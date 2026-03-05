@@ -1,1 +1,47 @@
+# Rust build artifacts
 /target
+Cargo.lock
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# RSA Key pairs
+private_key.pem
+public_key.pem
+*.pem
+*.key
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+data/
+
+# Logs
+*.log
+logs/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Uploaded assets (runtime-generated)
+uploads/
+photos/
+signatures/
+self_test_logs/
+
+# API documentation build output
+docs/build/

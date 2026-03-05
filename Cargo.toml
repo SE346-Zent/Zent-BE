@@ -4,3 +4,32 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aide = { version = "0.15.1", features = ["axum", "scalar"] }
+anyhow = "1.0.102"
+argon2 = { version = "0.5.3", features = ["std"] }
+axum = "0.8.8"
+base64 = "0.22.1"
+chrono = { version = "0.4.44", features = ["serde"] }
+console-subscriber = "0.5.0"
+dotenvy = "0.15.7"
+geo = {version = "0.32.0", features = ["serde"]}
+http = "1.4.0"
+image = { version = "0.25.9", features = ["serde"] }
+jsonwebtoken = { version = "10.3.0", features = ["rsa", "use_pem"] }
+lettre = { version = "0.11.19", features = ["tokio1", "tokio1-native-tls"] }
+qrcode = "0.14.1"
+rand = "0.9"
+regex = "1.12.3"
+scalar_api_reference = { version = "0.2.0", features = ["axum"] }
+sea-orm = { version = "1.1.19", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros", "sqlx-mysql"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+sha2 = "0.10.9"
+tokio = { version = "1.50.0", features = ["full"] }
+totp-rs = {version = "5.7.0", features = ["serde"]}
+tower = "0.5.3"
+tower-http = { version = "0.6.8", features = ["cors", "trace", "compression-gzip"] }
+tracing = "0.1.44"
+tracing-subscriber = "0.3.22"
+uuid = { version = "1.21.0", features = ["serde", "v4"] }
+validator = { version = "0.20.0", features = ["derive"] }
