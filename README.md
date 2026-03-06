@@ -1,6 +1,6 @@
-# FieldTech Pro - Backend Service
+# Zent - Backend Service
 
-A REST API backend for FieldTech Pro, a Licensed Field Technician Service Management System. This service supports mobile field operations including work order management, geolocation verification, parts tracking, and service documentation.
+A REST API backend for Zent, a Licensed Field Technician Service Management System. This service supports mobile field operations including work order management, geolocation verification, parts tracking, and service documentation.
 
 ## Project Information
 
@@ -8,8 +8,8 @@ A REST API backend for FieldTech Pro, a Licensed Field Technician Service Manage
 |-----------|-------|
 | **Course** | SE346.Q22 - Mobile Application Development |
 | **Framework** | Axum (Rust) |
-| **Database** | SQLite / MySQL (via SeaORM) |
-| **API Documentation** | OpenAPI/Swagger UI |
+| **Database** | SQLite (dev, mobile) / undecided (via SeaORM) |
+| **API Documentation** | OpenAPI/Scalar  |
 
 ## Features
 
