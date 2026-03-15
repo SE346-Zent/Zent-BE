@@ -3,6 +3,10 @@ name = "zent-be"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+members = [".", "migration"]
+default-members = [".", "migration"]
+
 [dependencies]
 anyhow = "1.0.102"
 argon2 = { version = "0.5.3", features = ["std"] }
