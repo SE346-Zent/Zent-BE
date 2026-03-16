@@ -1,6 +1,10 @@
 use axum::{response::IntoResponse, routing::post, Json, Router};
 use serde::Deserialize;
 
+pub mod extractor;
+pub mod model;
+pub mod state;
+
 #[derive(Deserialize)]
 struct User {
     name: String,

@@ -16,10 +16,10 @@ impl MigrationTrait for Migration {
                     .col(string(User::Email))
                     .col(string(User::PasswordHash))
                     .col(string(User::PhoneNumber))
-                    .col(string(User::AccountStatus))
-                    .col(string(User::RoleID))
-                    .col(timestamp_null(CreatedAt))
-                    .col(timestamp_null(UpdatedAt))
+                    .col(integer(User::AccountStatus))
+                    .col(integer(User::RoleID))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
@@ -36,6 +36,20 @@ impl MigrationTrait for Migration {
                             .to(Role::Table, Role::Id)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .index(
+                        Index::create()
+                            .name("idx_user_email")
+                            .col(User::RoleID)
+                            .col(User::Email)
+                            .unique(),
+                    )
+                    .index(
+                        Index::create()
+                            .name("idx_user_phone_number")
+                            .col(User::RoleID)
+                            .col(User::PhoneNumber)
+                            .unique(),
                     )
                     .to_owned(),
             )
@@ -63,6 +77,9 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // TODO: GH Issue #15: trigger to invalidate sessions when user is deleted or essential fields are updated
+        // TODO: Untracked: logging login attempts
+        // TODO: Untracked: Security audit log
         manager
             .create_table(
                 Table::create()
@@ -70,30 +87,45 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(Session::Id).primary_key())
                     .col(uuid(Session::UserID))
-                    .col(string(Session::AccessToken))
+                    .col(string_len(Session::RefreshTokenHash, 64)) // SHA-256 hash
                     .col(string(Session::DeviceFingerprint))
-                    .col(string(Session::IPAddress))
-                    .col(timestamp_null(CreatedAt))
-                    .col(timestamp_null(Session::ExpiresAt))
+                    .col(string_len(Session::IPAddress, 45))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(Session::ExpiresAt))
                     .col(timestamp_null(Session::RevokedAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_session_user_id")
                             .from(Session::Table, Session::UserID)
                             .to(User::Table, User::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade),
+                            // users are soft-deleted
+                            // restrict is implemented to prevent orphaned rows
+                            .on_delete(ForeignKeyAction::Restrict)
+                            .on_update(ForeignKeyAction::Restrict),
+                    )
+                    .index(Index::create().name("idx_session_id").col(Session::Id))
+                    .index(
+                        Index::create()
+                            .name("idx_session_expires_at")
+                            .col(Session::ExpiresAt),
                     )
                     .to_owned(),
             )
-            .await?;
-
-        Ok(())
+            .await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
+            .drop_table(Table::drop().table(Session::Table).to_owned())
+            .await?;
+        manager
             .drop_table(Table::drop().table(User::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(Role::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(AccountStatus::Table).to_owned())
             .await
     }
 }
@@ -136,9 +168,9 @@ enum AccountStatus {
 #[derive(DeriveIden)]
 enum Session {
     Table,
-    Id, // also refresh token
+    Id,
+    RefreshTokenHash,
     UserID,
-    AccessToken,
     DeviceFingerprint,
     IPAddress,
     ExpiresAt,
