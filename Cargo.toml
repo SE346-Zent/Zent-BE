@@ -20,7 +20,7 @@ geo = { version = "0.32.0", features = ["serde"] }
 http = "1.4.0"
 image = { version = "0.25.9", features = ["serde"] }
 jsonwebtoken = { version = "10.3.0", features = ["hmac"] }
-lettre = { version = "0.11.19", features = ["tokio1", "tokio1-native-tls"] }
+lettre = { version = "0.11.19", features = ["serde", "tokio1", "tokio1-native-tls", "tracing"] }
 qrcode = "0.14.1"
 rand = "0.9"
 regex = "1.12.3"
