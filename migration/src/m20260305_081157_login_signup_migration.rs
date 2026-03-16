@@ -13,7 +13,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(User::Id).primary_key())
                     .col(string(User::FullName))
-                    .col(string(User::Email))
+                    .col(string_uniq(User::Email))
                     .col(string(User::PasswordHash))
                     .col(string(User::PhoneNumber))
                     .col(integer(User::AccountStatus))
@@ -37,19 +37,11 @@ impl MigrationTrait for Migration {
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
-                    .index(
-                        Index::create()
-                            .name("idx_user_email")
-                            .col(User::RoleID)
-                            .col(User::Email)
-                            .unique(),
-                    )
+                    .index(Index::create().name("idx_user_email").col(User::Email))
                     .index(
                         Index::create()
                             .name("idx_user_phone_number")
-                            .col(User::RoleID)
-                            .col(User::PhoneNumber)
-                            .unique(),
+                            .col(User::PhoneNumber),
                     )
                     .to_owned(),
             )
@@ -87,7 +79,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(Session::Id).primary_key())
                     .col(uuid(Session::UserID))
-                    .col(string_len(Session::RefreshTokenHash, 64)) // SHA-256 hash
+                    .col(string_len_uniq(Session::RefreshTokenHash, 64)) // SHA-256 hash
                     .col(string(Session::DeviceFingerprint))
                     .col(string_len(Session::IPAddress, 45))
                     .col(timestamp(CreatedAt))
