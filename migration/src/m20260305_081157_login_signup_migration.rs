@@ -37,12 +37,6 @@ impl MigrationTrait for Migration {
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
-                    .index(Index::create().name("idx_user_email").col(User::Email))
-                    .index(
-                        Index::create()
-                            .name("idx_user_phone_number")
-                            .col(User::PhoneNumber),
-                    )
                     .to_owned(),
             )
             .await?;

@@ -1,6 +1,8 @@
 pub use sea_orm_migration::prelude::*;
 
-mod m20260305_081157_login_signup_migration;
+mod m20260305_081157_login_signup_migration;m20260318_051423_work_orders
+mod m20260318_051423_seed_data;
+
 
 pub struct Migrator;
 
