@@ -3,15 +3,14 @@ use clap::Parser;
 use dialoguer::Input;
 use sea_orm::Database;
 use seeder::{
-    seed_account_statuses, seed_roles, seed_users,
-    UserSeedConfig,
+    UserSeedConfig, seed_account_statuses, seed_random_work_orders, seed_roles, seed_users, seed_work_order_statuses
 };
 use serde_json::to_string_pretty;
 use std::path::PathBuf;
 
 /// Zent database seeder CLI
 #[derive(Parser, Debug)]
-#[command(version, about = "Seed the zent_be database with fake user data", long_about = None)]
+#[command(version, about = "Seed the zent_be database with fake data", long_about = None)]
 struct Args {
     /// Database connection URL
     #[arg(short, long)]
@@ -21,23 +20,19 @@ struct Args {
     #[arg(short, long)]
     num_users: Option<usize>,
 
-    /// Role name to assign to every generated user (default: Customer)
-    #[arg(short = 'r', long, default_value = "Customer")]
-    role: String,
-
-    /// Account status name to assign to every generated user (default: Active)
-    #[arg(short = 's', long, default_value = "Active")]
-    account_status: String,
+    /// Number of work orders to generate
+    #[arg(short, long)]
+    work_orders: Option<usize>,
 
     /// Random seed for reproducibility
     #[arg(long, default_value = "0")]
     rng_seed: u64,
 
-    /// Force interactive mode — prompt for all parameters including optional ones
+    /// Force interactive mode — prompt for all parameters
     #[arg(short, long)]
     interactive: bool,
 
-    /// Write plaintext passwords to a JSON file instead of printing to STDOUT
+    /// Write plaintext user credentials to a JSON file instead of STDOUT
     #[arg(short, long)]
     output: Option<PathBuf>,
 }
@@ -46,7 +41,7 @@ struct Args {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    let (db_url, num_users, role_name, status_name, rng_seed) = if args.interactive {
+    let (db_url, num_users, num_work_orders, rng_seed) = if args.interactive {
         prompt_all(&args)?
     } else if args.db_url.is_none() || args.num_users.is_none() {
         prompt_missing(&args)?
@@ -54,8 +49,7 @@ async fn main() -> Result<()> {
         (
             args.db_url.clone().unwrap(),
             args.num_users.unwrap(),
-            args.role.clone(),
-            args.account_status.clone(),
+            args.work_orders.unwrap_or(0),
             args.rng_seed,
         )
     };
@@ -72,25 +66,20 @@ async fn main() -> Result<()> {
     println!("\n--- Seeding Account Statuses ---");
     let statuses = seed_account_statuses(&db).await?;
 
-    // Resolve names to IDs, failing fast with a helpful error on typos
-    let role_id = *roles.get(&role_name).ok_or_else(|| {
-        anyhow::anyhow!(
-            "Unknown role '{}'. Valid roles: {}",
-            role_name,
-            seeder::role::ROLES.join(", ")
-        )
-    })?;
-
-    let account_status_id = *statuses.get(&status_name).ok_or_else(|| {
-        anyhow::anyhow!(
-            "Unknown account status '{}'. Valid statuses: {}",
-            status_name,
-            seeder::account_status::ACCOUNT_STATUSES.join(", ")
-        )
-    })?;
+    println!("\n --- Seeding Work Order Statuses ---");
+    let _ = seed_work_order_statuses(&db).await?;
 
     // -----------------------------------------------------------------------
-    // Step 2: seed users (hashes passwords inline via Argon2)
+    // Step 2: seed work orders
+    // -----------------------------------------------------------------------
+
+    if num_work_orders > 0 {
+        println!("\n--- Seeding Work Orders ({}) ---", num_work_orders);
+        seed_random_work_orders(&db, num_work_orders, rng_seed).await?;
+    }
+
+    // -----------------------------------------------------------------------
+    // Step 3: seed users — role and account_status assigned randomly per user
     // -----------------------------------------------------------------------
     println!("\n--- Seeding Users ({}) ---", num_users);
     let records = seed_users(
@@ -98,11 +87,12 @@ async fn main() -> Result<()> {
         UserSeedConfig {
             num_users,
             seed: rng_seed,
-            default_account_status: account_status_id,
-            default_role_id: role_id,
+            roles,
+            account_statuses: statuses,
         },
     )
     .await?;
+    
 
     // -----------------------------------------------------------------------
     // Output plaintext credentials
@@ -129,35 +119,22 @@ async fn main() -> Result<()> {
 // Interactive prompts
 // ---------------------------------------------------------------------------
 
-fn prompt_all(args: &Args) -> Result<(String, usize, String, String, u64)> {
+fn prompt_all(args: &Args) -> Result<(String, usize, usize, u64)> {
     let db_url: String = prompt_required("Database URL", args.db_url.clone())?;
     let num_users: usize = prompt_required("Number of users", args.num_users)?;
-
-    let role: String = Input::new()
-        .with_prompt(format!(
-            "Role to assign [{}]",
-            seeder::role::ROLES.join(", ")
-        ))
-        .default(args.role.clone())
+    let num_work_orders: usize = Input::new()
+        .with_prompt("Number of work orders")
+        .default(args.work_orders.unwrap_or(0))
         .interact_text()?;
-
-    let status: String = Input::new()
-        .with_prompt(format!(
-            "Account status to assign [{}]",
-            seeder::account_status::ACCOUNT_STATUSES.join(", ")
-        ))
-        .default(args.account_status.clone())
-        .interact_text()?;
-
     let rng_seed: u64 = Input::new()
         .with_prompt("Random seed")
         .default(args.rng_seed)
         .interact_text()?;
 
-    Ok((db_url, num_users, role, status, rng_seed))
+    Ok((db_url, num_users, num_work_orders, rng_seed))
 }
 
-fn prompt_missing(args: &Args) -> Result<(String, usize, String, String, u64)> {
+fn prompt_missing(args: &Args) -> Result<(String, usize, usize, u64)> {
     let db_url = match &args.db_url {
         Some(url) => url.clone(),
         None => Input::new().with_prompt("Database URL").interact_text()?,
@@ -173,8 +150,7 @@ fn prompt_missing(args: &Args) -> Result<(String, usize, String, String, u64)> {
     Ok((
         db_url,
         num_users,
-        args.role.clone(),
-        args.account_status.clone(),
+        args.work_orders.unwrap_or(0),
         args.rng_seed,
     ))
 }

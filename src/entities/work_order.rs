@@ -9,7 +9,7 @@ pub struct Model {
     pub id: Uuid,
     pub title: String,
     pub address_string: String,
-    pub status_id: Uuid,
+    pub status_id: i32,
     pub description: String,
     pub reject_reason: String,
     pub priority: i32,
