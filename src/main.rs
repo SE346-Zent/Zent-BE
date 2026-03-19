@@ -1,8 +1,11 @@
 use axum::{response::IntoResponse, routing::post, Json, Router};
 use serde::Deserialize;
 
+pub mod entities;
 pub mod extractor;
+pub mod handlers;
 pub mod model;
+pub mod services;
 pub mod state;
 
 #[derive(Deserialize)]
