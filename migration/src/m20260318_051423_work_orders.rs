@@ -12,6 +12,7 @@ impl MigrationTrait for Migration {
                     .table(WorkOrder::Table)
                     .if_not_exists()
                     .col(uuid(WorkOrder::Id).primary_key())
+                    .col(string(WorkOrder::Title))
                     .col(string(WorkOrder::AddressString))
                     .col(uuid(WorkOrder::StatusId))
                     .col(string(WorkOrder::Description))
@@ -32,9 +33,9 @@ impl MigrationTrait for Migration {
                     .to_owned(),
             )
             .await?;
-        
-        manager.
-            create_table(
+
+        manager
+            .create_table(
                 Table::create()
                     .table(WorkOrderStatus::Table)
                     .if_not_exists()
@@ -48,8 +49,12 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        todo!();
-
+        manager
+            .drop_table(Table::drop().table(WorkOrder::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(WorkOrderStatus::Table).to_owned())
+            .await
     }
 }
 
@@ -60,11 +65,7 @@ struct CreatedAt;
 struct UpdatedAt;
 
 #[derive(DeriveIden)]
-struct DeletedAt;
-
-#[derive(DeriveIden)]
-enum WorkOrder
-{
+enum WorkOrder {
     Table,
     Id,
     Title,
@@ -78,10 +79,8 @@ enum WorkOrder
 }
 
 #[derive(DeriveIden)]
-enum WorkOrderStatus
-{
+enum WorkOrderStatus {
     Table,
     Id,
     Name,
 }
-
