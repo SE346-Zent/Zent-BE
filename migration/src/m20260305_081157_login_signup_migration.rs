@@ -89,15 +89,21 @@ impl MigrationTrait for Migration {
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Restrict),
                     )
-                    .index(Index::create().name("idx_session_id").col(Session::Id))
-                    .index(
-                        Index::create()
-                            .name("idx_session_expires_at")
-                            .col(Session::ExpiresAt),
-                    )
                     .to_owned(),
             )
-            .await
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_session_expires_at")
+                    .table(Session::Table)
+                    .col(Session::ExpiresAt)
+                    .to_owned(),
+            )
+            .await?;
+
+        Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
