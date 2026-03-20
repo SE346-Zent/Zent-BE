@@ -14,7 +14,7 @@ impl MigrationTrait for Migration {
                     .col(uuid(WorkOrder::Id).primary_key())
                     .col(string(WorkOrder::Title))
                     .col(string(WorkOrder::AddressString))
-                    .col(uuid(WorkOrder::StatusId))
+                    .col(integer(WorkOrder::StatusId))
                     .col(string(WorkOrder::Description))
                     .col(string(WorkOrder::RejectReason))
                     .col(integer(WorkOrder::Priority))
@@ -39,7 +39,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(WorkOrderStatus::Table)
                     .if_not_exists()
-                    .col(uuid(WorkOrderStatus::Id).primary_key())
+                    .col(pk_auto(WorkOrderStatus::Id))
                     .col(string(WorkOrderStatus::Name))
                     .to_owned(),
             )

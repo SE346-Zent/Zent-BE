@@ -4,7 +4,7 @@ pub mod prelude;
 
 pub mod account_status;
 pub mod role;
-pub mod session;
 pub mod user;
+pub mod session;
 pub mod work_order;
 pub mod work_order_status;

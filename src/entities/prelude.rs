@@ -2,7 +2,7 @@
 
 pub use super::account_status::Entity as AccountStatus;
 pub use super::role::Entity as Role;
-pub use super::session::Entity as Session;
 pub use super::user::Entity as User;
+pub use super::session::Entity as Session;
 pub use super::work_order::Entity as WorkOrder;
 pub use super::work_order_status::Entity as WorkOrderStatus;
