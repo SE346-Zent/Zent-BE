@@ -35,18 +35,27 @@ pub enum AccountStatusEnum {
     Unknown(i32),
 }
 
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UserInfo {
+    /// Account status mapped to database integer ID
+    pub account_status: AccountStatusEnum,
+    /// Full name
+    pub fullname: String,
+    /// Email
+    pub email: String,
+    /// Phone number
+    pub phone_number: String,
+    /// Role ID
+    pub role_id: i32,
+}
+
 /// Login response data
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginResponseData {
-    /// Account status mapped to database integer ID
-    pub account_status: AccountStatusEnum,
-    /// Email
-    pub email: String,
-    /// Phone
-    pub phone: String,
-    /// Role ID
-    pub role_id: i32,
+    /// User info
+    pub user: UserInfo,
     /// Access token used to authenticate requests
     pub access_token: String,
     /// Refresh token used to refresh access token

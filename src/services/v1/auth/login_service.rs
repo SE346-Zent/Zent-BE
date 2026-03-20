@@ -2,7 +2,7 @@ use crate::entities::{session, user};
 use crate::model::auth::jwt_claims::Claims;
 use crate::model::requests::auth::user_login_request::UserLoginRequest;
 use crate::model::responses::auth::login_response::{
-    AccountStatusEnum, LoginResponse, LoginResponseData,
+    AccountStatusEnum, LoginResponse, LoginResponseData, UserInfo,
 };
 use crate::model::responses::error::AppError;
 use argon2::{
@@ -128,10 +128,13 @@ pub async fn perform_login(
     .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create session: {:?}", e)))?;
 
     Ok(LoginResponse::success(LoginResponseData {
-        account_status: status,
-        email: user_model.email.clone(),
-        phone: user_model.phone_number.clone(),
-        role_id: user_model.role_id,
+        user: UserInfo {
+            fullname: user_model.full_name.clone(),
+            account_status: status,
+            email: user_model.email.clone(),
+            phone_number: user_model.phone_number.clone(),
+            role_id: user_model.role_id,
+        },
         access_token,
         refresh_token,
     }))
