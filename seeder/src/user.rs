@@ -11,7 +11,7 @@ use fake::{
         name::en::Name,
         phone_number::en::PhoneNumber,
     },
-    rand::{SeedableRng, rngs::StdRng, seq::{IndexedRandom, SliceRandom}},
+    rand::{SeedableRng, rngs::StdRng, seq::{IndexedRandom}},
 };
 use rayon::prelude::*;
 use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, Set};
