@@ -1,14 +1,6 @@
-use serde::Serialize;
-use serde_json::Value;
+use crate::define_api_response;
 
-#[derive(Debug, Serialize)]
-pub struct RegisterResponse {
-    #[serde(rename = "statusCode")]
-    pub status_code: u16,
-    pub message: String,
-    pub data: Option<Value>,
-    pub meta: Option<Value>,
-}
+define_api_response!(RegisterResponse, Option<()>, Option<()>);
 
 impl RegisterResponse {
     pub fn success(message: &str) -> Self {

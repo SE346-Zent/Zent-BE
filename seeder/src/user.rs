@@ -11,7 +11,7 @@ use fake::{
         name::en::Name,
         phone_number::en::PhoneNumber,
     },
-    rand::{SeedableRng, rngs::StdRng, seq::{IndexedRandom}},
+    rand::{SeedableRng, rngs::StdRng, seq::IndexedRandom},
 };
 use rayon::prelude::*;
 use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, Set};
@@ -183,11 +183,7 @@ pub async fn seed_users(
     }
 
     let total = user::Entity::find().count(db).await?;
-    println!(
-        "  Inserted {} users. Total in DB: {}",
-        records.len(),
-        total
-    );
+    println!("  Inserted {} users. Total in DB: {}", records.len(), total);
 
     Ok(records)
 }

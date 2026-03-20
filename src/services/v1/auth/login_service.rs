@@ -10,15 +10,15 @@ use argon2::{
     Argon2,
 };
 // use axum::extract::ConnectInfo;
+use crate::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
 use base64::{engine::general_purpose::URL_SAFE, Engine};
 use chrono::Utc;
+use jsonwebtoken::EncodingKey;
 use rand::RngCore;
 use sea_orm::*;
 use sha2::{Digest, Sha256};
 use std::net::SocketAddr;
 use uuid::Uuid;
-use jsonwebtoken::EncodingKey;
-use crate::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
 
 pub async fn perform_login(
     db: DatabaseConnection,
@@ -41,7 +41,7 @@ pub async fn perform_login(
     };
 
     // 2. Check account status
-    let status = AccountStatusEnum::from_i32(user_model.account_status);
+    let status = AccountStatusEnum::from(user_model.account_status);
     match status {
         AccountStatusEnum::Active => {}
         AccountStatusEnum::Pending => {
@@ -54,6 +54,16 @@ pub async fn perform_login(
         }
         _ => return Err(AppError::Forbidden("Account state unknown".to_string())),
     };
+
+    // 2.5. Check Role exists
+    let role_exists = crate::entities::role::Entity::find_by_id(user_model.role_id)
+        .one(&db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    if role_exists.is_none() {
+        return Err(AppError::Forbidden("Account state unknown".to_string()));
+    }
 
     // 3. Validate password
     let password_hash_str = user_model.password_hash.clone();
@@ -85,12 +95,9 @@ pub async fn perform_login(
         exp: (now + access_token_ttl_seconds) as usize,
     };
 
-    let access_token = jsonwebtoken::encode(
-        &jsonwebtoken::Header::default(),
-        &claims,
-        &encoding_key,
-    )
-    .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to encode token: {}", e)))?;
+    let access_token =
+        jsonwebtoken::encode(&jsonwebtoken::Header::default(), &claims, &encoding_key)
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to encode token: {}", e)))?;
 
     // Generate refresh token
     let mut refresh_token_bytes = [0u8; 48];

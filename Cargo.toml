@@ -19,8 +19,14 @@ dotenvy = "0.15.7"
 geo = { version = "0.32.0", features = ["serde"] }
 http = "1.4.0"
 image = { version = "0.25.9", features = ["serde"] }
-jsonwebtoken = { version = "10.3.0", features = ["hmac"] }
-lettre = { version = "0.11.19", features = ["serde", "tokio1", "tokio1-native-tls", "tracing"] }
+jsonwebtoken = { version = "10.3.0", features = ["hmac", "rust_crypto"] }
+lettre = { version = "0.11.19", features = [
+    "serde",
+    "tokio1",
+    "tokio1-native-tls",
+    "tracing",
+] }
+num_enum = "0.7.6"
 qrcode = "0.14.1"
 rand = "0.9"
 regex = "1.12.3"
@@ -53,3 +59,7 @@ utoipa = { version = "5.4.0", features = [
 utoipa-scalar = { version = "0.3.0", features = ["axum"] }
 uuid = { version = "1.21.0", features = ["serde", "v4"] }
 validator = { version = "0.20.0", features = ["derive"] }
+
+[dev-dependencies]
+rstest = "0.26.1"
+migration = { path = "migration" }
