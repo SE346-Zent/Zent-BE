@@ -6,7 +6,7 @@ use fake::{
         address::en::{BuildingNumber, StreetName},
         lorem::en::{Paragraph, Sentence},
     },
-    rand::{RngCore, SeedableRng, rngs::StdRng, seq::{IndexedRandom, SliceRandom}},
+    rand::{RngCore, SeedableRng, rngs::StdRng, seq::IndexedRandom},
 };
 use sea_orm::{DatabaseConnection, EntityTrait, Set};
 use uuid::Uuid;
