@@ -1,9 +1,10 @@
 use super::prelude::*;
 use crate::define_api_response;
+use crate::model::responses::common::pagination::PaginationMeta;
 
 #[derive(Deserialize, Debug, Serialize, utoipa::ToSchema)]
 pub struct WorkOrderResponseData {
-    pub work_order_id: i32,
+    pub work_order_id: uuid::Uuid,
     pub title: String,
     pub address_string: String,
     pub description: String,
@@ -24,6 +25,18 @@ impl WorkOrderResponse {
             message: "Work order retrieved successfully".to_string(),
             data,
             meta: None,
+        }
+    }
+}
+
+define_api_response!(WorkOrderListResponse, Vec<WorkOrderResponseData>, PaginationMeta);
+impl WorkOrderListResponse {
+    pub fn success(data: Vec<WorkOrderResponseData>, meta: PaginationMeta) -> Self {
+        Self {
+            status_code: 200,
+            message: "Work orders retrieved successfully".to_string(),
+            data,
+            meta,
         }
     }
 }
