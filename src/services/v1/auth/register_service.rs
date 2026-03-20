@@ -59,10 +59,10 @@ pub async fn perform_register(
 
     let new_user = user::ActiveModel {
         id: Set(Uuid::new_v4()),
-        full_name: Set(req.fullname),
+        full_name: Set(req.full_name),
         email: Set(req.email),
         password_hash: Set(hashed_password),
-        phone_number: Set(req.phonenumber),
+        phone_number: Set(req.phone_number),
         account_status: Set(pending_status.id), // Using id from pending_status
         role_id: Set(customer_role.id),         // Using id from customer_role
         created_at: Set(now),
