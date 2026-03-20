@@ -23,6 +23,20 @@ impl AccountStatusEnum {
     }
 }
 
+// TODO: Temp patch; fix later
+impl From<AccountStatusEnum> for i32 {
+    fn from(value: AccountStatusEnum) -> Self {
+        match value {
+            AccountStatusEnum::Active => 1,
+            AccountStatusEnum::Pending => 2,
+            AccountStatusEnum::Locked => 3,
+            AccountStatusEnum::Inactive => 4,
+            AccountStatusEnum::Terminated => 5,
+            AccountStatusEnum::Unknown(other) => other,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginResponseData {
