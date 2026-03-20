@@ -4,7 +4,7 @@ use validator::Validate;
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct UserRegistrationRequest {
     #[validate(length(min = 1, message = "Full name is required"))]
-    pub fullname: String,
+    pub full_name: String,
 
     // TODO: Implement more sophisticated email validation; validator cannot catch special, legal email formats
     #[validate(email(message = "Invalid email format"))]
@@ -15,5 +15,5 @@ pub struct UserRegistrationRequest {
 
     // Optional parameter but treated as required. Basic non-empty check
     #[validate(length(min = 1, message = "Phone number is required"))]
-    pub phonenumber: String,
+    pub phone_number: String,
 }

@@ -41,7 +41,7 @@ pub struct UserInfo {
     /// Account status mapped to database integer ID
     pub account_status: AccountStatusEnum,
     /// Full name
-    pub fullname: String,
+    pub full_name: String,
     /// Email
     pub email: String,
     /// Phone number

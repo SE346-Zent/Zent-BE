@@ -129,7 +129,7 @@ pub async fn perform_login(
 
     Ok(LoginResponse::success(LoginResponseData {
         user: UserInfo {
-            fullname: user_model.full_name.clone(),
+            full_name: user_model.full_name.clone(),
             account_status: status,
             email: user_model.email.clone(),
             phone_number: user_model.phone_number.clone(),
