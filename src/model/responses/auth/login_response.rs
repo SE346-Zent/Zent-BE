@@ -1,61 +1,59 @@
+use num_enum::{FromPrimitive, IntoPrimitive};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+// Assuming the macro is exported via `crate::macros::define_api_response` or similar
+use crate::define_api_response;
+
+/// Account status enum
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    utoipa::ToSchema,
+    IntoPrimitive,
+    FromPrimitive,
+)]
+#[serde(from = "i32", into = "i32")]
+#[schema(example = 1)]
+#[repr(i32)]
 pub enum AccountStatusEnum {
-    Active,
-    Pending,
-    Locked,
-    Inactive,
-    Terminated,
+    /// Active accounts
+    Active = 1,
+    /// Accounts pending email verification (Customer only)
+    Pending = 2,
+    /// Accounts administratively locked down due to policy violations (Customer only)
+    Locked = 3,
+    /// Accounts administratively deactivated (Technician/Administrator only)
+    Inactive = 4,
+    /// Accounts deleted (Customer only)
+    Terminated = 5,
+    /// Unknown account status
+    #[num_enum(catch_all)]
     Unknown(i32),
 }
 
-impl AccountStatusEnum {
-    pub fn from_i32(v: i32) -> Self {
-        match v {
-            1 => AccountStatusEnum::Active,
-            2 => AccountStatusEnum::Pending,
-            3 => AccountStatusEnum::Locked,
-            4 => AccountStatusEnum::Inactive,
-            5 => AccountStatusEnum::Terminated,
-            other => AccountStatusEnum::Unknown(other),
-        }
-    }
-}
-
-// TODO: Temp patch; fix later
-impl From<AccountStatusEnum> for i32 {
-    fn from(value: AccountStatusEnum) -> Self {
-        match value {
-            AccountStatusEnum::Active => 1,
-            AccountStatusEnum::Pending => 2,
-            AccountStatusEnum::Locked => 3,
-            AccountStatusEnum::Inactive => 4,
-            AccountStatusEnum::Terminated => 5,
-            AccountStatusEnum::Unknown(other) => other,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
+/// Login response data
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginResponseData {
+    /// Account status mapped to database integer ID
     pub account_status: AccountStatusEnum,
+    /// Email
     pub email: String,
+    /// Phone
     pub phone: String,
+    /// Role ID
     pub role_id: i32,
+    /// Access token used to authenticate requests
     pub access_token: String,
+    /// Refresh token used to refresh access token
     pub refresh_token: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoginResponse {
-    pub status_code: u16,
-    pub message: String,
-    pub data: LoginResponseData,
-    pub meta: Option<serde_json::Value>,
-}
+define_api_response!(LoginResponse, LoginResponseData, Option<()>);
 
 impl LoginResponse {
     pub fn success(data: LoginResponseData) -> Self {

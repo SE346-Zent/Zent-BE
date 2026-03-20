@@ -41,7 +41,7 @@ pub async fn perform_login(
     };
 
     // 2. Check account status
-    let status = AccountStatusEnum::from_i32(user_model.account_status);
+    let status = AccountStatusEnum::from(user_model.account_status);
     match status {
         AccountStatusEnum::Active => {}
         AccountStatusEnum::Pending => {
