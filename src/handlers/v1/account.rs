@@ -10,7 +10,7 @@ use crate::{
         responses::account::profile_response::{ProfileListQuery, ProfileListResponse, ProfileResponse},
         responses::error::AppError,
     },
-    services::v1::account::profile::{get_profile_service, get_profiles_service},
+    services::v1::account::profile_service::{get_profile_service, get_profiles_service},
 };
 
 pub async fn get_profile(

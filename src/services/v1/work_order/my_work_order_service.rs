@@ -9,6 +9,7 @@ use crate::{
         responses::work_order::work_order_response::{
             WorkOrderListResponse, WorkOrderResponse, WorkOrderResponseData,
         },
+        requests::work_order::work_order_list_query::WorkOrderListQuery,
     },
 };
 
@@ -28,16 +29,30 @@ pub async fn get_my_work_order_service(
 
 pub async fn get_my_work_orders_service(
     db: DatabaseConnection,
+    query: WorkOrderListQuery,
 ) -> Result<WorkOrderListResponse, AppError> {
-    let orders = work_order::Entity::find()
-        .all(&db)
+    let mut db_query = work_order::Entity::find();
+
+    if let Some(uid) = query.user_id {
+        db_query = db_query.filter(work_order::Column::UserId.eq(uid));
+    }
+
+    let total_items = db_query
+        .clone()
+        .count(&db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
-    let total_items = orders.len() as u64;
-    let data = orders.into_iter().map(map_work_order).collect::<Vec<_>>();
+    let paginator = db_query.paginate(&db, query.pagination.per_page);
+    let page_index = query.pagination.page.saturating_sub(1);
 
-    let meta = PaginationMeta::new(1, total_items.max(1), total_items);
+    let orders = paginator
+        .fetch_page(page_index)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let data = orders.into_iter().map(map_work_order).collect::<Vec<_>>();
+    let meta = PaginationMeta::new(query.pagination.page, query.pagination.per_page, total_items);
     Ok(WorkOrderListResponse::success(data, meta))
 }
 

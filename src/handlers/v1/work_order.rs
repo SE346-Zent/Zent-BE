@@ -7,7 +7,7 @@ use sea_orm::DatabaseConnection;
 use crate::{
     model::auth::jwt_claims::Claims,
     model::{
-        requests::work_order::my_work_order_query::WorkOrderQuery,
+        requests::work_order::{my_work_order_query::WorkOrderQuery, work_order_list_query::WorkOrderListQuery},
         responses::error::AppError,
         responses::work_order::work_order_response::{WorkOrderListResponse, WorkOrderResponse},
     },
@@ -25,8 +25,9 @@ pub async fn get_my_work_order(
 
 pub async fn get_my_work_orders(
     State(db): State<DatabaseConnection>,
+    Query(query): Query<WorkOrderListQuery>,
     _claims: Claims,
 ) -> Result<Json<WorkOrderListResponse>, AppError> {
-    let result = get_my_work_orders_service(db).await?;
+    let result = get_my_work_orders_service(db, query).await?;
     Ok(Json(result))
 }
