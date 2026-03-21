@@ -45,3 +45,9 @@ self_test_logs/
 
 # API documentation build output
 docs/build/
+
+# Workspace scratchpad for feature specs
+specs/
+
+TODO.txt
+tasks/

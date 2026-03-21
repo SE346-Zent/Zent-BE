@@ -1,0 +1,33 @@
+use axum::{
+    extract::{Query, State},
+    Json,
+};
+use sea_orm::DatabaseConnection;
+
+use crate::{
+    extractor::auth_user::AuthUser,
+    model::{
+        requests::account::profile_list_query::ProfileListQuery,
+        responses::account::profile_response::{ProfileListResponse, ProfileResponse},
+        responses::error::AppError,
+    },
+    services::v1::account::profile_service::{get_profile_service, get_profiles_service},
+};
+
+pub async fn get_profile(
+    State(db): State<DatabaseConnection>,
+    auth: AuthUser,
+) -> Result<Json<ProfileResponse>, AppError> {
+    // Utilize the hydrated context!
+    let result = get_profile_service(db, auth.user.id).await?;
+    Ok(Json(result))
+}
+
+pub async fn get_profiles(
+    State(db): State<DatabaseConnection>,
+    Query(query): Query<ProfileListQuery>,
+    _auth: AuthUser,
+) -> Result<Json<ProfileListResponse>, AppError> {
+    let result = get_profiles_service(db, query).await?;
+    Ok(Json(result))
+}
