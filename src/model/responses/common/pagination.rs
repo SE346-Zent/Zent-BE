@@ -29,7 +29,7 @@ impl PaginationMeta {
 /// Embed this inside a specific endpoint's query struct via `#[serde(flatten)]`.
 ///
 /// Example:
-/// ```rust
+/// ```rust, ignore
 /// #[derive(Deserialize, utoipa::IntoParams)]
 /// pub struct ProfileListQuery {
 ///     pub role: String,

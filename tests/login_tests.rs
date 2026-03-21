@@ -6,6 +6,7 @@ use axum::{
 };
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tower::ServiceExt;
+use serde::Deserialize;
 
 use rstest::rstest;
 
