@@ -58,6 +58,9 @@ pub async fn seed_random_work_orders(
                 updated_at: Set(now),
                 closed_at: Set(None),
                 version: Set(1),
+                admin_id: Set(Uuid::new_v4()),
+                customer_id: Set(Uuid::new_v4()),
+                technician_id: Set(Uuid::new_v4()),
             }
         })
         .collect();

@@ -31,11 +31,10 @@ pub async fn get_my_work_orders_service(
     db: DatabaseConnection,
     query: WorkOrderListQuery,
 ) -> Result<WorkOrderListResponse, AppError> {
-    let mut db_query = work_order::Entity::find();
-
-    if let Some(uid) = query.user_id {
-        db_query = db_query.filter(work_order::Column::UserId.eq(uid));
-    }
+    let db_query = work_order::Entity::find()
+        .filter(work_order::Column::AdminId.eq(query.admin_id))
+        .filter(work_order::Column::CustomerId.eq(query.customer_id))
+        .filter(work_order::Column::TechnicianId.eq(query.technician_id));
 
     let total_items = db_query
         .clone()
@@ -69,5 +68,8 @@ fn map_work_order(model: work_order::Model) -> WorkOrderResponseData {
         updated_at: model.updated_at.to_rfc3339(),
         closed_at: model.closed_at.map(|d| d.to_rfc3339()),
         version: model.version,
+        admin_id: model.admin_id,
+        customer_id: model.customer_id,
+        technician_id: model.technician_id,
     }
 }

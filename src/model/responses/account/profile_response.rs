@@ -1,18 +1,6 @@
 use super::prelude::*;
 use crate::define_api_response;
 
-// ---------------------------------------------------------------------------
-// Query params
-// ---------------------------------------------------------------------------
-
-/// Query parameters for the profile list endpoint.
-/// Example: `GET /profiles?role=Technician&page=2&per_page=20`
-#[derive(Deserialize, Debug, IntoParams)]
-pub struct ProfileListQuery {
-    pub role: String,
-    #[serde(flatten)]
-    pub pagination: PaginationQuery,
-}
 
 // ---------------------------------------------------------------------------
 // Response data

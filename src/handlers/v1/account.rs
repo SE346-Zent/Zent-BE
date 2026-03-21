@@ -5,9 +5,10 @@ use axum::{
 use sea_orm::DatabaseConnection;
 
 use crate::{
-    model::auth::jwt_claims::Claims,
+    extractor::auth_user::AuthUser,
     model::{
-        responses::account::profile_response::{ProfileListQuery, ProfileListResponse, ProfileResponse},
+        requests::account::profile_list_query::ProfileListQuery,
+        responses::account::profile_response::{ProfileListResponse, ProfileResponse},
         responses::error::AppError,
     },
     services::v1::account::profile_service::{get_profile_service, get_profiles_service},
@@ -15,19 +16,17 @@ use crate::{
 
 pub async fn get_profile(
     State(db): State<DatabaseConnection>,
-    claims: Claims,
+    auth: AuthUser,
 ) -> Result<Json<ProfileResponse>, AppError> {
-    let user_id = uuid::Uuid::parse_str(&claims.sub)
-        .map_err(|_| AppError::Unauthorized("Invalid token subject".to_string()))?;
-    
-    let result = get_profile_service(db, user_id).await?;
+    // Utilize the hydrated context!
+    let result = get_profile_service(db, auth.user.id).await?;
     Ok(Json(result))
 }
 
 pub async fn get_profiles(
     State(db): State<DatabaseConnection>,
     Query(query): Query<ProfileListQuery>,
-    _claims: Claims,
+    _auth: AuthUser,
 ) -> Result<Json<ProfileListResponse>, AppError> {
     let result = get_profiles_service(db, query).await?;
     Ok(Json(result))

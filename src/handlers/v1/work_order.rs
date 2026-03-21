@@ -5,7 +5,7 @@ use axum::{
 use sea_orm::DatabaseConnection;
 
 use crate::{
-    model::auth::jwt_claims::Claims,
+    extractor::auth_user::AuthUser,
     model::{
         requests::work_order::{my_work_order_query::WorkOrderQuery, work_order_list_query::WorkOrderListQuery},
         responses::error::AppError,
@@ -17,7 +17,7 @@ use crate::{
 pub async fn get_my_work_order(
     State(db): State<DatabaseConnection>,
     Query(query): Query<WorkOrderQuery>,
-    _claims: Claims,
+    _auth: AuthUser,
 ) -> Result<Json<WorkOrderResponse>, AppError> {
     let result = get_my_work_order_service(db, query.id).await?;
     Ok(Json(result))
@@ -26,7 +26,7 @@ pub async fn get_my_work_order(
 pub async fn get_my_work_orders(
     State(db): State<DatabaseConnection>,
     Query(query): Query<WorkOrderListQuery>,
-    _claims: Claims,
+    _auth: AuthUser,
 ) -> Result<Json<WorkOrderListResponse>, AppError> {
     let result = get_my_work_orders_service(db, query).await?;
     Ok(Json(result))

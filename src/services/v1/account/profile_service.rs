@@ -4,8 +4,9 @@ use uuid::Uuid;
 use crate::{
     entities::{role, user},
     model::{
+        requests::account::profile_list_query::ProfileListQuery,
         responses::account::profile_response::{
-            ProfileListQuery, ProfileListResponse, ProfileResponse, ProfileResponseData,
+            ProfileListResponse, ProfileResponse, ProfileResponseData,
         },
         responses::error::AppError,
     },
@@ -37,8 +38,9 @@ pub async fn get_profiles_service(
     query: ProfileListQuery,
 ) -> Result<ProfileListResponse, AppError> {
     // Lookup role id by name
+    let role_name = query.role.to_string();
     let role_model = role::Entity::find()
-        .filter(role::Column::Name.eq(&query.role))
+        .filter(role::Column::Name.eq(&role_name))
         .one(&db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
@@ -75,7 +77,7 @@ pub async fn get_profiles_service(
         .collect::<Vec<_>>();
 
     Ok(ProfileListResponse::success(
-        &query.role,
+        &role_name,
         data,
         &query.pagination,
         total_items,

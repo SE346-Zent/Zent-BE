@@ -17,7 +17,9 @@ pub struct Model {
     pub updated_at: DateTimeUtc,
     pub closed_at: Option<DateTimeUtc>,
     pub version: i32,
-    pub user_id: Uuid,
+    pub admin_id: Uuid,
+    pub customer_id: Uuid,
+    pub technician_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

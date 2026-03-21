@@ -22,7 +22,9 @@ impl MigrationTrait for Migration {
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(WorkOrder::ClosedAt))
                     .col(integer(WorkOrder::Version))
-                    .col(uuid(WorkOrder::UserId))
+                    .col(uuid(WorkOrder::AdminId))
+                    .col(uuid(WorkOrder::CustomerId))
+                    .col(uuid(WorkOrder::TechnicianId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_status_id")
@@ -77,7 +79,9 @@ enum WorkOrder {
     Priority,
     ClosedAt,
     Version,
-    UserId,
+    AdminId,
+    CustomerId,
+    TechnicianId,
 }
 
 #[derive(DeriveIden)]

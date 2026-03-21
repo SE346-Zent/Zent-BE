@@ -15,6 +15,9 @@ pub struct WorkOrderResponseData {
     pub updated_at: String,
     pub closed_at: Option<String>,
     pub version: i32,
+    pub admin_id: uuid::Uuid,
+    pub customer_id: uuid::Uuid,
+    pub technician_id: uuid::Uuid,
 }
 
 define_api_response!(WorkOrderResponse, WorkOrderResponseData, Option<()>);
