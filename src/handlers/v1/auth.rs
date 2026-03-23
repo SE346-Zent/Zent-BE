@@ -1,6 +1,6 @@
 use axum::{
     extract::{ConnectInfo, State},
-    Json,
+    Json, Router, routing::post,
 };
 use std::net::SocketAddr;
 use validator::Validate;
@@ -43,4 +43,10 @@ pub async fn register_handler(
 
     let result = register_service::perform_register(db, payload).await?;
     Ok(Json(result))
+}
+
+pub fn router() -> Router<crate::state::AppState> {
+    Router::new()
+        .route("/login", post(login_handler))
+        .route("/register", post(register_handler))
 }

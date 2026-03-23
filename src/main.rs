@@ -1,27 +1,91 @@
-use axum::{response::IntoResponse, routing::post, Json, Router};
-use serde::Deserialize;
+use axum::Router;
+use sea_orm::{Database, ConnectOptions};
+use std::env;
+use std::time::Duration;
+use tracing::info;
 
-// pub mod entities;
-// pub mod extractor;
-// pub mod handlers;
-// pub mod model;
-// pub mod services;
-// pub mod state;
+#[macro_use]
+pub mod macros;
+pub mod config;
 
-#[derive(Deserialize)]
-struct User {
-    name: String,
-}
+pub mod entities;
+pub mod extractor;
+pub mod handlers;
+pub mod model;
+pub mod services;
+pub mod state;
 
-async fn hello_user(Json(user): Json<User>) -> impl IntoResponse {
-    format!("hello {}", user.name)
-}
+use crate::state::AppState;
+use crate::config::AppConfig;
 
 #[tokio::main]
-async fn main() {
-    let app = Router::new().route("/hello", post(hello_user));
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
+    
+    // Initialize central configuration manager
+    AppConfig::init();
+    let cfg = AppConfig::get();
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    // Connect to database
+    let mut opt = ConnectOptions::new(&cfg.database_url);
+    opt.max_connections(100)
+       .min_connections(5)
+       .connect_timeout(Duration::from_secs(8))
+       .acquire_timeout(Duration::from_secs(8))
+       .idle_timeout(Duration::from_secs(8))
+       .max_lifetime(Duration::from_secs(8))
+       .sqlx_logging(false);
+    
+    let db = Database::connect(opt).await?;
+    
+    let state = AppState::new(
+        cfg.jwt_sign_key.as_bytes(),
+        db,
+        3600, // access token ttl
+        86400 // session ttl
+    );
 
-    axum::serve(listener, app).await.unwrap();
+    // Apply strict nested modular Router mapping with dynamic dispatch boundaries safely inside axum
+    let app = Router::new()
+        .nest("/api/v1", handlers::v1::router())
+        .with_state(state);
+
+    let addr = format!("0.0.0.0:{}", cfg.port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    info!("Server listening on {}", addr);
+
+    // Starting Server with Graceful Shutdown hooks
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+
+    Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {
+            info!("Received Ctrl+C, shutting down gracefully...");
+        },
+        _ = terminate => {
+            info!("Received SIGTERM, shutting down gracefully...");
+        },
+    }
 }

@@ -1,6 +1,6 @@
 use axum::{
     extract::{Query, State},
-    Json,
+    Json, Router, routing::get,
 };
 use sea_orm::DatabaseConnection;
 
@@ -30,4 +30,10 @@ pub async fn get_my_work_orders(
 ) -> Result<Json<WorkOrderListResponse>, AppError> {
     let result = get_my_work_orders_service(db, query).await?;
     Ok(Json(result))
+}
+
+pub fn router() -> Router<crate::state::AppState> {
+    Router::new()
+        .route("/my_work_order", get(get_my_work_order))
+        .route("/my_work_orders", get(get_my_work_orders))
 }

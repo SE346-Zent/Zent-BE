@@ -1,6 +1,6 @@
 use axum::{
     extract::{Query, State},
-    Json,
+    Json, Router, routing::get,
 };
 use sea_orm::DatabaseConnection;
 
@@ -30,4 +30,10 @@ pub async fn get_profiles(
 ) -> Result<Json<ProfileListResponse>, AppError> {
     let result = get_profiles_service(db, query).await?;
     Ok(Json(result))
+}
+
+pub fn router() -> Router<crate::state::AppState> {
+    Router::new()
+        .route("/profile", get(get_profile))
+        .route("/profiles", get(get_profiles))
 }
