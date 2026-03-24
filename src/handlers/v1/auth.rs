@@ -19,6 +19,14 @@ use crate::{
 use sea_orm::DatabaseConnection;
 use jsonwebtoken::EncodingKey;
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    request_body = UserLoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = LoginResponse)
+    )
+)]
 pub async fn login_handler(
     State(db): State<DatabaseConnection>,
     State(access_token_ttl): State<AccessTokenDefaultTTLSeconds>,
@@ -31,6 +39,14 @@ pub async fn login_handler(
     Ok(Json(result))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/register",
+    request_body = UserRegistrationRequest,
+    responses(
+        (status = 200, description = "Registration successful", body = RegisterResponse)
+    )
+)]
 pub async fn register_handler(
     State(db): State<DatabaseConnection>,
     Json(payload): Json<UserRegistrationRequest>,

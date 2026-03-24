@@ -1,31 +1,31 @@
-use std::env;
 use std::sync::OnceLock;
+use serde::Deserialize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
     pub database_url: String,
     pub jwt_sign_key: String,
     pub port: u16,
+
+    #[serde(default = "default_access_token_ttl")]
+    pub access_token_ttl_seconds: i64,
+
+    #[serde(default = "default_session_ttl")]
+    pub session_ttl_seconds: i64,
 }
+
+fn default_access_token_ttl() -> i64 { 3600 }
+fn default_session_ttl() -> i64 { 86400 }
 
 static CONFIG: OnceLock<AppConfig> = OnceLock::new();
 
 impl AppConfig {
-    /// Initializes the application configuration.
-    /// This should be called exactly once at the beginning of the application loop.
+    /// Initializes the application configuration reading natively from the environment using Envy structurally.
     pub fn init() {
         dotenvy::dotenv().ok();
         
-        let config = AppConfig {
-            database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "sqlite://data.db?mode=rwc".to_string()),
-            jwt_sign_key: env::var("JWT_SIGN_KEY")
-                .unwrap_or_else(|_| "super_secret_key_change_me".to_string()),
-            port: env::var("PORT")
-                .unwrap_or_else(|_| "3000".to_string())
-                .parse()
-                .expect("PORT must be a valid u16 integer"),
-        };
+        let config = envy::from_env::<AppConfig>()
+            .expect("Failed to parse configuration variables from environment!");
         
         CONFIG.set(config).expect("Config is already initialized");
     }
