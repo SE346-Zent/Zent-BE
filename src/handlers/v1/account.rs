@@ -14,6 +14,16 @@ use crate::{
     services::v1::account::profile_service::{get_profile_service, get_profiles_service},
 };
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/account/profile",
+    responses(
+        (status = 200, description = "Retrieve Profile", body = ProfileResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_profile(
     State(db): State<DatabaseConnection>,
     auth: AuthUser,
@@ -23,6 +33,17 @@ pub async fn get_profile(
     Ok(Json(result))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/account/profiles",
+    params(ProfileListQuery),
+    responses(
+        (status = 200, description = "Retrieve Profile List", body = ProfileListResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_profiles(
     State(db): State<DatabaseConnection>,
     Query(query): Query<ProfileListQuery>,

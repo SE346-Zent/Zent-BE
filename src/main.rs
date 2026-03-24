@@ -41,8 +41,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
         db,
-        3600, // access token ttl
-        86400 // session ttl
+        cfg.access_token_ttl_seconds,
+        cfg.session_ttl_seconds,
     );
 
     // Apply strict nested modular Router mapping with dynamic dispatch boundaries safely inside axum

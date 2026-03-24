@@ -14,8 +14,8 @@ axum = { version = "0.8.8", features = ["multipart"] }
 axum-extra = { version = "0.12.5", features = ["typed-header"] }
 base64 = "0.22.1"
 chrono = { version = "0.4.44", features = ["serde"] }
-console-subscriber = "0.5.0"
 dotenvy = "0.15.7"
+envy = "0.4.2"
 geo = { version = "0.32.0", features = ["serde"] }
 http = "1.4.0"
 image = { version = "0.25.9", features = ["serde"] }

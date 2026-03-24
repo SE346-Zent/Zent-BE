@@ -14,6 +14,17 @@ use crate::{
     services::v1::work_order::my_work_order_service::{get_my_work_order_service, get_my_work_orders_service},
 };
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/work_order/my_work_order",
+    params(WorkOrderQuery),
+    responses(
+        (status = 200, description = "Retrieve My Work Order", body = WorkOrderResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_my_work_order(
     State(db): State<DatabaseConnection>,
     Query(query): Query<WorkOrderQuery>,
@@ -23,6 +34,17 @@ pub async fn get_my_work_order(
     Ok(Json(result))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/work_order/my_work_orders",
+    params(WorkOrderListQuery),
+    responses(
+        (status = 200, description = "Retrieve My Work Orders", body = WorkOrderListResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_my_work_orders(
     State(db): State<DatabaseConnection>,
     Query(query): Query<WorkOrderListQuery>,

@@ -20,11 +20,22 @@ services:
     networks:
       - zent-gateway-net
     ports:
-      - "80:80"
+      - "8080:80"
       - "443:443"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/certs:/etc/nginx/certs:ro
+
+  rabbitmq-server:
+    container_name: zent-rabbitmq-server
+    image: rabbitmq
+    restart: unless-stopped
+    networks:
+      - zent-backend-net
+    ports:
+      - "15691:15691"
+    volumes:
+      - zent-rabbitmq-data:/var/lib/rabbitmq
 
 networks:
   zent-gateway-net:
@@ -35,3 +46,5 @@ networks:
 volumes:
   zent-redis-data:
     name: zent-redis-data
+  zent-rabbitmq-data:
+    name: zent-rabbitmq-data
