@@ -13,6 +13,7 @@ use crate::model::{
         account::profile_response::{ProfileListResponse, ProfileResponse, ProfileResponseData},
         auth::{login_response::LoginResponse, login_response::LoginResponseData, register_response::RegisterResponse},
         common::pagination::PaginationMeta,
+        error::ErrorResponse,
         work_order::work_order_response::{WorkOrderListResponse, WorkOrderResponse, WorkOrderResponseData},
     },
 };
@@ -44,6 +45,7 @@ use crate::handlers::v1::{account, auth, work_order};
             WorkOrderResponse,
             WorkOrderResponseData,
             PaginationMeta,
+            ErrorResponse,
         )
     ),
     modifiers(&SecurityAddon),

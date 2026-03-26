@@ -112,7 +112,14 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<user::Model>)
         active_user.insert(&db).await.unwrap();
     }
 
-    let state = AppState::new(b"integration_test_secret_for_tokens", db, 900, 3600);
+    let rabbitmq = zent_be::infrastructure::mq::init_rabbitmq("amqp://guest:guest@127.0.0.1:5672/%2f")
+        .await
+        .expect("Failed to initialize RabbitMQ Message Queue Architecture");
+
+    // Start the background consumer
+    zent_be::infrastructure::mq::start_email_consumer(rabbitmq.clone()).await;
+
+    let state = AppState::new(b"integration_test_secret_for_tokens", db, rabbitmq, 900, 3600);
 
     // Provide the application endpoints explicitly for tests
     Router::new()
@@ -353,7 +360,14 @@ async fn test_cat2_unknown_status_legacy_data() {
     // Re-enable FK for normal application flow execution
     db.execute_unprepared("PRAGMA foreign_keys = ON;").await.unwrap();
 
-    let state = AppState::new(b"integration_test_secret_for_tokens", db, 900, 3600);
+    let rabbitmq = zent_be::infrastructure::mq::init_rabbitmq("amqp://guest:guest@127.0.0.1:5672/%2f")
+        .await
+        .expect("Failed to initialize RabbitMQ Message Queue Architecture");
+
+    // Start the background consumer
+    zent_be::infrastructure::mq::start_email_consumer(rabbitmq.clone()).await;
+
+    let state = AppState::new(b"integration_test_secret_for_tokens", db, rabbitmq, 900, 3600);
     let app = Router::new()
         .route("/login", post(login_handler))
         .with_state(state);
@@ -472,7 +486,14 @@ async fn test_cat3_12_13_zero_ttl() {
     };
     active_user.insert(&db).await.unwrap();
 
-    let state = AppState::new(b"secret", db.clone(), 0, 0); // 0 TTLs
+    let rabbitmq = zent_be::infrastructure::mq::init_rabbitmq("amqp://guest:guest@127.0.0.1:5672/%2f")
+        .await
+        .expect("Failed to initialize RabbitMQ Message Queue Architecture");
+
+    // Start the background consumer
+    zent_be::infrastructure::mq::start_email_consumer(rabbitmq.clone()).await;
+
+    let state = AppState::new(b"secret", db.clone(), rabbitmq, 0, 0); // 0 TTLs
     let app = Router::new()
         .route("/login", post(login_handler))
         .with_state(state);

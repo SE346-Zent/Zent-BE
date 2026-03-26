@@ -1,16 +1,16 @@
 use axum::Router;
 use sea_orm::{Database, ConnectOptions};
-use std::env;
 use std::time::Duration;
 use tracing::info;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[macro_use]
 pub mod macros;
 pub mod config;
-
 pub mod entities;
 pub mod extractor;
 pub mod handlers;
+pub mod infrastructure;
 pub mod model;
 pub mod services;
 pub mod state;
@@ -20,7 +20,15 @@ use crate::config::AppConfig;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| "debug".into())
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
+    tracing::info!("Server starting...");
     
     // Initialize central configuration manager
     AppConfig::init();
@@ -37,10 +45,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
        .sqlx_logging(false);
     
     let db = Database::connect(opt).await?;
-    
+
+    // Connect to RabbitMQ using configured URI mapping efficiently
+    let rabbitmq = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url)
+        .await
+        .expect("Failed to initialize RabbitMQ Message Queue Architecture");
+
+    // Start background asynchronous AMQP email consumer pool globally
+    infrastructure::mq::start_email_consumer(rabbitmq.clone()).await;
+
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
         db,
+        rabbitmq,
         cfg.access_token_ttl_seconds,
         cfg.session_ttl_seconds,
     );

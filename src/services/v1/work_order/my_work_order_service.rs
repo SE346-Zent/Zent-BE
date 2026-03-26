@@ -32,8 +32,6 @@ pub async fn get_my_work_orders_service(
     query: WorkOrderListQuery,
 ) -> Result<WorkOrderListResponse, AppError> {
     let db_query = work_order::Entity::find()
-        .filter(work_order::Column::AdminId.eq(query.admin_id))
-        .filter(work_order::Column::CustomerId.eq(query.customer_id))
         .filter(work_order::Column::TechnicianId.eq(query.technician_id));
 
     let total_items = db_query

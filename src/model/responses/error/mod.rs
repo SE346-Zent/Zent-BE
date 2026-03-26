@@ -39,3 +39,17 @@ impl IntoResponse for AppError {
         (status, body).into_response()
     }
 }
+
+/// Structured mapped response for Utoipa displaying Error architecture explicitly resolving Scalar formats smoothly mapping JSON types organically
+#[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorResponse {
+    #[schema(example = 400)]
+    pub status_code: u16,
+    #[schema(example = "Generic error mapping format instance")]
+    pub message: String,
+    #[schema(value_type = Option<Object>)]
+    pub data: Option<serde_json::Value>,
+    #[schema(value_type = Option<Object>)]
+    pub meta: Option<serde_json::Value>,
+}

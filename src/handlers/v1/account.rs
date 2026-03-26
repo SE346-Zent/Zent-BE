@@ -9,7 +9,7 @@ use crate::{
     model::{
         requests::account::profile_list_query::ProfileListQuery,
         responses::account::profile_response::{ProfileListResponse, ProfileResponse},
-        responses::error::AppError,
+        responses::error::{AppError, ErrorResponse},
     },
     services::v1::account::profile_service::{get_profile_service, get_profiles_service},
 };
@@ -18,7 +18,9 @@ use crate::{
     get,
     path = "/api/v1/account/profile",
     responses(
-        (status = 200, description = "Retrieve Profile", body = ProfileResponse)
+        (status = 200, description = "Retrieve Profile", body = ProfileResponse),
+        (status = 401, description = "Unauthorized JWT Invalid", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
     security(
         ("bearer_auth" = [])
@@ -38,7 +40,10 @@ pub async fn get_profile(
     path = "/api/v1/account/profiles",
     params(ProfileListQuery),
     responses(
-        (status = 200, description = "Retrieve Profile List", body = ProfileListResponse)
+        (status = 200, description = "Retrieve Profile List", body = ProfileListResponse),
+        (status = 400, description = "Bad Request Constraints", body = ErrorResponse),
+        (status = 401, description = "Unauthorized Executions", body = ErrorResponse),
+        (status = 500, description = "Server Trapped Error", body = ErrorResponse)
     ),
     security(
         ("bearer_auth" = [])
