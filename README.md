@@ -114,33 +114,30 @@ Zent-BE/
 
 ### Work Orders
 
-| Method | Endpoint                           | Description            |
-|--------|------------------------------------|------------------------|
-| GET    | `/api/v1/work-orders`              | List work orders       |
-| POST   | `/api/v1/work-orders`              | Create work order      |
-| GET    | `/api/v1/work-orders/:id`          | Get work order details |
-| PATCH  | `/api/v1/work-orders/:id`          | Update work order      |
-| POST   | `/api/v1/work-orders/:id/complete` | Complete work order    |
-| POST   | `/api/v1/work-orders/:id/refuse`   | Refuse work order      |
+| Method | Endpoint                                     | Description                |
+|--------|----------------------------------------------|----------------------------|
+| GET    | `/api/v1/work-orders`                        | List work orders           |
+| POST   | `/api/v1/work-orders`                        | Create work order          |
+| GET    | `/api/v1/work-orders/:id`                    | Get work order details     |
+| PATCH  | `/api/v1/work-orders/:id`                    | Update work order          |
+| POST   | `/api/v1/work-orders/:id/complete`           | Complete work order        |
+| POST   | `/api/v1/work-orders/:id/refuse`             | Refuse work order          |
+| POST   | `/api/v1/work-orders/:id/parts/install`      | Register part installation |
+| POST   | `/api/v1/work-orders/:id/parts/remove`       | Register part removal      |
+| POST   | `/api/v1/work-orders/:id/photos/upload`      | Upload service photo       |
+| GET    | `/api/v1/work-orders/:id/photos`             | Get photos for work order  |
+| POST   | `/api/v1/work-orders/:id/signature/upload`   | Upload signature           |
+| POST   | `/api/v1/work-orders/:id/logs/upload`        | Upload self-test log       |
 
-### Parts Management
+### Inventory Management
 
 | Method | Endpoint                 | Description          |
 |--------|--------------------------|----------------------|
 | GET    | `/api/v1/parts`          | List inventory       |
 | POST   | `/api/v1/parts`          | Add part             |
 | POST   | `/api/v1/parts/checkout` | Check out part       |
-| POST   | `/api/v1/parts/checkin`  | Check in part        |
+| POST   | `/api/v1/parts/return`   | Register part return |
 | GET    | `/api/v1/parts/stale`    | List stale checkouts |
-
-### Documentation
-
-| Method | Endpoint                     | Description               |
-|--------|------------------------------|---------------------------|
-| POST   | `/api/v1/photos/upload`      | Upload service photo      |
-| GET    | `/api/v1/photos/:work_order` | Get photos for work order |
-| POST   | `/api/v1/signatures/upload`  | Upload signature          |
-| POST   | `/api/v1/logs/upload`        | Upload self-test log      |
 
 ## Development
 
