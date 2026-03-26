@@ -4,12 +4,12 @@ A REST API backend for Zent, a Licensed Field Technician Service Management Syst
 
 ## Project Information
 
-| Attribute | Value |
-|-----------|-------|
-| **Course** | SE346.Q22 - Mobile Application Development |
-| **Framework** | Axum (Rust) |
-| **Database** | SQLite (dev, mobile) / undecided (via SeaORM) |
-| **API Documentation** | OpenAPI/Scalar  |
+| Attribute             | Value                                         |
+|-----------------------|-----------------------------------------------|
+| **Course**            | SE346.Q22 - Mobile Application Development    |
+| **Framework**         | Axum (Rust)                                   |
+| **Database**          | SQLite (dev, mobile) / undecided (via SeaORM) |
+| **API Documentation** | OpenAPI/Scalar                                |
 
 ## Features
 
@@ -28,11 +28,11 @@ A REST API backend for Zent, a Licensed Field Technician Service Management Syst
 
 ## User Roles
 
-| Role | Key Capabilities |
-|------|------------------|
-| **Administrator** | User management, work order assignment, inventory oversight, analytics |
-| **Technician** | Work order execution, QR scanning, photo documentation, signature capture |
-| **Customer** | Service requests, messaging, surveys, escalations |
+| Role              | Key Capabilities                                                          |
+|-------------------|---------------------------------------------------------------------------|
+| **Administrator** | User management, work order assignment, inventory oversight, analytics    |
+| **Technician**    | Work order execution, QR scanning, photo documentation, signature capture |
+| **Customer**      | Service requests, messaging, surveys, escalations                         |
 
 ## Tech Stack
 
@@ -106,41 +106,41 @@ Zent-BE/
 
 ### Authentication
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/auth/login` | User login |
-| POST | `/api/v1/auth/logout` | User logout |
-| POST | `/api/v1/auth/refresh` | Session refresh |
+| Method | Endpoint               | Description     |
+|--------|------------------------|-----------------|
+| POST   | `/api/v1/auth/login`   | User login      |
+| POST   | `/api/v1/auth/logout`  | User logout     |
+| POST   | `/api/v1/auth/refresh` | Session refresh |
 
 ### Work Orders
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/work-orders` | List work orders |
-| POST | `/api/v1/work-orders` | Create work order |
-| GET | `/api/v1/work-orders/:id` | Get work order details |
-| PUT | `/api/v1/work-orders/:id` | Update work order |
-| POST | `/api/v1/work-orders/:id/complete` | Complete work order |
-| POST | `/api/v1/work-orders/:id/refuse` | Refuse work order |
+| Method | Endpoint                           | Description            |
+|--------|------------------------------------|------------------------|
+| GET    | `/api/v1/work-orders`              | List work orders       |
+| POST   | `/api/v1/work-orders`              | Create work order      |
+| GET    | `/api/v1/work-orders/:id`          | Get work order details |
+| PATCH  | `/api/v1/work-orders/:id`          | Update work order      |
+| POST   | `/api/v1/work-orders/:id/complete` | Complete work order    |
+| POST   | `/api/v1/work-orders/:id/refuse`   | Refuse work order      |
 
 ### Parts Management
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/parts` | List inventory |
-| POST | `/api/v1/parts` | Add part |
-| POST | `/api/v1/parts/checkout` | Check out part |
-| POST | `/api/v1/parts/checkin` | Check in part |
-| GET | `/api/v1/parts/stale` | List stale checkouts |
+| Method | Endpoint                 | Description          |
+|--------|--------------------------|----------------------|
+| GET    | `/api/v1/parts`          | List inventory       |
+| POST   | `/api/v1/parts`          | Add part             |
+| POST   | `/api/v1/parts/checkout` | Check out part       |
+| POST   | `/api/v1/parts/checkin`  | Check in part        |
+| GET    | `/api/v1/parts/stale`    | List stale checkouts |
 
 ### Documentation
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/photos/upload` | Upload service photo |
-| GET | `/api/v1/photos/:work_order` | Get photos for work order |
-| POST | `/api/v1/signatures/upload` | Upload signature |
-| POST | `/api/v1/logs/upload` | Upload self-test log |
+| Method | Endpoint                     | Description               |
+|--------|------------------------------|---------------------------|
+| POST   | `/api/v1/photos/upload`      | Upload service photo      |
+| GET    | `/api/v1/photos/:work_order` | Get photos for work order |
+| POST   | `/api/v1/signatures/upload`  | Upload signature          |
+| POST   | `/api/v1/logs/upload`        | Upload self-test log      |
 
 ## Development
 
