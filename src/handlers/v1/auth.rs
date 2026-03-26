@@ -10,8 +10,10 @@ use crate::{
             user_login_request::UserLoginRequest,
             user_registration_request::UserRegistrationRequest,
         },
-        responses::auth::{login_response::LoginResponse, register_response::RegisterResponse},
-        responses::error::AppError,
+        responses::{
+            auth::{login_response::LoginResponse, register_response::RegisterResponse},
+            error::{AppError, ErrorResponse},
+        },
     },
     services::v1::auth::{login_service, register_service},
     state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds},
@@ -24,7 +26,9 @@ use jsonwebtoken::EncodingKey;
     path = "/api/v1/auth/login",
     request_body = UserLoginRequest,
     responses(
-        (status = 200, description = "Login successful", body = LoginResponse)
+        (status = 200, description = "Login successful", body = LoginResponse),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
     )
 )]
 pub async fn login_handler(
@@ -44,11 +48,15 @@ pub async fn login_handler(
     path = "/api/v1/auth/register",
     request_body = UserRegistrationRequest,
     responses(
-        (status = 200, description = "Registration successful", body = RegisterResponse)
+        (status = 200, description = "Registration successful", body = RegisterResponse),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 409, description = "Conflict Validation Error", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
     )
 )]
 pub async fn register_handler(
     State(db): State<DatabaseConnection>,
+    State(rabbitmq): State<std::sync::Arc<lapin::Connection>>,
     Json(payload): Json<UserRegistrationRequest>,
 ) -> Result<Json<RegisterResponse>, AppError> {
     if let Err(errors) = payload.validate() {
@@ -57,7 +65,7 @@ pub async fn register_handler(
         return Err(AppError::BadRequest(err_msg));
     }
 
-    let result = register_service::perform_register(db, payload).await?;
+    let result = register_service::perform_register(db, rabbitmq, payload).await?;
     Ok(Json(result))
 }
 

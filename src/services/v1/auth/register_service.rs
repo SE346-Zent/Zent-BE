@@ -1,7 +1,11 @@
-use crate::entities::{account_status, role, user};
-use crate::model::requests::auth::user_registration_request::UserRegistrationRequest;
-use crate::model::responses::auth::register_response::RegisterResponse;
-use crate::model::responses::error::AppError;
+use crate::{
+    entities::{account_status, role, user},
+    infrastructure::mq::publish_email_message,
+    model::{
+        requests::auth::user_registration_request::UserRegistrationRequest,
+        responses::{auth::register_response::RegisterResponse, error::AppError},
+    }
+};
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
@@ -13,6 +17,7 @@ use uuid::Uuid;
 
 pub async fn perform_register(
     db: DatabaseConnection,
+    rabbitmq: std::sync::Arc<lapin::Connection>,
     req: UserRegistrationRequest,
 ) -> Result<RegisterResponse, AppError> {
     // 3. Check if user already exist with email
@@ -29,7 +34,6 @@ pub async fn perform_register(
     }
 
     // 4. Construct User entity object
-    // TODO: Implement in-memory lookup table that loads DB Role table for fast, type-safe lookup.
     let customer_role = role::Entity::find()
         .filter(role::Column::Name.eq("Customer"))
         .one(&db)
@@ -59,8 +63,8 @@ pub async fn perform_register(
 
     let new_user = user::ActiveModel {
         id: Set(Uuid::new_v4()),
-        full_name: Set(req.full_name),
-        email: Set(req.email),
+        full_name: Set(req.full_name.clone()),
+        email: Set(req.email.clone()),
         password_hash: Set(hashed_password),
         phone_number: Set(req.phone_number),
         account_status: Set(pending_status.id), // Using id from pending_status
@@ -76,9 +80,16 @@ pub async fn perform_register(
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create user: {:?}", e)))?;
 
-    // 6. Finalise
-    // TODO: Add send verification email here once implemented
-    // TODO: implement full phone number format validation (format & country code).
+    // 6. Deliver async email task to DLQ RabbitMQ environment securely bypassing direct blocking HTTP flows.
+    let email_payload = serde_json::json!({
+        "to": req.email,
+        "subject": "Welcome to Zent!",
+        "body": format!("Welcome to Zent, {}! Please verify your email.", req.full_name)
+    });
+    if let Err(e) = publish_email_message(&rabbitmq, email_payload.to_string().as_bytes()).await {
+        tracing::error!("Failed to enqueue registration email task into RabbitMQ: {}", e);
+    }
 
-    Ok(RegisterResponse::success("User registered successfully"))
+    // 7. Finalise
+    Ok(RegisterResponse::success("Registration successful"))
 }

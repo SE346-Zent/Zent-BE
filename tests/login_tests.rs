@@ -112,7 +112,7 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<user::Model>)
         active_user.insert(&db).await.unwrap();
     }
 
-    let state = AppState::new(b"integration_test_secret_for_tokens", db, 900, 3600);
+    let state = AppState::new(b"integration_test_secret_for_tokens", db, None, 900, 3600);
 
     // Provide the application endpoints explicitly for tests
     Router::new()
@@ -353,7 +353,7 @@ async fn test_cat2_unknown_status_legacy_data() {
     // Re-enable FK for normal application flow execution
     db.execute_unprepared("PRAGMA foreign_keys = ON;").await.unwrap();
 
-    let state = AppState::new(b"integration_test_secret_for_tokens", db, 900, 3600);
+    let state = AppState::new(b"integration_test_secret_for_tokens", db, None, 900, 3600);
     let app = Router::new()
         .route("/login", post(login_handler))
         .with_state(state);
@@ -472,7 +472,8 @@ async fn test_cat3_12_13_zero_ttl() {
     };
     active_user.insert(&db).await.unwrap();
 
-    let state = AppState::new(b"secret", db.clone(), 0, 0); // 0 TTLs
+
+    let state = AppState::new(b"secret", db.clone(), None, 0, 0); // 0 TTLs
     let app = Router::new()
         .route("/login", post(login_handler))
         .with_state(state);

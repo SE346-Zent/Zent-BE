@@ -8,8 +8,10 @@ use crate::{
     extractor::auth_user::AuthUser,
     model::{
         requests::work_order::{my_work_order_query::WorkOrderQuery, work_order_list_query::WorkOrderListQuery},
-        responses::error::AppError,
-        responses::work_order::work_order_response::{WorkOrderListResponse, WorkOrderResponse},
+        responses::{
+            error::{AppError, ErrorResponse},
+            work_order::work_order_response::{WorkOrderListResponse, WorkOrderResponse},
+        },
     },
     services::v1::work_order::my_work_order_service::{get_my_work_order_service, get_my_work_orders_service},
 };
@@ -19,13 +21,17 @@ use crate::{
     path = "/api/v1/work_order/my_work_order",
     params(WorkOrderQuery),
     responses(
-        (status = 200, description = "Retrieve My Work Order", body = WorkOrderResponse)
+        (status = 200, description = "Retrieve My Work Order", body = WorkOrderResponse),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized JWT Validation", body = ErrorResponse),
+        (status = 404, description = "Work Order Not Found", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
     security(
         ("bearer_auth" = [])
     )
 )]
-pub async fn get_my_work_order(
+async fn get_my_work_order(
     State(db): State<DatabaseConnection>,
     Query(query): Query<WorkOrderQuery>,
     _auth: AuthUser,
@@ -39,13 +45,16 @@ pub async fn get_my_work_order(
     path = "/api/v1/work_order/my_work_orders",
     params(WorkOrderListQuery),
     responses(
-        (status = 200, description = "Retrieve My Work Orders", body = WorkOrderListResponse)
+        (status = 200, description = "Retrieve My Work Orders", body = WorkOrderListResponse),
+        (status = 400, description = "Bad Request Query Parameters", body = ErrorResponse),
+        (status = 401, description = "Unauthorized Token", body = ErrorResponse),
+        (status = 500, description = "Internal Platform Error", body = ErrorResponse)
     ),
     security(
         ("bearer_auth" = [])
     )
 )]
-pub async fn get_my_work_orders(
+async fn get_my_work_orders(
     State(db): State<DatabaseConnection>,
     Query(query): Query<WorkOrderListQuery>,
     _auth: AuthUser,
