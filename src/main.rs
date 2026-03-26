@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
         db,
-        rabbitmq,
+        Some(rabbitmq),
         cfg.access_token_ttl_seconds,
         cfg.session_ttl_seconds,
     );
