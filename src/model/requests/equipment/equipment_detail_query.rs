@@ -3,6 +3,7 @@ use utoipa::IntoParams;
 use uuid::Uuid;
 
 #[derive(Deserialize, IntoParams, Debug)]
-pub struct MyEquipmentQuery {
-    pub customer_id: Uuid,
+pub struct EquipmentDetailQuery {
+    #[serde(rename = "equipmentId")]
+    pub equipment_id: Uuid,
 }

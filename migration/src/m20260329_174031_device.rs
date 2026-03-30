@@ -162,20 +162,20 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Images::Table)
+                    .table(Image::Table)
                     .if_not_exists()
-                    .col(uuid(Images::Id).primary_key())
-                    .col(string(Images::ImageURL))
-                    .col(uuid_null(Images::PartId))
-                    .col(uuid_null(Images::EquipmentId))
-                    .col(timestamp(Images::CapturedAt))
+                    .col(uuid(Image::Id).primary_key())
+                    .col(string(Image::ImageURL))
+                    .col(uuid_null(Image::PartId))
+                    .col(uuid_null(Image::EquipmentId))
+                    .col(timestamp(Image::CapturedAt))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_images_part")
-                            .from(Images::Table, Images::PartId)
+                            .from(Image::Table, Image::PartId)
                             .to(Parts::Table, Parts::Id)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
@@ -183,7 +183,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_images_equipment")
-                            .from(Images::Table, Images::EquipmentId)
+                            .from(Image::Table, Image::EquipmentId)
                             .to(Equipments::Table, Equipments::Id)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
@@ -196,7 +196,7 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager.drop_table(Table::drop().table(Images::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(Image::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Warranty::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Parts::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Equipments::Table).to_owned()).await?;
@@ -290,7 +290,7 @@ enum Warranty
 }
 
 #[derive(DeriveIden)]
-enum Images
+enum Image
 {
     Table,
     Id,

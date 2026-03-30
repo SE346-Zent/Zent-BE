@@ -10,7 +10,8 @@ use crate::{
         requests::work_order::{my_work_order_query::WorkOrderQuery, work_order_list_query::WorkOrderListQuery},
         responses::{
             error::{AppError, ErrorResponse},
-            work_order::work_order_response::{WorkOrderListResponse, WorkOrderResponse},
+            work_order::work_order_detail_response::WorkOrderDetailResponse,
+            work_order::work_order_list_item_response::WorkOrderListResponse,
         },
     },
     services::v1::work_order::my_work_order_service::{get_my_work_order_service, get_my_work_orders_service},
@@ -21,7 +22,7 @@ use crate::{
     path = "/api/v1/work_order/my_work_order",
     params(WorkOrderQuery),
     responses(
-        (status = 200, description = "Retrieve My Work Order", body = WorkOrderResponse),
+        (status = 200, description = "Retrieve My Work Order", body = WorkOrderDetailResponse),
         (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 401, description = "Unauthorized JWT Validation", body = ErrorResponse),
         (status = 404, description = "Work Order Not Found", body = ErrorResponse),
@@ -35,7 +36,7 @@ async fn get_my_work_order(
     State(db): State<DatabaseConnection>,
     Query(query): Query<WorkOrderQuery>,
     _auth: AuthUser,
-) -> Result<Json<WorkOrderResponse>, AppError> {
+) -> Result<Json<WorkOrderDetailResponse>, AppError> {
     let result = get_my_work_order_service(db, query.id).await?;
     Ok(Json(result))
 }

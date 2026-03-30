@@ -1,3 +1,3 @@
-pub mod pagination;
+pub mod pagination_meta;
 
-pub use pagination::{PaginationMeta, PaginationQuery};
+pub use pagination_meta::{PaginationMeta, PaginationQuery};

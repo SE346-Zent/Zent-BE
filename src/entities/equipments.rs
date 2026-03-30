@@ -35,8 +35,8 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     EquipmentStatus,
-    #[sea_orm(has_many = "super::images::Entity")]
-    Images,
+    #[sea_orm(has_many = "super::image::Entity")]
+    Image,
     #[sea_orm(has_many = "super::parts::Entity")]
     Parts,
     #[sea_orm(has_many = "super::warranty::Entity")]
@@ -55,9 +55,9 @@ impl Related<super::equipment_status::Entity> for Entity {
     }
 }
 
-impl Related<super::images::Entity> for Entity {
+impl Related<super::image::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Images.def()
+        Relation::Image.def()
     }
 }
 

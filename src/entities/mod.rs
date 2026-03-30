@@ -6,7 +6,7 @@ pub mod account_status;
 pub mod equipment_models;
 pub mod equipment_status;
 pub mod equipments;
-pub mod images;
+pub mod image;
 pub mod part_status;
 pub mod part_type;
 pub mod parts;

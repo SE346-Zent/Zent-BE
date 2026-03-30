@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use utoipa::{IntoParams, ToSchema};
-use crate::model::responses::common::pagination::PaginationQuery;
+use crate::model::responses::common::pagination_meta::PaginationQuery;
 
 #[derive(Deserialize, Debug, Clone, ToSchema)]
 pub enum RoleQuery {

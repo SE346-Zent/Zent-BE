@@ -5,8 +5,9 @@ use uuid::Uuid;
 use crate::model::responses::common::pagination_meta::PaginationQuery;
 
 #[derive(Deserialize, Debug, IntoParams)]
-pub struct WorkOrderListQuery {
-    pub technician_id: Uuid,
+pub struct PartListQuery {
+    #[serde(rename = "equipmentId")]
+    pub equipment_id: Uuid,
     #[serde(flatten)]
     pub pagination: PaginationQuery,
 }

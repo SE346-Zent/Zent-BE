@@ -29,8 +29,8 @@ pub enum Relation {
         on_delete = "SetNull"
     )]
     Equipments,
-    #[sea_orm(has_many = "super::images::Entity")]
-    Images,
+    #[sea_orm(has_many = "super::image::Entity")]
+    Image,
     #[sea_orm(
         belongs_to = "super::part_status::Entity",
         from = "Column::PartStatusId",
@@ -47,9 +47,9 @@ impl Related<super::equipments::Entity> for Entity {
     }
 }
 
-impl Related<super::images::Entity> for Entity {
+impl Related<super::image::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Images.def()
+        Relation::Image.def()
     }
 }
 

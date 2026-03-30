@@ -5,8 +5,11 @@ use crate::{
     entities::{role, user},
     model::{
         requests::account::profile_list_query::ProfileListQuery,
-        responses::account::profile_response::{
-            ProfileListResponse, ProfileResponse, ProfileResponseData,
+        responses::account::profile_detail_response::{
+            ProfileDetailResponse, ProfileDetailResponseData,
+        },
+        responses::account::profile_list_item_response::{
+            ProfileListResponse, ProfileListItemResponseData,
         },
         responses::error::AppError,
     },
@@ -15,14 +18,14 @@ use crate::{
 pub async fn get_profile_service(
     db: DatabaseConnection,
     user_id: Uuid,
-) -> Result<ProfileResponse, AppError> {
+) -> Result<ProfileDetailResponse, AppError> {
     let user_model = user::Entity::find_by_id(user_id)
         .one(&db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
         .ok_or_else(|| AppError::BadRequest("User not found".to_string()))?;
 
-    let data = ProfileResponseData {
+    let data = ProfileDetailResponseData {
         full_name: user_model.full_name,
         email: user_model.email,
         phone_number: user_model.phone_number,
@@ -30,7 +33,7 @@ pub async fn get_profile_service(
         account_status: user_model.account_status,
     };
 
-    Ok(ProfileResponse::success(data))
+    Ok(ProfileDetailResponse::success(data))
 }
 
 pub async fn get_profiles_service(
@@ -67,7 +70,7 @@ pub async fn get_profiles_service(
 
     let data = users
         .into_iter()
-        .map(|user_model| ProfileResponseData {
+        .map(|user_model| ProfileListItemResponseData {
             full_name: user_model.full_name,
             email: user_model.email,
             phone_number: user_model.phone_number,

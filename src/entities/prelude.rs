@@ -4,7 +4,7 @@ pub use super::account_status::Entity as AccountStatus;
 pub use super::equipment_models::Entity as EquipmentModels;
 pub use super::equipment_status::Entity as EquipmentStatus;
 pub use super::equipments::Entity as Equipments;
-pub use super::images::Entity as Images;
+pub use super::image::Entity as Image;
 pub use super::part_status::Entity as PartStatus;
 pub use super::part_type::Entity as PartType;
 pub use super::parts::Entity as Parts;

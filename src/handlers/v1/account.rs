@@ -8,7 +8,8 @@ use crate::{
     extractor::auth_user::AuthUser,
     model::{
         requests::account::profile_list_query::ProfileListQuery,
-        responses::account::profile_response::{ProfileListResponse, ProfileResponse},
+        responses::account::profile_detail_response::ProfileDetailResponse,
+        responses::account::profile_list_item_response::ProfileListResponse,
         responses::error::{AppError, ErrorResponse},
     },
     services::v1::account::profile_service::{get_profile_service, get_profiles_service},
@@ -18,7 +19,7 @@ use crate::{
     get,
     path = "/api/v1/account/profile",
     responses(
-        (status = 200, description = "Retrieve Profile", body = ProfileResponse),
+        (status = 200, description = "Retrieve Profile", body = ProfileDetailResponse),
         (status = 401, description = "Unauthorized JWT Invalid", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
@@ -29,7 +30,7 @@ use crate::{
 pub async fn get_profile(
     State(db): State<DatabaseConnection>,
     auth: AuthUser,
-) -> Result<Json<ProfileResponse>, AppError> {
+) -> Result<Json<ProfileDetailResponse>, AppError> {
     // Utilize the hydrated context!
     let result = get_profile_service(db, auth.user.id).await?;
     Ok(Json(result))
