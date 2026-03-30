@@ -4,20 +4,27 @@ use crate::model::responses::common::pagination_meta::PaginationMeta;
 
 #[derive(Deserialize, Debug, Serialize, utoipa::ToSchema)]
 pub struct WorkOrderListItemResponseData {
-    pub work_order_id: uuid::Uuid,
-    pub title: String,
-    pub address_string: String,
-    pub description: String,
-    pub status_id: i32,
-    pub priority: i32,
-    pub reject_reason: String,
+    pub id: uuid::Uuid,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
+    pub phone_number: String,
+    pub work_order_status_id: i32,
+    pub country: String,
+    pub state: String,
+    pub city: String,
+    pub address: String,
+    pub building: String,
+    pub appointment: String,
+    pub reference_ticket: String,
     pub created_at: String,
     pub updated_at: String,
-    pub closed_at: Option<String>,
-    pub version: i32,
+    pub closed_at: String,
     pub admin_id: uuid::Uuid,
     pub customer_id: uuid::Uuid,
     pub technician_id: uuid::Uuid,
+    pub complete_form_id: uuid::Uuid,
+    pub reject_form_id: uuid::Uuid,
 }
 
 define_api_response!(WorkOrderListResponse, Vec<WorkOrderListItemResponseData>, PaginationMeta);

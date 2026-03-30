@@ -5,7 +5,7 @@ pub use axum::{
 pub use std::net::SocketAddr;
 pub use validator::Validate;
 pub use crate::{
-    entities::user,
+    entities::users,
     model::{
         responses::error::AppError,
     }

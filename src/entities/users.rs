@@ -3,7 +3,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "user")]
+#[sea_orm(table_name = "users")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
@@ -30,15 +30,15 @@ pub enum Relation {
     )]
     AccountStatus,
     #[sea_orm(
-        belongs_to = "super::role::Entity",
+        belongs_to = "super::roles::Entity",
         from = "Column::RoleId",
-        to = "super::role::Column::Id",
+        to = "super::roles::Column::Id",
         on_update = "Cascade",
         on_delete = "Restrict"
     )]
-    Role,
-    #[sea_orm(has_many = "super::session::Entity")]
-    Session,
+    Roles,
+    #[sea_orm(has_many = "super::sessions::Entity")]
+    Sessions,
 }
 
 impl Related<super::account_status::Entity> for Entity {
@@ -47,15 +47,15 @@ impl Related<super::account_status::Entity> for Entity {
     }
 }
 
-impl Related<super::role::Entity> for Entity {
+impl Related<super::roles::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Role.def()
+        Relation::Roles.def()
     }
 }
 
-impl Related<super::session::Entity> for Entity {
+impl Related<super::sessions::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Session.def()
+        Relation::Sessions.def()
     }
 }
 

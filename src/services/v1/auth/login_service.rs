@@ -1,4 +1,4 @@
-use crate::entities::{session, user};
+use crate::entities::{sessions, users};
 use crate::model::auth::jwt_claims::Claims;
 use crate::model::requests::auth::user_login_request::UserLoginRequest;
 use crate::model::responses::auth::login_response::{
@@ -29,8 +29,8 @@ pub async fn perform_login(
     ip_addr: SocketAddr,
 ) -> Result<LoginResponse, AppError> {
     // 1. Lookup user
-    let user_opt = user::Entity::find()
-        .filter(user::Column::Email.eq(&req.email))
+    let user_opt = users::Entity::find()
+        .filter(users::Column::Email.eq(&req.email))
         .one(&db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
@@ -56,7 +56,7 @@ pub async fn perform_login(
     };
 
     // 2.5. Check Role exists
-    let role_exists = crate::entities::role::Entity::find_by_id(user_model.role_id)
+    let role_exists = crate::entities::roles::Entity::find_by_id(user_model.role_id)
         .one(&db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
@@ -113,7 +113,7 @@ pub async fn perform_login(
     let session_id = Uuid::new_v4();
     let expires_at_chrono =
         chrono::DateTime::from_timestamp(now + session_ttl_seconds, 0).unwrap_or(Utc::now());
-    let _ = session::ActiveModel {
+    let _ = sessions::ActiveModel {
         id: Set(session_id),
         user_id: Set(user_model.id),
         refresh_token_hash: Set(refresh_token_hash),

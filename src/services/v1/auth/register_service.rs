@@ -1,5 +1,5 @@
 use crate::{
-    entities::{account_status, role, user},
+    entities::{account_status, roles, users},
     infrastructure::mq::publish_email_message,
     model::{
         requests::auth::user_registration_request::UserRegistrationRequest,
@@ -21,8 +21,8 @@ pub async fn perform_register(
     req: UserRegistrationRequest,
 ) -> Result<RegisterResponse, AppError> {
     // 3. Check if user already exist with email
-    let existing_user = user::Entity::find()
-        .filter(user::Column::Email.eq(&req.email))
+    let existing_user = users::Entity::find()
+        .filter(users::Column::Email.eq(&req.email))
         .one(&db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
@@ -34,8 +34,8 @@ pub async fn perform_register(
     }
 
     // 4. Construct User entity object
-    let customer_role = role::Entity::find()
-        .filter(role::Column::Name.eq("Customer"))
+    let customer_role = roles::Entity::find()
+        .filter(roles::Column::Name.eq("Customer"))
         .one(&db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error loading role: {}", e)))?
@@ -61,7 +61,7 @@ pub async fn perform_register(
 
     let now = Utc::now();
 
-    let new_user = user::ActiveModel {
+    let new_user = users::ActiveModel {
         id: Set(Uuid::new_v4()),
         full_name: Set(req.full_name.clone()),
         email: Set(req.email.clone()),

@@ -8,6 +8,8 @@ use crate::model::{
     requests::{
         account::profile_list_query::RoleQuery,
         auth::{user_login_request::UserLoginRequest, user_registration_request::UserRegistrationRequest},
+        work_order::create_work_order_request::CreateWorkOrderRequest,
+        work_order::create_closing_form_request::CreateClosingFormRequest,
     },
     responses::{
         account::profile_detail_response::{ProfileDetailResponse, ProfileDetailResponseData},
@@ -17,6 +19,8 @@ use crate::model::{
         error::ErrorResponse,
         work_order::work_order_detail_response::{WorkOrderDetailResponse, WorkOrderDetailResponseData},
         work_order::work_order_list_item_response::{WorkOrderListResponse, WorkOrderListItemResponseData},
+        work_order::closing_form_response::{ClosingFormResponse, ClosingFormResponseData},
+        warranty::warranty_detail_response::{WarrantyDetailResponse, WarrantyDetailResponseData},
     },
 };
 
@@ -31,6 +35,9 @@ use crate::handlers::v1::{account, auth, work_order};
         account::get_profiles,
         work_order::get_my_work_order,
         work_order::get_my_work_orders,
+        work_order::create_work_order,
+        work_order::create_closing_form,
+        work_order::get_warranty,
     ),
     components(
         schemas(
@@ -48,6 +55,12 @@ use crate::handlers::v1::{account, auth, work_order};
             WorkOrderListItemResponseData,
             WorkOrderDetailResponse,
             WorkOrderDetailResponseData,
+            CreateWorkOrderRequest,
+            CreateClosingFormRequest,
+            ClosingFormResponse,
+            ClosingFormResponseData,
+            WarrantyDetailResponse,
+            WarrantyDetailResponseData,
             PaginationMeta,
             ErrorResponse,
         )

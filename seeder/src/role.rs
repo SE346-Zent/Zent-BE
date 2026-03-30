@@ -1,7 +1,7 @@
 use anyhow::Result;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::collections::HashMap;
-use zent_be::entities::role;
+use zent_be::entities::roles;
 
 /// All roles that must exist in the database.
 pub const ROLES: &[&str] = &["Admin", "SuperAdmin", "Customer", "Technician"];
@@ -12,8 +12,8 @@ pub async fn seed_roles(db: &DatabaseConnection) -> Result<HashMap<String, i32>>
     let mut map = HashMap::new();
 
     for &name in ROLES {
-        let existing = role::Entity::find()
-            .filter(role::Column::Name.eq(name))
+        let existing = roles::Entity::find()
+            .filter(roles::Column::Name.eq(name))
             .one(db)
             .await?;
 
@@ -23,7 +23,7 @@ pub async fn seed_roles(db: &DatabaseConnection) -> Result<HashMap<String, i32>>
                 r.id
             }
             None => {
-                let inserted = role::ActiveModel {
+                let inserted = roles::ActiveModel {
                     name: Set(name.to_string()),
                     ..Default::default()
                 }

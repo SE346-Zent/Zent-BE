@@ -18,7 +18,7 @@ use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, Set};
 use serde::Serialize;
 use std::collections::HashMap;
 use uuid::Uuid;
-use zent_be::entities::user;
+use zent_be::entities::users;
 
 /// Configuration for user seeding.
 pub struct UserSeedConfig {
@@ -151,7 +151,7 @@ pub async fn seed_users(
     let (models, records): (Vec<_>, Vec<_>) = hashed
         .into_iter()
         .map(|h| {
-            let model = user::ActiveModel {
+            let model = users::ActiveModel {
                 id: Set(h.id),
                 full_name: Set(h.full_name.clone()),
                 email: Set(h.email.clone()),
@@ -179,10 +179,10 @@ pub async fn seed_users(
 
     // Phase 4: bulk insert
     if !models.is_empty() {
-        user::Entity::insert_many(models).exec(db).await?;
+        users::Entity::insert_many(models).exec(db).await?;
     }
 
-    let total = user::Entity::find().count(db).await?;
+    let total = users::Entity::find().count(db).await?;
     println!("  Inserted {} users. Total in DB: {}", records.len(), total);
 
     Ok(records)

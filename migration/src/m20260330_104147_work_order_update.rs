@@ -25,32 +25,33 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(WorkOrder::Table)
+                    .table(WorkOrders::Table)
                     .if_not_exists()
-                    .col(uuid(WorkOrder::Id).primary_key())
-                    .col(string(WorkOrder::FirstName))
-                    .col(string(WorkOrder::LastName))
-                    .col(string(WorkOrder::Email))
-                    .col(string(WorkOrder::PhoneNumber))
-                    .col(string(WorkOrder::Role))
-                    .col(integer(WorkOrder::WorkOrderStatusId))
-                    .col(string(WorkOrder::Country))
-                    .col(string(WorkOrder::State))
-                    .col(string(WorkOrder::City))
-                    .col(string(WorkOrder::Address))
-                    .col(string(WorkOrder::Building))
+                    .col(uuid(WorkOrders::Id).primary_key())
+                    .col(string(WorkOrders::FirstName))
+                    .col(string(WorkOrders::LastName))
+                    .col(string(WorkOrders::Email))
+                    .col(string(WorkOrders::PhoneNumber))
+                    .col(integer(WorkOrders::WorkOrderStatusId))
+                    .col(string(WorkOrders::Country))
+                    .col(string(WorkOrders::State))
+                    .col(string(WorkOrders::City))
+                    .col(string(WorkOrders::Address))
+                    .col(string(WorkOrders::Building))
+                    .col(timestamp(WorkOrders::Appointment))
+                    .col(string(WorkOrders::ReferenceTicket))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp(ClosedAt))
-                    .col(uuid(WorkOrder::AdminId))
-                    .col(uuid(WorkOrder::CustomerId))
-                    .col(uuid(WorkOrder::TechnicianId))
-                    .col(uuid(WorkOrder::CompleteFormId))
-                    .col(uuid(WorkOrder::RejectFormId))
+                    .col(uuid(WorkOrders::AdminId))
+                    .col(uuid(WorkOrders::CustomerId))
+                    .col(uuid(WorkOrders::TechnicianId))
+                    .col(uuid(WorkOrders::CompleteFormId))
+                    .col(uuid(WorkOrders::RejectFormId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_status")
-                            .from(WorkOrder::Table, WorkOrder::WorkOrderStatusId)
+                            .from(WorkOrders::Table, WorkOrders::WorkOrderStatusId)
                             .to(WorkOrderStatus::Table, WorkOrderStatus::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
@@ -58,7 +59,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_admin")
-                            .from(WorkOrder::Table, WorkOrder::AdminId)
+                            .from(WorkOrders::Table, WorkOrders::AdminId)
                             .to(Users::Table, Users::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
@@ -66,7 +67,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_customer")
-                            .from(WorkOrder::Table, WorkOrder::CustomerId)
+                            .from(WorkOrders::Table, WorkOrders::CustomerId)
                             .to(Users::Table, Users::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
@@ -74,7 +75,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_technician")
-                            .from(WorkOrder::Table, WorkOrder::TechnicianId)
+                            .from(WorkOrders::Table, WorkOrders::TechnicianId)
                             .to(Users::Table, Users::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
@@ -82,7 +83,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_complete_form")
-                            .from(WorkOrder::Table, WorkOrder::CompleteFormId)
+                            .from(WorkOrders::Table, WorkOrders::CompleteFormId)
                             .to(WorkOrderClosingForms::Table, WorkOrderClosingForms::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
@@ -90,7 +91,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_reject_form")
-                            .from(WorkOrder::Table, WorkOrder::RejectFormId)
+                            .from(WorkOrders::Table, WorkOrders::RejectFormId)
                             .to(WorkOrderClosingForms::Table, WorkOrderClosingForms::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
@@ -135,7 +136,7 @@ impl MigrationTrait for Migration {
             .drop_table(Table::drop().table(WorkOrderSymptoms::Table).to_owned())
             .await?;
         manager
-            .drop_table(Table::drop().table(WorkOrder::Table).to_owned())
+            .drop_table(Table::drop().table(WorkOrders::Table).to_owned())
             .await
     }
 }
@@ -161,7 +162,7 @@ enum WorkOrderClosingForms {
 // TODO: reject form ID
 
 #[derive(DeriveIden)]
-enum WorkOrder
+enum WorkOrders
 {
     Table,
     Id,
@@ -180,7 +181,9 @@ enum WorkOrder
     State,
     City,
     Address,
-    Building
+    Building,
+    Appointment,
+    ReferenceTicket,
 }
 
 #[derive(DeriveIden)]

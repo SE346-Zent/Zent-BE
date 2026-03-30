@@ -2,7 +2,7 @@ use sea_orm::*;
 use uuid::Uuid;
 
 use crate::{
-    entities::{role, user},
+    entities::{roles, users},
     model::{
         requests::account::profile_list_query::ProfileListQuery,
         responses::account::profile_detail_response::{
@@ -19,7 +19,7 @@ pub async fn get_profile_service(
     db: DatabaseConnection,
     user_id: Uuid,
 ) -> Result<ProfileDetailResponse, AppError> {
-    let user_model = user::Entity::find_by_id(user_id)
+    let user_model = users::Entity::find_by_id(user_id)
         .one(&db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
@@ -42,15 +42,15 @@ pub async fn get_profiles_service(
 ) -> Result<ProfileListResponse, AppError> {
     // Lookup role id by name
     let role_name = query.role.to_string();
-    let role_model = role::Entity::find()
-        .filter(role::Column::Name.eq(&role_name))
+    let role_model = roles::Entity::find()
+        .filter(roles::Column::Name.eq(&role_name))
         .one(&db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
         .ok_or_else(|| AppError::BadRequest("Role not found".to_string()))?;
 
     // Count total items
-    let user_query = user::Entity::find().filter(user::Column::RoleId.eq(role_model.id));
+    let user_query = users::Entity::find().filter(users::Column::RoleId.eq(role_model.id));
     let total_items = user_query
         .clone()
         .count(&db)

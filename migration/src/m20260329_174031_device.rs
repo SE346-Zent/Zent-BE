@@ -52,10 +52,10 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(PartType::Table)
+                    .table(PartTypes::Table)
                     .if_not_exists()
-                    .col(pk_auto(PartType::Id))
-                    .col(string(PartType::Name))
+                    .col(pk_auto(PartTypes::Id))
+                    .col(string(PartTypes::Name))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -136,21 +136,21 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Warranty::Table)
+                    .table(Warranties::Table)
                     .if_not_exists()
-                    .col(uuid(Warranty::Id).primary_key())
-                    .col(uuid(Warranty::CustomerId))
-                    .col(uuid(Warranty::EquipmentId))
-                    .col(timestamp(Warranty::StartDate))
-                    .col(timestamp_null(Warranty::EndDate))
-                    .col(string(Warranty::WarrantyStatus))
+                    .col(uuid(Warranties::Id).primary_key())
+                    .col(uuid(Warranties::CustomerId))
+                    .col(uuid(Warranties::EquipmentId))
+                    .col(timestamp(Warranties::StartDate))
+                    .col(timestamp_null(Warranties::EndDate))
+                    .col(string(Warranties::WarrantyStatus))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_warranty_equipment")
-                            .from(Warranty::Table, Warranty::EquipmentId)
+                            .from(Warranties::Table, Warranties::EquipmentId)
                             .to(Equipments::Table, Equipments::Id)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
@@ -162,20 +162,20 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Image::Table)
+                    .table(Images::Table)
                     .if_not_exists()
-                    .col(uuid(Image::Id).primary_key())
-                    .col(string(Image::ImageURL))
-                    .col(uuid_null(Image::PartId))
-                    .col(uuid_null(Image::EquipmentId))
-                    .col(timestamp(Image::CapturedAt))
+                    .col(uuid(Images::Id).primary_key())
+                    .col(string(Images::ImageURL))
+                    .col(uuid_null(Images::PartId))
+                    .col(uuid_null(Images::EquipmentId))
+                    .col(timestamp(Images::CapturedAt))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_images_part")
-                            .from(Image::Table, Image::PartId)
+                            .from(Images::Table, Images::PartId)
                             .to(Parts::Table, Parts::Id)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
@@ -183,7 +183,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_images_equipment")
-                            .from(Image::Table, Image::EquipmentId)
+                            .from(Images::Table, Images::EquipmentId)
                             .to(Equipments::Table, Equipments::Id)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
@@ -196,11 +196,11 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager.drop_table(Table::drop().table(Image::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(Warranty::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(Images::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(Warranties::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Parts::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Equipments::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(PartType::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(PartTypes::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(PartStatus::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(EquipmentStatus::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(EquipmentModels::Table).to_owned()).await?;
@@ -270,7 +270,7 @@ enum EquipmentStatus
 }
 
 #[derive(DeriveIden)]
-enum PartType
+enum PartTypes
 {
     Table,
     Id,
@@ -278,7 +278,7 @@ enum PartType
 }
 
 #[derive(DeriveIden)]
-enum Warranty
+enum Warranties
 {
     Table,
     Id,
@@ -290,7 +290,7 @@ enum Warranty
 }
 
 #[derive(DeriveIden)]
-enum Image
+enum Images
 {
     Table,
     Id,

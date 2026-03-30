@@ -3,14 +3,18 @@ use chrono::Utc;
 use fake::{
     Fake,
     faker::{
-        address::en::{BuildingNumber, StreetName},
-        lorem::en::{Paragraph, Sentence},
+        address::en::{BuildingNumber, CityName, CountryName, StateName, StreetName},
+        internet::en::FreeEmail,
+        name::en::{FirstName, LastName},
+        phone_number::en::PhoneNumber,
     },
-    rand::{RngCore, SeedableRng, rngs::StdRng, seq::IndexedRandom},
+    rand::{SeedableRng, rngs::StdRng, seq::IndexedRandom},
 };
 use sea_orm::{DatabaseConnection, EntityTrait, Set};
 use uuid::Uuid;
-use zent_be::entities::{work_order, work_order_status};
+use zent_be::entities::{work_order_status, work_orders};
+
+const ROLES: &[&str] = &["Technician", "Admin", "Customer"];
 
 /// Generates and inserts random work orders into the database.
 ///
@@ -31,42 +35,45 @@ pub async fn seed_random_work_orders(
 
     println!("  Generating {} fake work orders...", count);
 
-    let records: Vec<work_order::ActiveModel> = (0..count)
-        .map(|_| {
+    let records: Vec<work_orders::ActiveModel> = (0..count)
+        .map(|i| {
             let status = valid_statuses
                 .choose(&mut rng)
                 .context("Failed to pick a random status")
                 .unwrap();
 
-            let address = format!(
-                "{} {}",
-                BuildingNumber().fake_with_rng::<String, _>(&mut rng),
-                StreetName().fake_with_rng::<String, _>(&mut rng),
-            );
-
-            let priority: i32 = (rng.next_u32() % 5) as i32; // 0-4
-
-            work_order::ActiveModel {
+            work_orders::ActiveModel {
                 id: Set(Uuid::new_v4()),
-                title: Set(Sentence(3..6).fake_with_rng(&mut rng)),
-                address_string: Set(address),
-                status_id: Set(status.id),
-                description: Set(Paragraph(1..2).fake_with_rng(&mut rng)),
-                reject_reason: Set(String::new()),
-                priority: Set(priority),
+                first_name: Set(FirstName().fake_with_rng(&mut rng)),
+                last_name: Set(LastName().fake_with_rng(&mut rng)),
+                email: Set(FreeEmail().fake_with_rng(&mut rng)),
+                phone_number: Set(PhoneNumber().fake_with_rng(&mut rng)),
+                work_order_status_id: Set(status.id),
+                country: Set(CountryName().fake_with_rng(&mut rng)),
+                state: Set(StateName().fake_with_rng(&mut rng)),
+                city: Set(CityName().fake_with_rng(&mut rng)),
+                address: Set(format!(
+                    "{} {}",
+                    BuildingNumber().fake_with_rng::<String, _>(&mut rng),
+                    StreetName().fake_with_rng::<String, _>(&mut rng),
+                )),
+                building: Set(BuildingNumber().fake_with_rng(&mut rng)),
+                appointment: Set(now),
+                reference_ticket: Set(format!("REF-{:05}", i + 1)),
                 created_at: Set(now),
                 updated_at: Set(now),
-                closed_at: Set(None),
-                version: Set(1),
+                closed_at: Set(now),
                 admin_id: Set(Uuid::new_v4()),
                 customer_id: Set(Uuid::new_v4()),
                 technician_id: Set(Uuid::new_v4()),
+                complete_form_id: Set(Uuid::new_v4()),
+                reject_form_id: Set(Uuid::new_v4()),
             }
         })
         .collect();
 
     println!("  Inserting into database...");
-    work_order::Entity::insert_many(records).exec(db).await?;
+    work_orders::Entity::insert_many(records).exec(db).await?;
 
     println!("  Successfully seeded {} work orders.", count);
     Ok(())

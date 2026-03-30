@@ -12,14 +12,14 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::{
-    entities::{role, user},
+    entities::{roles, users},
     model::auth::jwt_claims::Claims,
 };
 use super::jwt_claims::AuthError;
 
 pub struct AuthUser {
-    pub user: user::Model,
-    pub role: role::Model,
+    pub user: users::Model,
+    pub role: roles::Model,
 }
 
 impl<S> FromRequestParts<S> for AuthUser
@@ -63,8 +63,8 @@ where
         })?;
 
         // Utilization of find_with_related mapping Role context iteratively
-        let user_with_role = user::Entity::find_by_id(user_id)
-            .find_with_related(role::Entity)
+        let user_with_role = users::Entity::find_by_id(user_id)
+            .find_with_related(roles::Entity)
             .all(&db)
             .await
             .map_err(|_| AuthError::InternalServerError)?;
