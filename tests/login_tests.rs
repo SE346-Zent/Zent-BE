@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use rstest::rstest;
 
-use zent_be::entities::{account_status, role, session, user};
+use zent_be::entities::{account_status, roles, sessions, users};
 use zent_be::handlers::v1::auth::login_handler;
 use zent_be::model::responses::auth::login_response::{AccountStatusEnum, LoginResponse};
 use zent_be::state::AppState;
@@ -36,8 +36,8 @@ fn generate_hash(password: &str) -> String {
         .to_string()
 }
 
-fn create_mock_user(email: &str, password_hash: &str, status: AccountStatusEnum) -> user::Model {
-    user::Model {
+fn create_mock_user(email: &str, password_hash: &str, status: AccountStatusEnum) -> users::Model {
+    users::Model {
         id: Uuid::new_v4(),
         full_name: "Test User".to_string(),
         email: email.to_string(),
@@ -53,7 +53,7 @@ fn create_mock_user(email: &str, password_hash: &str, status: AccountStatusEnum)
 
 async fn seed_test_db(db: &DatabaseConnection) {
     // Resolve foreign key constraints systematically before mock tests execute insertions
-    let _ = role::ActiveModel {
+    let _ = roles::ActiveModel {
         id: Set(1),
         name: Set("Admin".to_string()),
     }
@@ -91,13 +91,13 @@ async fn seed_test_db(db: &DatabaseConnection) {
     .await;
 }
 
-async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<user::Model>) -> Router {
+async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>) -> Router {
     // Ensure all tables are established via migrations without relying on manual sync schemas
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
 
     for u in mock_users {
-        let active_user = user::ActiveModel {
+        let active_user = users::ActiveModel {
             id: Set(u.id),
             full_name: Set(u.full_name),
             email: Set(u.email),
@@ -120,7 +120,7 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<user::Model>)
         .with_state(state)
 }
 
-async fn setup_test_app(mock_user: Option<user::Model>) -> Router {
+async fn setup_test_app(mock_user: Option<users::Model>) -> Router {
     let db: DatabaseConnection = Database::connect("sqlite::memory:").await.unwrap();
     setup_app_with_db(db, mock_user.into_iter().collect()).await
 }
@@ -305,7 +305,7 @@ async fn test_cat2_fk_constraint_blocks_unknown_status() {
         &generate_hash(VALID_PASS),
         AccountStatusEnum::Unknown(999),
     );
-    let active_user = user::ActiveModel {
+    let active_user = users::ActiveModel {
         id: Set(u.id),
         full_name: Set(u.full_name),
         email: Set(u.email),
@@ -336,7 +336,7 @@ async fn test_cat2_unknown_status_legacy_data() {
         &generate_hash(VALID_PASS),
         AccountStatusEnum::Unknown(999),
     );
-    let active_user = user::ActiveModel {
+    let active_user = users::ActiveModel {
         id: Set(u.id),
         full_name: Set(u.full_name),
         email: Set(u.email),
@@ -436,7 +436,7 @@ async fn test_cat3_session_properties() {
     // 5. Refresh token format
     assert!(!data.refresh_token.is_empty());
 
-    let db_sessions = session::Entity::find().all(&db).await.unwrap();
+    let db_sessions = sessions::Entity::find().all(&db).await.unwrap();
     assert_eq!(db_sessions.len(), 1); // 6. DB Session Created
     let db_session = &db_sessions[0];
     assert_eq!(db_session.user_id, user_id);
@@ -458,7 +458,7 @@ async fn test_cat3_12_13_zero_ttl() {
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
 
-    let active_user = user::ActiveModel {
+    let active_user = users::ActiveModel {
         id: Set(u.id),
         full_name: Set(u.full_name),
         email: Set(u.email),
@@ -483,7 +483,7 @@ async fn test_cat3_12_13_zero_ttl() {
     let r = app.oneshot(req).await.unwrap();
     assert_eq!(r.status(), StatusCode::OK);
 
-    let session = session::Entity::find().one(&db).await.unwrap().unwrap();
+    let session = sessions::Entity::find().one(&db).await.unwrap().unwrap();
     let diff = session.expires_at.timestamp() - session.created_at.timestamp();
     assert!(diff.abs() <= 1); // Equals Created At theoretically +/- seconds
 }
@@ -515,7 +515,7 @@ async fn test_cat4_ip_address_truncation() {
 
     let r = app.oneshot(req).await.unwrap();
     assert_eq!(r.status(), StatusCode::OK);
-    let session = session::Entity::find().one(&db).await.unwrap().unwrap();
+    let session = sessions::Entity::find().one(&db).await.unwrap().unwrap();
     assert!(session.ip_address.len() <= 45); // safely restricted
 }
 
@@ -561,7 +561,7 @@ async fn test_cat4_6_concurrent_logins() {
         t.await.unwrap();
     }
 
-    let sessions = session::Entity::find().all(&db).await.unwrap();
+    let sessions = sessions::Entity::find().all(&db).await.unwrap();
     assert_eq!(sessions.len(), 5);
 }
 

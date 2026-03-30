@@ -2,11 +2,14 @@ use sea_orm::*;
 use uuid::Uuid;
 
 use crate::{
-    entities::{role, user},
+    entities::{roles, users},
     model::{
         requests::account::profile_list_query::ProfileListQuery,
-        responses::account::profile_response::{
-            ProfileListResponse, ProfileResponse, ProfileResponseData,
+        responses::account::profile_detail_response::{
+            ProfileDetailResponse, ProfileDetailResponseData,
+        },
+        responses::account::profile_list_item_response::{
+            ProfileListResponse, ProfileListItemResponseData,
         },
         responses::error::AppError,
     },
@@ -15,14 +18,14 @@ use crate::{
 pub async fn get_profile_service(
     db: DatabaseConnection,
     user_id: Uuid,
-) -> Result<ProfileResponse, AppError> {
-    let user_model = user::Entity::find_by_id(user_id)
+) -> Result<ProfileDetailResponse, AppError> {
+    let user_model = users::Entity::find_by_id(user_id)
         .one(&db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
         .ok_or_else(|| AppError::BadRequest("User not found".to_string()))?;
 
-    let data = ProfileResponseData {
+    let data = ProfileDetailResponseData {
         full_name: user_model.full_name,
         email: user_model.email,
         phone_number: user_model.phone_number,
@@ -30,7 +33,7 @@ pub async fn get_profile_service(
         account_status: user_model.account_status,
     };
 
-    Ok(ProfileResponse::success(data))
+    Ok(ProfileDetailResponse::success(data))
 }
 
 pub async fn get_profiles_service(
@@ -39,15 +42,15 @@ pub async fn get_profiles_service(
 ) -> Result<ProfileListResponse, AppError> {
     // Lookup role id by name
     let role_name = query.role.to_string();
-    let role_model = role::Entity::find()
-        .filter(role::Column::Name.eq(&role_name))
+    let role_model = roles::Entity::find()
+        .filter(roles::Column::Name.eq(&role_name))
         .one(&db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
         .ok_or_else(|| AppError::BadRequest("Role not found".to_string()))?;
 
     // Count total items
-    let user_query = user::Entity::find().filter(user::Column::RoleId.eq(role_model.id));
+    let user_query = users::Entity::find().filter(users::Column::RoleId.eq(role_model.id));
     let total_items = user_query
         .clone()
         .count(&db)
@@ -67,7 +70,7 @@ pub async fn get_profiles_service(
 
     let data = users
         .into_iter()
-        .map(|user_model| ProfileResponseData {
+        .map(|user_model| ProfileListItemResponseData {
             full_name: user_model.full_name,
             email: user_model.email,
             phone_number: user_model.phone_number,

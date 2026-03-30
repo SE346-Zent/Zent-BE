@@ -9,22 +9,22 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(User::Table)
+                    .table(Users::Table)
                     .if_not_exists()
-                    .col(uuid(User::Id).primary_key())
-                    .col(string(User::FullName))
-                    .col(string_uniq(User::Email))
-                    .col(string(User::PasswordHash))
-                    .col(string(User::PhoneNumber))
-                    .col(integer(User::AccountStatus))
-                    .col(integer(User::RoleID))
+                    .col(uuid(Users::Id).primary_key())
+                    .col(string(Users::FullName))
+                    .col(string_uniq(Users::Email))
+                    .col(string(Users::PasswordHash))
+                    .col(string(Users::PhoneNumber))
+                    .col(integer(Users::AccountStatus))
+                    .col(integer(Users::RoleID))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_user_account_status")
-                            .from(User::Table, User::AccountStatus)
+                            .from(Users::Table, Users::AccountStatus)
                             .to(AccountStatus::Table, AccountStatus::Id)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
@@ -32,8 +32,8 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_user_role_id")
-                            .from(User::Table, User::RoleID)
-                            .to(Role::Table, Role::Id)
+                            .from(Users::Table, Users::RoleID)
+                            .to(Roles::Table, Roles::Id)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -44,10 +44,10 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Role::Table)
+                    .table(Roles::Table)
                     .if_not_exists()
-                    .col(pk_auto(Role::Id))
-                    .col(string(Role::Name))
+                    .col(pk_auto(Roles::Id))
+                    .col(string(Roles::Name))
                     .to_owned(),
             )
             .await?;
@@ -69,21 +69,21 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Session::Table)
+                    .table(Sessions::Table)
                     .if_not_exists()
-                    .col(uuid(Session::Id).primary_key())
-                    .col(uuid(Session::UserID))
-                    .col(string_len_uniq(Session::RefreshTokenHash, 64)) // SHA-256 hash
-                    .col(string(Session::DeviceFingerprint))
-                    .col(string_len(Session::IPAddress, 45))
+                    .col(uuid(Sessions::Id).primary_key())
+                    .col(uuid(Sessions::UserID))
+                    .col(string_len_uniq(Sessions::RefreshTokenHash, 64)) // SHA-256 hash
+                    .col(string(Sessions::DeviceFingerprint))
+                    .col(string_len(Sessions::IPAddress, 45))
                     .col(timestamp(CreatedAt))
-                    .col(timestamp(Session::ExpiresAt))
-                    .col(timestamp_null(Session::RevokedAt))
+                    .col(timestamp(Sessions::ExpiresAt))
+                    .col(timestamp_null(Sessions::RevokedAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_session_user_id")
-                            .from(Session::Table, Session::UserID)
-                            .to(User::Table, User::Id)
+                            .from(Sessions::Table, Sessions::UserID)
+                            .to(Users::Table, Users::Id)
                             // users are soft-deleted
                             // restrict is implemented to prevent orphaned rows
                             .on_delete(ForeignKeyAction::Restrict)
@@ -97,8 +97,8 @@ impl MigrationTrait for Migration {
             .create_index(
                 Index::create()
                     .name("idx_session_expires_at")
-                    .table(Session::Table)
-                    .col(Session::ExpiresAt)
+                    .table(Sessions::Table)
+                    .col(Sessions::ExpiresAt)
                     .to_owned(),
             )
             .await?;
@@ -108,13 +108,13 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(Session::Table).to_owned())
+            .drop_table(Table::drop().table(Sessions::Table).to_owned())
             .await?;
         manager
-            .drop_table(Table::drop().table(User::Table).to_owned())
+            .drop_table(Table::drop().table(Users::Table).to_owned())
             .await?;
         manager
-            .drop_table(Table::drop().table(Role::Table).to_owned())
+            .drop_table(Table::drop().table(Roles::Table).to_owned())
             .await?;
         manager
             .drop_table(Table::drop().table(AccountStatus::Table).to_owned())
@@ -132,7 +132,7 @@ struct UpdatedAt;
 struct DeletedAt;
 
 #[derive(DeriveIden)]
-enum User {
+enum Users {
     Table,
     Id,
     FullName,
@@ -144,7 +144,7 @@ enum User {
 }
 
 #[derive(DeriveIden)]
-enum Role {
+enum Roles {
     Table,
     Id,
     Name,
@@ -158,7 +158,7 @@ enum AccountStatus {
 }
 
 #[derive(DeriveIden)]
-enum Session {
+enum Sessions {
     Table,
     Id,
     RefreshTokenHash,

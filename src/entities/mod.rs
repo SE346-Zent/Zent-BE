@@ -3,8 +3,18 @@
 pub mod prelude;
 
 pub mod account_status;
-pub mod role;
-pub mod user;
-pub mod session;
-pub mod work_order;
+pub mod equipment_models;
+pub mod equipment_status;
+pub mod equipments;
+pub mod images;
+pub mod part_status;
+pub mod part_types;
+pub mod parts;
+pub mod roles;
+pub mod sessions;
+pub mod users;
+pub mod warranties;
+pub mod work_order_closing_forms;
 pub mod work_order_status;
+pub mod work_order_symptoms;
+pub mod work_orders;
