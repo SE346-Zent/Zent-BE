@@ -52,7 +52,7 @@ pub async fn create_work_order_service(
         customer_id: Set(request.customer_id),
         technician_id: Set(request.technician_id),
         complete_form_id: Set(request.complete_form_id),
-        reject_form_id: Set(request.reject_form_id),
+        reject_reason: Set(request.reject_reason),
     };
 
     let model = active_model
@@ -81,7 +81,7 @@ pub async fn create_work_order_service(
         customer_id: model.customer_id,
         technician_id: model.technician_id,
         complete_form_id: model.complete_form_id,
-        reject_form_id: model.reject_form_id,
+        reject_reason: model.reject_reason,
     };
 
     Ok(WorkOrderDetailResponse {

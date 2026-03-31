@@ -24,7 +24,7 @@ pub struct WorkOrderListItemResponseData {
     pub customer_id: uuid::Uuid,
     pub technician_id: uuid::Uuid,
     pub complete_form_id: uuid::Uuid,
-    pub reject_form_id: uuid::Uuid,
+    pub reject_reason: String,
 }
 
 define_api_response!(WorkOrderListResponse, Vec<WorkOrderListItemResponseData>, PaginationMeta);

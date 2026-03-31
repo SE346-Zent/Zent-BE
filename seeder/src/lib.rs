@@ -3,6 +3,7 @@ pub mod role;
 pub mod account_status;
 pub mod work_order_status;
 pub mod work_order;
+pub mod work_order_symptom;
 
 pub use user::{seed_users, UserSeedConfig};
 pub use role::seed_roles;

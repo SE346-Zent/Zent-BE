@@ -21,5 +21,5 @@ pub struct CreateWorkOrderRequest {
     pub customer_id: Uuid,
     pub technician_id: Uuid,
     pub complete_form_id: Uuid,
-    pub reject_form_id: Uuid,
+    pub reject_reason: String,
 }

@@ -26,7 +26,7 @@ pub struct Model {
     pub customer_id: Uuid,
     pub technician_id: Uuid,
     pub complete_form_id: Uuid,
-    pub reject_form_id: Uuid,
+    pub reject_reason: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -57,20 +57,12 @@ pub enum Relation {
     Users1,
     #[sea_orm(
         belongs_to = "super::work_order_closing_forms::Entity",
-        from = "Column::RejectFormId",
-        to = "super::work_order_closing_forms::Column::Id",
-        on_update = "Cascade",
-        on_delete = "Restrict"
-    )]
-    WorkOrderClosingForms2,
-    #[sea_orm(
-        belongs_to = "super::work_order_closing_forms::Entity",
         from = "Column::CompleteFormId",
         to = "super::work_order_closing_forms::Column::Id",
         on_update = "Cascade",
         on_delete = "Restrict"
     )]
-    WorkOrderClosingForms1,
+    WorkOrderClosingForms,
     #[sea_orm(
         belongs_to = "super::work_order_status::Entity",
         from = "Column::WorkOrderStatusId",
@@ -79,6 +71,12 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     WorkOrderStatus,
+}
+
+impl Related<super::work_order_closing_forms::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderClosingForms.def()
+    }
 }
 
 impl Related<super::work_order_status::Entity> for Entity {

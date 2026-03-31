@@ -78,7 +78,7 @@ fn map_work_order_detail(model: work_orders::Model) -> WorkOrderDetailResponseDa
         customer_id: model.customer_id,
         technician_id: model.technician_id,
         complete_form_id: model.complete_form_id,
-        reject_form_id: model.reject_form_id,
+        reject_reason: model.reject_reason,
     }
 }
 
@@ -104,6 +104,6 @@ fn map_work_order_list_item(model: work_orders::Model) -> WorkOrderListItemRespo
         customer_id: model.customer_id,
         technician_id: model.technician_id,
         complete_form_id: model.complete_form_id,
-        reject_form_id: model.reject_form_id,
+        reject_reason: model.reject_reason,
     }
 }

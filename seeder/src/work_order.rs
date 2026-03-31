@@ -14,7 +14,7 @@ use sea_orm::{DatabaseConnection, EntityTrait, Set};
 use uuid::Uuid;
 use zent_be::entities::{work_order_status, work_orders};
 
-const ROLES: &[&str] = &["Technician", "Admin", "Customer"];
+const ROLES: &[&str] = &["Technician", "Admin", "Customer", "SuperAdmin"];
 
 /// Generates and inserts random work orders into the database.
 ///
@@ -67,7 +67,7 @@ pub async fn seed_random_work_orders(
                 customer_id: Set(Uuid::new_v4()),
                 technician_id: Set(Uuid::new_v4()),
                 complete_form_id: Set(Uuid::new_v4()),
-                reject_form_id: Set(Uuid::new_v4()),
+                reject_reason: Set("".to_string()),
             }
         })
         .collect();

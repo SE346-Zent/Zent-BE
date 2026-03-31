@@ -8,6 +8,7 @@ pub struct AppConfig {
     pub port: u16,
     pub smtp_password: String,
     pub smtp_username: String,
+    pub rabbitmq_url: String,
 
     #[serde(default = "default_access_token_ttl")]
     pub access_token_ttl_seconds: i64,
@@ -15,13 +16,10 @@ pub struct AppConfig {
     #[serde(default = "default_session_ttl")]
     pub session_ttl_seconds: i64,
 
-    #[serde(default = "default_rabbitmq_url")]
-    pub rabbitmq_url: String,
 }
 
 fn default_access_token_ttl() -> i64 { 3600 }
 fn default_session_ttl() -> i64 { 86400 }
-fn default_rabbitmq_url() -> String { "amqp://guest:guest@127.0.0.1:5672/%2f".to_string() }
 
 static CONFIG: OnceLock<AppConfig> = OnceLock::new();
 
