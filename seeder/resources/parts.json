@@ -1,0 +1,1704 @@
+{
+  "part_types": [
+    {
+      "part_number": "5T10S33847",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "TAPE L 83JM MB MYLAR L DIS"
+    },
+    {
+      "part_number": "5T10S33856",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "TAPE L 83JM FOR CONN"
+    },
+    {
+      "part_number": "5CB1R61094",
+      "commodity_type": "LCD PARTS",
+      "description": "Strip Cover, 83JM"
+    },
+    {
+      "part_number": "5S10S35759",
+      "commodity_type": "KITS SCREWS AND LABELS",
+      "description": "Screw L 83JN KITS"
+    },
+    {
+      "part_number": "5R60S37340",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "Rubber L 83JM TOF"
+    },
+    {
+      "part_number": "5R60S37337",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "RUBBER L 83JM MIC(L+R)"
+    },
+    {
+      "part_number": "5D11R64277",
+      "commodity_type": "LCD ASSEMBLIES",
+      "description": "Lenovo LCD Module, 16\", 2.8K, Non_Touch, Glare, OLED, 500nit, 100%DCI-P3, Color Calibration"
+    },
+    {
+      "part_number": "5CB1R61091",
+      "commodity_type": "LCD PARTS",
+      "description": "Hinge CAP, 83JM, Luna Grey"
+    },
+    {
+      "part_number": "5CB1R61083",
+      "commodity_type": "COVERS",
+      "description": "D-Cover, 83JM, Luna Grey, DIS"
+    },
+    {
+      "part_number": "5C21P86450",
+      "commodity_type": "CAMERAS",
+      "description": "CS25 Y4 FHD Hybrid 2MC CCY"
+    },
+    {
+      "part_number": "5CB1R61093",
+      "commodity_type": "MISC INTERNAL",
+      "description": "Cover L 83JM Camera shutter"
+    },
+    {
+      "part_number": "5C50S25811",
+      "commodity_type": "CARDS MISC INTERNAL",
+      "description": "CARDPOP L 83JN PMIC"
+    },
+    {
+      "part_number": "5C50S25812",
+      "commodity_type": "CARDS MISC INTERNAL",
+      "description": "CARDPOP L 83JN IO/B"
+    },
+    {
+      "part_number": "5CB1R91584",
+      "commodity_type": "C-cover with keyboard",
+      "description": "C-Cover with keyboard, English, Luna Grey, DIS, US"
+    },
+    {
+      "part_number": "5B40S22321",
+      "commodity_type": "MISC INTERNAL",
+      "description": "Bracket L 83JM for TYPE C"
+    },
+    {
+      "part_number": "5B30S19235",
+      "commodity_type": "Consumptive Bezels",
+      "description": "Bezel 83JM W/Tape & Position Rubber"
+    },
+    {
+      "part_number": "5CB1R61092",
+      "commodity_type": "A-cover assembly, LCD cover assembly",
+      "description": "A-Cover, 83JM, Luna Grey"
+    },
+    {
+      "part_number": "5W11H85471",
+      "commodity_type": "Wireless LAN adapters",
+      "description": "Wireless,WLAN,FL,RTL8922AE"
+    },
+    {
+      "part_number": "5R31S70366",
+      "commodity_type": "RECRDMEDIA",
+      "description": "W11_H64_SL-ENG RUSB"
+    },
+    {
+      "part_number": "5SS1P00642",
+      "commodity_type": "M.2 Card",
+      "description": "Lenovo SSD 1TB,M.2,2242,PCIE4X4,SK HYNIX"
+    },
+    {
+      "part_number": "00XL065",
+      "commodity_type": "Cable, External, power cord, USB cable, and CRU-able internal cables",
+      "description": "Lenovo Power Cord,EU/KR,1m,3P"
+    },
+    {
+      "part_number": "5B11M63872",
+      "commodity_type": "Rechargeable Batteries , internal",
+      "description": "Lenovo BATTERY,15.6V,84Wh,4cell"
+    },
+    {
+      "part_number": "5A11K67849",
+      "commodity_type": "AC ADAPTERS",
+      "description": "Lenovo AC_ADAPTOR, Rectangle, 170W, 3P, Black"
+    },
+    {
+      "part_number": "5B21R27554",
+      "commodity_type": "SYSTEM BOARDS",
+      "description": "L83JNWINAIR7350RTX505032GRMyAB"
+    },
+    {
+      "part_number": "5H40S21345",
+      "commodity_type": "HEAT SINKS",
+      "description": "HEATSINK L 83JN DIS WEIHONG"
+    },
+    {
+      "part_number": "5F10S14238",
+      "commodity_type": "FANS",
+      "description": "FAN 83JM AVC DIS"
+    },
+    {
+      "part_number": "5C10S31296",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE L 83JM IR CAM DIS IMP LUX"
+    },
+    {
+      "part_number": "5C10S31292",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE L 83JM IO/B DIS MGE"
+    },
+    {
+      "part_number": "5C10S31302",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "Cable L 83JM EDP LUX"
+    },
+    {
+      "part_number": "5C10S30924",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE L 83D4 BATT LUX"
+    },
+    {
+      "part_number": "5W10V25819",
+      "commodity_type": "Wireless LAN adapters",
+      "description": "Wireless,CMB,IN,AX203"
+    },
+    {
+      "part_number": "5R31S73528",
+      "commodity_type": "RECRDMEDIA",
+      "description": "W11_H64_SL-ENG RUSB"
+    },
+    {
+      "part_number": "5T10S33788",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "TAPE L 83JJ LCD_NOISE"
+    },
+    {
+      "part_number": "5T10S33677",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "TAPE L 82Y5 WLAN_MYLAR"
+    },
+    {
+      "part_number": "5SB0S32096",
+      "commodity_type": "SPEAKERS INTERNAL",
+      "description": "SPEAKERINT L 83LY (L+R)"
+    },
+    {
+      "part_number": "5S60S36638",
+      "commodity_type": "MISC INTERNAL",
+      "description": "SHIELD L 83LY SSD_DDR"
+    },
+    {
+      "part_number": "5S10S35780",
+      "commodity_type": "KITS SCREWS AND LABELS",
+      "description": "Screw L 83LY Kits"
+    },
+    {
+      "part_number": "5S10S35619",
+      "commodity_type": "KITS SCREWS AND LABELS",
+      "description": "Screw L 83DF 2.5D 3.2L 9 5.0D 3.6T"
+    },
+    {
+      "part_number": "5P20S37715",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "PAD L 83LY SECOND_SSD"
+    },
+    {
+      "part_number": "5P20S37716",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "PAD L 83LY MAIN_SSD"
+    },
+    {
+      "part_number": "5M20S28012",
+      "commodity_type": "Tools (special tools, drivers, etc.)",
+      "description": "MECHANICAL L 83F5 THM grease"
+    },
+    {
+      "part_number": "5M20S28014",
+      "commodity_type": "Tools (special tools, drivers, etc.)",
+      "description": "MECHANICAL L 83F5 Thermal Gel"
+    },
+    {
+      "part_number": "5SS1Q28866",
+      "commodity_type": "M.2 Card",
+      "description": "Lenovo SSD 512G,M.2,2242,PCIE4X4,SAMSUNG"
+    },
+    {
+      "part_number": "5M31N59979",
+      "commodity_type": "MEMORY",
+      "description": "Lenovo MEMORY,16G,DDR5,5600,SODIMM,SAMSUNG"
+    },
+    {
+      "part_number": "5D11S91479",
+      "commodity_type": "LCD ASSEMBLIES",
+      "description": "Lenovo LCD Module, 15.3\", WUXGA, Non_Touch, Anti-Glare, IPS, 300nit, 100%SRGB, Color Calibration"
+    },
+    {
+      "part_number": "5B11Q30691",
+      "commodity_type": "Rechargeable Batteries , internal",
+      "description": "Lenovo BATTERY, 15.52V, 80Wh, 4cell"
+    },
+    {
+      "part_number": "5A11Q29119",
+      "commodity_type": "AC ADAPTERS",
+      "description": "Lenovo AC_ADAPTER, RECTANGLE, 245W, 3P, BLACK"
+    },
+    {
+      "part_number": "5B21R90841",
+      "commodity_type": "SYSTEM BOARDS",
+      "description": "L83LYI713650HX_5060WH165LWyABRM"
+    },
+    {
+      "part_number": "5B30S19249",
+      "commodity_type": "Consumptive Bezels",
+      "description": "L83LY IPS W/TAPE&Position Rubber*4"
+    },
+    {
+      "part_number": "5F10S14296",
+      "commodity_type": "FANS",
+      "description": "FAN 83LY THM_PRC"
+    },
+    {
+      "part_number": "5CB1S22982",
+      "commodity_type": "COVERS",
+      "description": "D-Cover 83LY"
+    },
+    {
+      "part_number": "5C21P86474",
+      "commodity_type": "CAMERAS",
+      "description": "CS25 Y4 HD 2MC CCY"
+    },
+    {
+      "part_number": "5CB1S89866",
+      "commodity_type": "LCD PARTS",
+      "description": "Cover, 83LY LCD, Hinge_165"
+    },
+    {
+      "part_number": "5CB1S22981",
+      "commodity_type": "Consumptive Bezels",
+      "description": "COVER L 83LY STRIP_COVER_IPS"
+    },
+    {
+      "part_number": "5B11S13430",
+      "commodity_type": "CMOS BATTERIES",
+      "description": "CMOS BATTERY L 83F5 DB"
+    },
+    {
+      "part_number": "5C50S25873",
+      "commodity_type": "CARDS MISC INTERNAL",
+      "description": "CARDPOP L 83LY IO/B NSG681"
+    },
+    {
+      "part_number": "5C10S31496",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "Cable L 83LY M/B-CAMERA cvilux IPS"
+    },
+    {
+      "part_number": "5C10S31494",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "Cable L 83LY LUXSHARE M/B-EDP"
+    },
+    {
+      "part_number": "5C10S31490",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE L 83LY CVILUX M/B-TP/B"
+    },
+    {
+      "part_number": "5C10S31487",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE L 83LY CVILUX M/B-IO/B"
+    },
+    {
+      "part_number": "5CB1S31064",
+      "commodity_type": "C-cover with keyboard",
+      "description": "C-Cover with keyboard, English, Eclipse Black, White Backlight, Painting, US"
+    },
+    {
+      "part_number": "5B40S22355",
+      "commodity_type": "MISC INTERNAL",
+      "description": "BRACKET L 83LY TYPE_C"
+    },
+    {
+      "part_number": "5B40S22354",
+      "commodity_type": "MISC INTERNAL",
+      "description": "BRACKET L 83LY DC_IN"
+    },
+    {
+      "part_number": "5B40S22357",
+      "commodity_type": "MISC INTERNAL",
+      "description": "Bracket L 83LY CAMERA_BRK"
+    },
+    {
+      "part_number": "5B40S22118",
+      "commodity_type": "MISC INTERNAL",
+      "description": "Bracket L 82RF MB_HOOK"
+    },
+    {
+      "part_number": "5CB1S22985",
+      "commodity_type": "A-cover assembly, LCD cover assembly",
+      "description": "A-Cover, 83LY, 165HZ_HD"
+    },
+    {
+      "part_number": "5T10S33633",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "WLAN Mylar C 82XV"
+    },
+    {
+      "part_number": "5W10V25823",
+      "commodity_type": "Wireless LAN adapters",
+      "description": "Wireless,CMB,FXN,MT7921 M2"
+    },
+    {
+      "part_number": "5B40S22261",
+      "commodity_type": "MISC INTERNAL",
+      "description": "Type_C Bracket C 83DV"
+    },
+    {
+      "part_number": "5B40S22260",
+      "commodity_type": "MISC INTERNAL",
+      "description": "TP Bracket C 83DV"
+    },
+    {
+      "part_number": "5CB1M65362",
+      "commodity_type": "LCD PARTS",
+      "description": "Strip Cover, 83DV"
+    },
+    {
+      "part_number": "5SB0S32037",
+      "commodity_type": "SPEAKERS INTERNAL",
+      "description": "Speaker R&L C 83DV"
+    },
+    {
+      "part_number": "5S10S35626",
+      "commodity_type": "KITS SCREWS AND LABELS",
+      "description": "Screw Pack C 83DV"
+    },
+    {
+      "part_number": "5T10S33712",
+      "commodity_type": "Removable tape",
+      "description": "Removable Tape R+L C 83DV T32"
+    },
+    {
+      "part_number": "5CB1N62560",
+      "commodity_type": "COVERS",
+      "description": "Lower Case C 83DX"
+    },
+    {
+      "part_number": "5D11M63778",
+      "commodity_type": "LCD PANELS",
+      "description": "Lenovo DISPLAY,15.6\",FHD,Anti-Glare,IPS,300nit,100%sRGB"
+    },
+    {
+      "part_number": "5A11Q60430",
+      "commodity_type": "AC ADAPTERS",
+      "description": "Lenovo AC_ADAPTER, RECTANGLE, 170W, 3P, BLACK"
+    },
+    {
+      "part_number": "5CB1M65363",
+      "commodity_type": "A-cover assembly, LCD cover assembly",
+      "description": "LCD Cover, 83DV, W/Antenna, T32, WW_LOQ"
+    },
+    {
+      "part_number": "5B30S19159",
+      "commodity_type": "LCD PARTS",
+      "description": "LCD Bezel, 83DV, WW_LOQ"
+    },
+    {
+      "part_number": "5H50S29136",
+      "commodity_type": "MECHANICAL ASSEMBLIES",
+      "description": "Hinge R+L C 83DV T32"
+    },
+    {
+      "part_number": "5CB1M65367",
+      "commodity_type": "LCD PARTS",
+      "description": "Hinge Cap, R+L, 83DV"
+    },
+    {
+      "part_number": "5C10S30933",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "EDP cable C 83DV"
+    },
+    {
+      "part_number": "5S60S36630",
+      "commodity_type": "MISC INTERNAL",
+      "description": "DIMM SHIELDING C 83DV"
+    },
+    {
+      "part_number": "5B40S22259",
+      "commodity_type": "MISC INTERNAL",
+      "description": "DC in bracket C 83DV"
+    },
+    {
+      "part_number": "5C21M05462",
+      "commodity_type": "CAMERAS",
+      "description": "CS24 Y4 HD 2MC CCY"
+    },
+    {
+      "part_number": "5B10S34107",
+      "commodity_type": "CMOS BATTERIES",
+      "description": "CMOS Battery C 83DV"
+    },
+    {
+      "part_number": "5C10S30934",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "camera cable C 83DV"
+    },
+    {
+      "part_number": "5CB1P43384",
+      "commodity_type": "C-cover with keyboard",
+      "description": "C-Cover with keyboard, English, White Backlight, US"
+    },
+    {
+      "part_number": "5R31S69911",
+      "commodity_type": "RECRDMEDIA",
+      "description": "W11_H64_SL-ENG RUSB"
+    },
+    {
+      "part_number": "5H40S21050",
+      "commodity_type": "FANS",
+      "description": "Thermal Module 83DX S7BP0X2"
+    },
+    {
+      "part_number": "5M20S27964",
+      "commodity_type": "Tools (special tools, drivers, etc.)",
+      "description": "MECHANICAL L 83DF Thermal Gel"
+    },
+    {
+      "part_number": "5B21M50226",
+      "commodity_type": "SYSTEM BOARDS",
+      "description": "MB83DX R78845HS RTX40506G WINRM"
+    },
+    {
+      "part_number": "5SS1K57706",
+      "commodity_type": "M.2 Card",
+      "description": "Lenovo SSD 512G,M.2,2242,PCIE4X4,STD,SAMSUNG"
+    },
+    {
+      "part_number": "5M31L87378",
+      "commodity_type": "MEMORY",
+      "description": "Lenovo MEMORY,16G,DDR5,5600,SODIMM,SAMSUNG"
+    },
+    {
+      "part_number": "5B11M64608",
+      "commodity_type": "Rechargeable Batteries , internal",
+      "description": "Lenovo BATTERY,15.44V,60Wh,4cell"
+    },
+    {
+      "part_number": "5P20S37594",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "Thermalpad W 82E3 2242"
+    },
+    {
+      "part_number": "5T11J12131",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "TAPE W 21UY AL FOIL DIMM"
+    },
+    {
+      "part_number": "5T10S33699",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "TAPE W 21KK SPONGE BATTERY 16"
+    },
+    {
+      "part_number": "5T10S33697",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "TAPE W 21KJ Sponge IR"
+    },
+    {
+      "part_number": "5S10S35821",
+      "commodity_type": "KITS SCREWS AND LABELS",
+      "description": "Screw Pack W 21US"
+    },
+    {
+      "part_number": "5T10S33395",
+      "commodity_type": "Removable tape",
+      "description": "Removable Tape W 82RA (R+L)*5"
+    },
+    {
+      "part_number": "5R60S37329",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "Mic Rubber W 21SG L+R IR"
+    },
+    {
+      "part_number": "5CB1T53031",
+      "commodity_type": "BEZELS/DOORS",
+      "description": "Lower Case, 21US, PL, Arctic Grey"
+    },
+    {
+      "part_number": "5A11S88669",
+      "commodity_type": "AC ADAPTERS",
+      "description": "Lenovo AC_ADAPTER, TYPE-C, 65W, 2P, BLACK, US"
+    },
+    {
+      "part_number": "5CB1T53030",
+      "commodity_type": "A-cover assembly, LCD cover assembly",
+      "description": "LCD Cover, 21US, AL, WUXGA, Arctic Grey"
+    },
+    {
+      "part_number": "5B30S19278",
+      "commodity_type": "Consumptive Bezels",
+      "description": "LCD BEZEL  W21US IR"
+    },
+    {
+      "part_number": "5L10X95175",
+      "commodity_type": "KITS SCREWS AND LABELS",
+      "description": "LABEL GEO W21UR"
+    },
+    {
+      "part_number": "5H50S29177",
+      "commodity_type": "MECHANICAL ASSEMBLIES",
+      "description": "Hinge W21US R+L"
+    },
+    {
+      "part_number": "5CB1M48391",
+      "commodity_type": "LCD PARTS",
+      "description": "Hinge Cover W 21KK AG"
+    },
+    {
+      "part_number": "5F30T71951",
+      "commodity_type": "CARDS MISC INTERNAL",
+      "description": "FP BD W21UT AG"
+    },
+    {
+      "part_number": "5C10S31759",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "EDP cable W21UR Incell IR"
+    },
+    {
+      "part_number": "5C10S31613",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE W21US IO"
+    },
+    {
+      "part_number": "5CB1U85281",
+      "commodity_type": "C-cover with keyboard",
+      "description": "C-Cover with keyboard, English, Arctic Grey, Backlight, US"
+    },
+    {
+      "part_number": "5B40S22252",
+      "commodity_type": "MISC INTERNAL",
+      "description": "BRACKET W 21KJ IO Bracket MB"
+    },
+    {
+      "part_number": "5A30S36123",
+      "commodity_type": "ANTENNA",
+      "description": "ANTENNA W21US MAIN+AUX"
+    },
+    {
+      "part_number": "5W11H85504",
+      "commodity_type": "Wireless LAN adapters",
+      "description": "Wireless,WLAN,INT,BE213 NV"
+    },
+    {
+      "part_number": "5R31V11659",
+      "commodity_type": "RECRDMEDIA",
+      "description": "W11_P64-US/UK_ENG RUSB"
+    },
+    {
+      "part_number": "5F10S14370",
+      "commodity_type": "FANS",
+      "description": "System FAN 21US HY"
+    },
+    {
+      "part_number": "5SB0S32141",
+      "commodity_type": "SPEAKERS INTERNAL",
+      "description": "SPEAKERINT W21UR IPL"
+    },
+    {
+      "part_number": "5B21U69384",
+      "commodity_type": "SYSTEM BOARDS",
+      "description": "MBW21URU5325 yTPM2 WIN yAB_VN"
+    },
+    {
+      "part_number": "5SS1S17582",
+      "commodity_type": "M.2 Card",
+      "description": "Lenovo SSD 512G, M.2, 2242, PCIE4X4, SanDisk"
+    },
+    {
+      "part_number": "5M31N59978",
+      "commodity_type": "MEMORY",
+      "description": "Lenovo MEMORY,16G,DDR5,5600,SODIMM,SAMSUNG"
+    },
+    {
+      "part_number": "5D11T57795",
+      "commodity_type": "LCD PANELS",
+      "description": "Lenovo DISPLAY, 16\", WUXGA, Touch, Anti-Glare, IPS, 400nit, 100%SRGB"
+    },
+    {
+      "part_number": "5B11T52326",
+      "commodity_type": "Rechargeable Batteries , internal",
+      "description": "Lenovo BATTERY, 11.49V, 48Wh, 3cell"
+    },
+    {
+      "part_number": "5H40S21470",
+      "commodity_type": "HEAT SINKS",
+      "description": "Heatsink W21UR HY IPL"
+    },
+    {
+      "part_number": "5C21S76240",
+      "commodity_type": "CAMERAS",
+      "description": "CS26 Y4 FHD Hybrid 2MC CCY"
+    },
+    {
+      "part_number": "5B10S34070",
+      "commodity_type": "CMOS BATTERIES",
+      "description": "CMOS Battery 81VS"
+    },
+    {
+      "part_number": "5C50S25997",
+      "commodity_type": "CARDS MISC INTERNAL",
+      "description": "CARDPOP W21UR IO BD IPL"
+    },
+    {
+      "part_number": "5C10S31614",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE W21US FingerPrinter"
+    },
+    {
+      "part_number": "5C10S31615",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE W21US Clickpad"
+    },
+    {
+      "part_number": "5M20S27978",
+      "commodity_type": "Tools (special tools, drivers, etc.)",
+      "description": "Thermal Gel L83ED"
+    },
+    {
+      "part_number": "5T11D70180",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "FRU TAPE MSF50_MYLAR_WLAN"
+    },
+    {
+      "part_number": "5R31N71813",
+      "commodity_type": "RECRDMEDIA",
+      "description": "Win11PROx64 Modular US"
+    },
+    {
+      "part_number": "5B21U93712",
+      "commodity_type": "SYSTEM BOARDS",
+      "description": "WIN,UX9388H32G,nAdTyABEI"
+    },
+    {
+      "part_number": "5M21L98705",
+      "commodity_type": "Tools (special tools, drivers, etc.)",
+      "description": "Thermal paste"
+    },
+    {
+      "part_number": "5P21B00331",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "Thermal pad for onboard ram"
+    },
+    {
+      "part_number": "5SS0Y87005",
+      "commodity_type": "M.2 Card",
+      "description": "Lenovo SSD 1TB, M.2, 2280, PCIE5X4, OPAL, SAMSUNG"
+    },
+    {
+      "part_number": "5M11U70625",
+      "commodity_type": "LCD ASSEMBLIES",
+      "description": "Lenovo LCD Module, 15.3\", 2.8K, Non-Touch, Glare, OLED, 500nit, 100%DCI-P3, Color Calibration"
+    },
+    {
+      "part_number": "5B11T61178",
+      "commodity_type": "CRUable Rechargeable Batteries, internal",
+      "description": "Lenovo BATTERY, 15.4V, 88Wh, 4cell"
+    },
+    {
+      "part_number": "5A11T64359",
+      "commodity_type": "AC ADAPTERS",
+      "description": "Lenovo AC_ADAPTER, USB-C, 100W, 2P, BLACK, EURO"
+    },
+    {
+      "part_number": "5G11H21139",
+      "commodity_type": "FANS",
+      "description": "GBM NSF50 Fan L+R"
+    },
+    {
+      "part_number": "5T11D70218",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "FRU TAPE NSF50_SSD_AL_FOIL"
+    },
+    {
+      "part_number": "5S10Z89301",
+      "commodity_type": "KITS SCREWS AND LABELS",
+      "description": "FRU Screw Screw PACK"
+    },
+    {
+      "part_number": "5L11U80704",
+      "commodity_type": "KITS SCREWS AND LABELS",
+      "description": "FRU LABEL GEO KIT"
+    },
+    {
+      "part_number": "5G11H21141",
+      "commodity_type": "SPEAKERS INTERNAL",
+      "description": "FRU GBM Speaker L+R YG"
+    },
+    {
+      "part_number": "5G11H21143",
+      "commodity_type": "HEAT SINKS",
+      "description": "FRU GBM NSF50_UMA_THM_ASSY AVC"
+    },
+    {
+      "part_number": "5T11D70223",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "FRU FPR ACETATE TAPE"
+    },
+    {
+      "part_number": "5C11P26421",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "FRU FPC NF-H224REV0 HY USB 78P"
+    },
+    {
+      "part_number": "5C11P26422",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "FRU FPC NF-H223REV0 HY USB 60P"
+    },
+    {
+      "part_number": "5C11P26419",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "FRU FPC NF-H222REV0 HY HDMI 78P"
+    },
+    {
+      "part_number": "5C11P26420",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "FRU FPC NF-H221REV0 HY HDMI 60P"
+    },
+    {
+      "part_number": "5C11P26424",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "FRU FFC 24PPAD=0.3MGE FORCEPAD/B"
+    },
+    {
+      "part_number": "5C11P26423",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "FRU FFC 10PPAD=0.3MGE FPR/B"
+    },
+    {
+      "part_number": "5C51T63030",
+      "commodity_type": "CARDS MISC INTERNAL",
+      "description": "FRU CARDPOP Right IO Board"
+    },
+    {
+      "part_number": "5C51T63029",
+      "commodity_type": "CARDS MISC INTERNAL",
+      "description": "FRU CARDPOP Left IO Board"
+    },
+    {
+      "part_number": "5B40Z68982",
+      "commodity_type": "MISC INTERNAL",
+      "description": "FRU BRACKET NSF50_SSD_HOLDER"
+    },
+    {
+      "part_number": "5A30Z88312",
+      "commodity_type": "ANTENNA",
+      "description": "FRU ANTENNA NSF50_ANTENNA"
+    },
+    {
+      "part_number": "5CB1S55531",
+      "commodity_type": "BEZELS/DOORS",
+      "description": "D-Cover NSF50 ASSY"
+    },
+    {
+      "part_number": "5T61S92901",
+      "commodity_type": "CARDS MISC INTERNAL",
+      "description": "CS26 Poseidon Taifang ForcePad"
+    },
+    {
+      "part_number": "5M11U70681",
+      "commodity_type": "C-cover with keyboard",
+      "description": "C-Cover with keyboard, English, US"
+    },
+    {
+      "part_number": "5A81U08778",
+      "commodity_type": "Misc External; external opticals",
+      "description": "Yoga Pen Case Blue"
+    },
+    {
+      "part_number": "5M51S86497",
+      "commodity_type": "POINTING DEVICES",
+      "description": "Yoga Mouse (Cosmic Blue)"
+    },
+    {
+      "part_number": "5R31V02719",
+      "commodity_type": "RECRDMEDIA",
+      "description": "W11_H64_SL-ENG RUSB"
+    },
+    {
+      "part_number": "5T11J35558",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "TAPE L 83SE MB CONDUCTIVE TAPE"
+    },
+    {
+      "part_number": "5S10S35844",
+      "commodity_type": "KITS SCREWS AND LABELS",
+      "description": "SCREW L 83SE KITS"
+    },
+    {
+      "part_number": "5R60S37388",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "RUBBER L 83SE RUBBER FOOT"
+    },
+    {
+      "part_number": "5P20S37735",
+      "commodity_type": "Reusable items (Reusable Tapes, Mylar,Sponge,thermal pad, rubber, rubber feet)",
+      "description": "PAD L 83SE SSD Thermalpad"
+    },
+    {
+      "part_number": "5T71S76916",
+      "commodity_type": "Misc External; external opticals",
+      "description": "Lenovo Yoga Pen Gen 2, (Linear pen 2) D9.13, Cosmic Blue"
+    },
+    {
+      "part_number": "5SS1T10167",
+      "commodity_type": "M.2 Card",
+      "description": "Lenovo SSD 1TB, M.2, 2242, PCIE4X4, MICRON"
+    },
+    {
+      "part_number": "5D10S40370",
+      "commodity_type": "LCD ASSEMBLIES",
+      "description": "Lenovo LCD Module, 14\", 2.8K, Touch, Glare, OLED, 500nit, 100%DCI-P3, Color Calibration, 5M+IR, Cosmic Blue"
+    },
+    {
+      "part_number": "5B11T80528",
+      "commodity_type": "Rechargeable Batteries , internal",
+      "description": "Lenovo BATTERY, 15.48V, 70Wh, 4cell"
+    },
+    {
+      "part_number": "5A11S88648",
+      "commodity_type": "AC ADAPTERS",
+      "description": "Lenovo AC_ADAPTER, TYPE-C, 65W, 2P, BLACK, Euro"
+    },
+    {
+      "part_number": "5B21U56688",
+      "commodity_type": "SYSTEM BOARDS",
+      "description": "L83SE U7355 32G W7 WINyAB RM EI"
+    },
+    {
+      "part_number": "5H40S21448",
+      "commodity_type": "HEAT SINKS",
+      "description": "HEATSINK L 83SE WEIHONG"
+    },
+    {
+      "part_number": "5F10S14417",
+      "commodity_type": "FANS",
+      "description": "Fan 83SE Fan L+R"
+    },
+    {
+      "part_number": "5CB1U73611",
+      "commodity_type": "COVERS",
+      "description": "COVER 83SE Lower Case"
+    },
+    {
+      "part_number": "5C50S25970",
+      "commodity_type": "CARDS MISC INTERNAL",
+      "description": "CARDPOP L 83SE USB Board"
+    },
+    {
+      "part_number": "5C50S25969",
+      "commodity_type": "CARDS MISC INTERNAL",
+      "description": "CARDPOP L 83SE PMIC Board SDC"
+    },
+    {
+      "part_number": "5C50S25971",
+      "commodity_type": "CARDS MISC INTERNAL",
+      "description": "CARDPOP L 83SE DMIC Board"
+    },
+    {
+      "part_number": "5C10S31718",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE L 83SE USB Board FFC HZD"
+    },
+    {
+      "part_number": "5C10S31717",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE L 83SE USB Board Cable LUX"
+    },
+    {
+      "part_number": "5C10S31720",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE L 83SE TP FFC CVILUX"
+    },
+    {
+      "part_number": "5C10S31715",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE L 83SE MIC FFC CVILUX"
+    },
+    {
+      "part_number": "5C10S31722",
+      "commodity_type": "CABLES INTERNAL",
+      "description": "CABLE L 83SE BATT Cable LUX"
+    },
+    {
+      "part_number": "5CB1U73617",
+      "commodity_type": "C-cover with keyboard",
+      "description": "C-Cover with keyboard, English, Cosmic Blue, Screw, US"
+    },
+    {
+      "part_number": "5A30S36130",
+      "commodity_type": "ANTENNA",
+      "description": "ANTENNA L 83SE WLAN ANTENNA"
+    }
+  ],
+  "installations": {
+    "IdeaPad Pro 5 16AKP10": [
+      {
+        "part_number": "5T10S33847",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T10S33856",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1R61094",
+        "quantity": 1
+      },
+      {
+        "part_number": "5S10S35759",
+        "quantity": 1
+      },
+      {
+        "part_number": "5R60S37340",
+        "quantity": 1
+      },
+      {
+        "part_number": "5R60S37337",
+        "quantity": 1
+      },
+      {
+        "part_number": "5D11R64277",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1R61091",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1R61083",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C21P86450",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1R61093",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C50S25811",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C50S25812",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1R91584",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B40S22321",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B30S19235",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1R61092",
+        "quantity": 1
+      },
+      {
+        "part_number": "5W11H85471",
+        "quantity": 1
+      },
+      {
+        "part_number": "5R31S70366",
+        "quantity": 1
+      },
+      {
+        "part_number": "5SS1P00642",
+        "quantity": 1
+      },
+      {
+        "part_number": "00XL065",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B11M63872",
+        "quantity": 1
+      },
+      {
+        "part_number": "5A11K67849",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B21R27554",
+        "quantity": 1
+      },
+      {
+        "part_number": "5H40S21345",
+        "quantity": 1
+      },
+      {
+        "part_number": "5F10S14238",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31296",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31292",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31302",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S30924",
+        "quantity": 1
+      }
+    ],
+    "Legion 5 15IRX10 - Type 83LY": [
+      {
+        "part_number": "5W10V25819",
+        "quantity": 1
+      },
+      {
+        "part_number": "5R31S73528",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T10S33788",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T10S33677",
+        "quantity": 1
+      },
+      {
+        "part_number": "5SB0S32096",
+        "quantity": 1
+      },
+      {
+        "part_number": "5S60S36638",
+        "quantity": 1
+      },
+      {
+        "part_number": "5S10S35780",
+        "quantity": 1
+      },
+      {
+        "part_number": "5S10S35619",
+        "quantity": 1
+      },
+      {
+        "part_number": "5P20S37715",
+        "quantity": 1
+      },
+      {
+        "part_number": "5P20S37716",
+        "quantity": 1
+      },
+      {
+        "part_number": "5M20S28012",
+        "quantity": 1
+      },
+      {
+        "part_number": "5M20S28014",
+        "quantity": 1
+      },
+      {
+        "part_number": "5SS1Q28866",
+        "quantity": 1
+      },
+      {
+        "part_number": "00XL065",
+        "quantity": 1
+      },
+      {
+        "part_number": "5M31N59979",
+        "quantity": 1
+      },
+      {
+        "part_number": "5D11S91479",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B11Q30691",
+        "quantity": 1
+      },
+      {
+        "part_number": "5A11Q29119",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B21R90841",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B30S19249",
+        "quantity": 1
+      },
+      {
+        "part_number": "5F10S14296",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1S22982",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C21P86474",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1S89866",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1S22981",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B11S13430",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C50S25873",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31496",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31494",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31490",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31487",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1S31064",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B40S22355",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B40S22354",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B40S22357",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B40S22118",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1S22985",
+        "quantity": 1
+      }
+    ],
+    "LOQ 15AHP9": [
+      {
+        "part_number": "5T10S33633",
+        "quantity": 1
+      },
+      {
+        "part_number": "5W10V25823",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B40S22261",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B40S22260",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1M65362",
+        "quantity": 1
+      },
+      {
+        "part_number": "5SB0S32037",
+        "quantity": 1
+      },
+      {
+        "part_number": "5S10S35626",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T10S33712",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1N62560",
+        "quantity": 1
+      },
+      {
+        "part_number": "5D11M63778",
+        "quantity": 1
+      },
+      {
+        "part_number": "5A11Q60430",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1M65363",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B30S19159",
+        "quantity": 1
+      },
+      {
+        "part_number": "5H50S29136",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1M65367",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S30933",
+        "quantity": 1
+      },
+      {
+        "part_number": "5S60S36630",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B40S22259",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C21M05462",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B10S34107",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S30934",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1P43384",
+        "quantity": 1
+      },
+      {
+        "part_number": "5R31S69911",
+        "quantity": 1
+      },
+      {
+        "part_number": "5H40S21050",
+        "quantity": 1
+      },
+      {
+        "part_number": "5M20S27964",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B21M50226",
+        "quantity": 1
+      },
+      {
+        "part_number": "5SS1K57706",
+        "quantity": 1
+      },
+      {
+        "part_number": "00XL065",
+        "quantity": 1
+      },
+      {
+        "part_number": "5M31L87378",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B11M64608",
+        "quantity": 1
+      }
+    ],
+    "ThinkBook 16 G9 IPL - Type 21UR": [
+      {
+        "part_number": "5P20S37594",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T11J12131",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T10S33699",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T10S33697",
+        "quantity": 1
+      },
+      {
+        "part_number": "5S10S35821",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T10S33395",
+        "quantity": 1
+      },
+      {
+        "part_number": "5R60S37329",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1T53031",
+        "quantity": 1
+      },
+      {
+        "part_number": "5A11S88669",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1T53030",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B30S19278",
+        "quantity": 1
+      },
+      {
+        "part_number": "5L10X95175",
+        "quantity": 1
+      },
+      {
+        "part_number": "5H50S29177",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1M48391",
+        "quantity": 1
+      },
+      {
+        "part_number": "5F30T71951",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31759",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31613",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1U85281",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B40S22252",
+        "quantity": 1
+      },
+      {
+        "part_number": "5A30S36123",
+        "quantity": 1
+      },
+      {
+        "part_number": "5W11H85504",
+        "quantity": 1
+      },
+      {
+        "part_number": "5R31V11659",
+        "quantity": 1
+      },
+      {
+        "part_number": "5F10S14370",
+        "quantity": 1
+      },
+      {
+        "part_number": "5SB0S32141",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B21U69384",
+        "quantity": 1
+      },
+      {
+        "part_number": "5SS1S17582",
+        "quantity": 1
+      },
+      {
+        "part_number": "5M31N59978",
+        "quantity": 1
+      },
+      {
+        "part_number": "5D11T57795",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B11T52326",
+        "quantity": 1
+      },
+      {
+        "part_number": "5H40S21470",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C21S76240",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B10S34070",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C50S25997",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31614",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31615",
+        "quantity": 1
+      }
+    ],
+    "X9-15p Gen 1 - Type 21VV, 21VW": [
+      {
+        "part_number": "5M20S27978",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T11D70180",
+        "quantity": 1
+      },
+      {
+        "part_number": "5R31N71813",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B21U93712",
+        "quantity": 1
+      },
+      {
+        "part_number": "5M21L98705",
+        "quantity": 1
+      },
+      {
+        "part_number": "5P21B00331",
+        "quantity": 1
+      },
+      {
+        "part_number": "5SS0Y87005",
+        "quantity": 1
+      },
+      {
+        "part_number": "5M11U70625",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B11T61178",
+        "quantity": 1
+      },
+      {
+        "part_number": "5A11T64359",
+        "quantity": 1
+      },
+      {
+        "part_number": "5G11H21139",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T11D70218",
+        "quantity": 1
+      },
+      {
+        "part_number": "5S10Z89301",
+        "quantity": 1
+      },
+      {
+        "part_number": "5L11U80704",
+        "quantity": 1
+      },
+      {
+        "part_number": "5G11H21141",
+        "quantity": 1
+      },
+      {
+        "part_number": "5G11H21143",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T11D70223",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C11P26421",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C11P26422",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C11P26419",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C11P26420",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C11P26424",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C11P26423",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C51T63030",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C51T63029",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B40Z68982",
+        "quantity": 1
+      },
+      {
+        "part_number": "5A30Z88312",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1S55531",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T61S92901",
+        "quantity": 1
+      },
+      {
+        "part_number": "5M11U70681",
+        "quantity": 1
+      }
+    ],
+    "Yoga 9 2-in-1 14IPH11": [
+      {
+        "part_number": "5M20S28012",
+        "quantity": 1
+      },
+      {
+        "part_number": "5A81U08778",
+        "quantity": 1
+      },
+      {
+        "part_number": "5M51S86497",
+        "quantity": 1
+      },
+      {
+        "part_number": "5R31V02719",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T11J35558",
+        "quantity": 1
+      },
+      {
+        "part_number": "5S10S35844",
+        "quantity": 1
+      },
+      {
+        "part_number": "5R60S37388",
+        "quantity": 1
+      },
+      {
+        "part_number": "5P20S37735",
+        "quantity": 1
+      },
+      {
+        "part_number": "5T71S76916",
+        "quantity": 1
+      },
+      {
+        "part_number": "5SS1T10167",
+        "quantity": 1
+      },
+      {
+        "part_number": "5D10S40370",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B11T80528",
+        "quantity": 1
+      },
+      {
+        "part_number": "5A11S88648",
+        "quantity": 1
+      },
+      {
+        "part_number": "5B21U56688",
+        "quantity": 1
+      },
+      {
+        "part_number": "5H40S21448",
+        "quantity": 1
+      },
+      {
+        "part_number": "5F10S14417",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1U73611",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C50S25970",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C50S25969",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C50S25971",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31718",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31717",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31720",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31715",
+        "quantity": 1
+      },
+      {
+        "part_number": "5C10S31722",
+        "quantity": 1
+      },
+      {
+        "part_number": "5CB1U73617",
+        "quantity": 1
+      },
+      {
+        "part_number": "5A30S36130",
+        "quantity": 1
+      }
+    ]
+  }
+}

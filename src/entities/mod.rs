@@ -3,13 +3,12 @@
 pub mod prelude;
 
 pub mod account_status;
-pub mod product_models;
-pub mod products;
 pub mod images;
-pub mod part_installations;
 pub mod part_status;
 pub mod part_types;
-pub mod parts;
+pub mod parts_by_model;
+pub mod product_models;
+pub mod products;
 pub mod roles;
 pub mod sessions;
 pub mod users;

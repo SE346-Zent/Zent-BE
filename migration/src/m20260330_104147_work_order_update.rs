@@ -42,13 +42,14 @@ impl MigrationTrait for Migration {
                     .col(string(WorkOrders::ReferenceTicket))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
-                    .col(timestamp(ClosedAt))
+                    .col(timestamp_null(DeletedAt))
                     .col(uuid(WorkOrders::AdminId))
                     .col(uuid(WorkOrders::CustomerId))
                     .col(uuid(WorkOrders::TechnicianId))
                     .col(uuid(WorkOrders::CompleteFormId))
                     .col(string(WorkOrders::RejectReason))
-                    .col(string(WorkOrders::WorkOrderSymptomId))
+                    .col(integer(WorkOrders::WorkOrderSymptomId))
+                    .col(uuid(WorkOrders::ProductId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_status")
@@ -91,7 +92,7 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_work_order_reject_form")
+                            .name("fk_work_order_closing_form")
                             .from(WorkOrders::Table, WorkOrders::RejectReason)
                             .to(WorkOrderClosingForms::Table, WorkOrderClosingForms::Id)
                             .on_update(ForeignKeyAction::Cascade)
@@ -102,6 +103,14 @@ impl MigrationTrait for Migration {
                             .name("fk_work_order_symptom")
                             .from(WorkOrders::Table, WorkOrders::WorkOrderSymptomId)
                             .to(WorkOrderSymptoms::Table, WorkOrderSymptoms::Id)
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_work_order_product")
+                            .from(WorkOrders::Table, WorkOrders::ProductId)
+                            .to(Products::Table, Products::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
                     )
@@ -116,6 +125,9 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(pk_auto(WorkOrderStatus::Id))
                     .col(string(WorkOrderStatus::Name))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(UpdatedAt))
+                    .col(timestamp_null(DeletedAt))
                     .to_owned(),
             )
             .await?;
@@ -127,6 +139,9 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(pk_auto(WorkOrderSymptoms::Id))
                     .col(string(WorkOrderSymptoms::SymptomNames))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(UpdatedAt))
+                    .col(timestamp_null(DeletedAt))
                     .to_owned(),
             )
             .await?;
@@ -156,7 +171,7 @@ struct CreatedAt;
 #[derive(DeriveIden)]
 struct UpdatedAt;
 #[derive(DeriveIden)]
-struct ClosedAt;
+struct DeletedAt;
 
 #[derive(DeriveIden)]
 enum WorkOrderClosingForms {
@@ -168,6 +183,12 @@ enum WorkOrderClosingForms {
     Diagnosis,
 }
 
+#[derive(DeriveIden)]
+enum Products
+{
+    Table,
+    Id, 
+}
 
 #[derive(DeriveIden)]
 enum WorkOrders
@@ -181,6 +202,7 @@ enum WorkOrders
     AdminId,
     WorkOrderStatusId,
     WorkOrderSymptomId,
+    ProductId,
     FirstName,
     LastName,
     Email,

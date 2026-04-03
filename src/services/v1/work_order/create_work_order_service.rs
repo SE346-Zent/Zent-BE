@@ -47,12 +47,14 @@ pub async fn create_work_order_service(
         reference_ticket: Set(request.reference_ticket),
         created_at: Set(now),
         updated_at: Set(now),
-        closed_at: Set(now),
+        deleted_at: Set(None),
         admin_id: Set(request.admin_id),
         customer_id: Set(request.customer_id),
         technician_id: Set(request.technician_id),
         complete_form_id: Set(request.complete_form_id),
         reject_reason: Set(request.reject_reason),
+        work_order_symptom_id: Set(request.work_order_symptom_id),
+        product_id: Set(request.product_id),
     };
 
     let model = active_model
@@ -76,12 +78,14 @@ pub async fn create_work_order_service(
         reference_ticket: model.reference_ticket,
         created_at: model.created_at.to_rfc3339(),
         updated_at: model.updated_at.to_rfc3339(),
-        closed_at: model.closed_at.to_rfc3339(),
+        deleted_at: model.deleted_at.map(|dt| dt.to_rfc3339()),
         admin_id: model.admin_id,
         customer_id: model.customer_id,
         technician_id: model.technician_id,
         complete_form_id: model.complete_form_id,
         reject_reason: model.reject_reason,
+        work_order_symptom_id: model.work_order_symptom_id,
+        product_id: model.product_id,
     };
 
     Ok(WorkOrderDetailResponse {

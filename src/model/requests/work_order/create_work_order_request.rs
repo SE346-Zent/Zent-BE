@@ -22,4 +22,6 @@ pub struct CreateWorkOrderRequest {
     pub technician_id: Uuid,
     pub complete_form_id: Uuid,
     pub reject_reason: String,
+    pub work_order_symptom_id: i32,
+    pub product_id: Uuid,
 }

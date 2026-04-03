@@ -6,6 +6,7 @@ use seeder::{
     UserSeedConfig, seed_account_statuses, seed_product_models, 
     seed_random_products, seed_random_warranties, seed_random_work_orders, seed_roles,
     seed_users, seed_work_order_closing_forms, seed_work_order_statuses,
+    seed_part_types, seed_part_installations,
 };
 use serde_json::to_string_pretty;
 use std::path::PathBuf;
@@ -142,6 +143,12 @@ async fn main() -> Result<()> {
             &prod_models,
         )
         .await?;
+        
+        println!("\n--- Seeding Part Types ---");
+        seed_part_types(&db).await?;
+        
+        println!("\n--- Seeding Part Installations ---");
+        seed_part_installations(&db).await?;
     }
 
     // -----------------------------------------------------------------------

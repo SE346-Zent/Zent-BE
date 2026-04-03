@@ -3,17 +3,29 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "part_installations")]
+#[sea_orm(table_name = "parts_by_model")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub product_id: Uuid,
     pub part_number: String,
     pub quantity: i32,
+    pub part_status_id: i32,
+    pub created_at: DateTimeUtc,
+    pub updated_at: DateTimeUtc,
+    pub deleted_at: Option<DateTimeUtc>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::part_status::Entity",
+        from = "Column::PartStatusId",
+        to = "super::part_status::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Restrict"
+    )]
+    PartStatus,
     #[sea_orm(
         belongs_to = "super::part_types::Entity",
         from = "Column::PartNumber",
@@ -30,6 +42,12 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     Products,
+}
+
+impl Related<super::part_status::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PartStatus.def()
+    }
 }
 
 impl Related<super::part_types::Entity> for Entity {

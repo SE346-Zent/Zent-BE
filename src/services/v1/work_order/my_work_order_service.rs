@@ -73,12 +73,14 @@ fn map_work_order_detail(model: work_orders::Model) -> WorkOrderDetailResponseDa
         reference_ticket: model.reference_ticket,
         created_at: model.created_at.to_rfc3339(),
         updated_at: model.updated_at.to_rfc3339(),
-        closed_at: model.closed_at.to_rfc3339(),
+        deleted_at: model.deleted_at.map(|t| t.to_rfc3339()),
         admin_id: model.admin_id,
         customer_id: model.customer_id,
         technician_id: model.technician_id,
         complete_form_id: model.complete_form_id,
         reject_reason: model.reject_reason,
+        product_id: model.product_id,
+        work_order_symptom_id: model.work_order_symptom_id,
     }
 }
 
@@ -99,11 +101,13 @@ fn map_work_order_list_item(model: work_orders::Model) -> WorkOrderListItemRespo
         reference_ticket: model.reference_ticket,
         created_at: model.created_at.to_rfc3339(),
         updated_at: model.updated_at.to_rfc3339(),
-        closed_at: model.closed_at.to_rfc3339(),
+        deleted_at: model.deleted_at.map(|t| t.to_rfc3339()),
         admin_id: model.admin_id,
         customer_id: model.customer_id,
         technician_id: model.technician_id,
         complete_form_id: model.complete_form_id,
         reject_reason: model.reject_reason,
+        product_id: model.product_id,
+        work_order_symptom_id: model.work_order_symptom_id,
     }
 }

@@ -19,6 +19,14 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
+        belongs_to = "super::part_types::Entity",
+        from = "Column::PartId",
+        to = "super::part_types::Column::PartNumber",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    PartTypes,
+    #[sea_orm(
         belongs_to = "super::products::Entity",
         from = "Column::ProductId",
         to = "super::products::Column::Id",
@@ -26,25 +34,17 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     Products,
-    #[sea_orm(
-        belongs_to = "super::parts::Entity",
-        from = "Column::PartId",
-        to = "super::parts::Column::Id",
-        on_update = "Cascade",
-        on_delete = "Cascade"
-    )]
-    Parts,
+}
+
+impl Related<super::part_types::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PartTypes.def()
+    }
 }
 
 impl Related<super::products::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Products.def()
-    }
-}
-
-impl Related<super::parts::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Parts.def()
     }
 }
 

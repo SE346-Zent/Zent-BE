@@ -5,9 +5,11 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "part_types")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    pub name: String,
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub part_number: String,
+    pub commodity_type: String,
+    pub description: String,
+    pub part_status_id: i32,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
@@ -15,13 +17,21 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::part_installations::Entity")]
-    PartInstallations,
+    #[sea_orm(has_many = "super::images::Entity")]
+    Images,
+    #[sea_orm(has_many = "super::parts_by_model::Entity")]
+    PartsByModel,
 }
 
-impl Related<super::part_installations::Entity> for Entity {
+impl Related<super::images::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::PartInstallations.def()
+        Relation::Images.def()
+    }
+}
+
+impl Related<super::parts_by_model::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PartsByModel.def()
     }
 }
 

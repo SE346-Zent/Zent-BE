@@ -9,6 +9,7 @@ pub mod product_model;
 pub mod product;
 pub mod warranty;
 pub mod part_status;
+pub mod parts;
 
 pub use user::{seed_users, UserSeedConfig};
 pub use role::seed_roles;
@@ -20,3 +21,4 @@ pub use product_model::seed_product_models;
 pub use product::seed_random_products;
 pub use warranty::seed_random_warranties;
 pub use part_status::seed_part_statuses;
+pub use parts::{seed_part_types, seed_part_installations};

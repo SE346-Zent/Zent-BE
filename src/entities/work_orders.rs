@@ -21,16 +21,26 @@ pub struct Model {
     pub reference_ticket: String,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
-    pub closed_at: DateTimeUtc,
+    pub deleted_at: Option<DateTimeUtc>,
     pub admin_id: Uuid,
     pub customer_id: Uuid,
     pub technician_id: Uuid,
     pub complete_form_id: Uuid,
     pub reject_reason: String,
+    pub work_order_symptom_id: i32,
+    pub product_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::products::Entity",
+        from = "Column::ProductId",
+        to = "super::products::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Restrict"
+    )]
+    Products,
     #[sea_orm(
         belongs_to = "super::users::Entity",
         from = "Column::TechnicianId",
@@ -79,11 +89,31 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     WorkOrderStatus,
+    #[sea_orm(
+        belongs_to = "super::work_order_symptoms::Entity",
+        from = "Column::WorkOrderSymptomId",
+        to = "super::work_order_symptoms::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Restrict"
+    )]
+    WorkOrderSymptoms,
+}
+
+impl Related<super::products::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Products.def()
+    }
 }
 
 impl Related<super::work_order_status::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::WorkOrderStatus.def()
+    }
+}
+
+impl Related<super::work_order_symptoms::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderSymptoms.def()
     }
 }
 

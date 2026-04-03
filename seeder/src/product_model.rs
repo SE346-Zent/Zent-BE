@@ -2,12 +2,17 @@ use anyhow::Result;
 use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::collections::HashMap;
+use uuid::Uuid;
 use zent_be::entities::product_models;
 
 /// Realistic Lenovo product models to seed.
 pub const PRODUCT_MODELS: &[(&str, &str)] = &[
-    ("IdeaPad 5 Pro 16ARH7 - Type 82SN", "21HD"),
-    ("Legion 5 15IRX10 - Type 83LY", "21KC"),
+    ("IdeaPad Pro 5 16AKP10", "83JN002SVN"),
+    ("Legion 5 15IRX10 - Type 83LY", "83LY00NGVN"),
+    ("LOQ 15AHP9", "83DX007QVN"),
+    ("ThinkBook 16 G9 IPL - Type 21UR", "21UR0009US"),
+    ("X9-15p Gen 1 - Type 21VV, 21VW", "21VV000UVN"),
+    ("Yoga 9 2-in-1 14IPH11", "83SE000HVN")
 ];
 
 /// Seed product models and return a map of model_name -> id.

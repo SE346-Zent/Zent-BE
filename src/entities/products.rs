@@ -18,6 +18,10 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::images::Entity")]
+    Images,
+    #[sea_orm(has_many = "super::parts_by_model::Entity")]
+    PartsByModel,
     #[sea_orm(
         belongs_to = "super::product_models::Entity",
         from = "Column::ModelId",
@@ -26,20 +30,10 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     ProductModels,
-    #[sea_orm(has_many = "super::images::Entity")]
-    Images,
-    #[sea_orm(has_many = "super::part_installations::Entity")]
-    PartInstallations,
-    #[sea_orm(has_many = "super::parts::Entity")]
-    Parts,
     #[sea_orm(has_many = "super::warranties::Entity")]
     Warranties,
-}
-
-impl Related<super::product_models::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::ProductModels.def()
-    }
+    #[sea_orm(has_many = "super::work_orders::Entity")]
+    WorkOrders,
 }
 
 impl Related<super::images::Entity> for Entity {
@@ -48,21 +42,27 @@ impl Related<super::images::Entity> for Entity {
     }
 }
 
-impl Related<super::part_installations::Entity> for Entity {
+impl Related<super::parts_by_model::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::PartInstallations.def()
+        Relation::PartsByModel.def()
     }
 }
 
-impl Related<super::parts::Entity> for Entity {
+impl Related<super::product_models::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Parts.def()
+        Relation::ProductModels.def()
     }
 }
 
 impl Related<super::warranties::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Warranties.def()
+    }
+}
+
+impl Related<super::work_orders::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrders.def()
     }
 }
 

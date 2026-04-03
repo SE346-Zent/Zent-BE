@@ -18,12 +18,14 @@ pub struct WorkOrderDetailResponseData {
     pub reference_ticket: String,
     pub created_at: String,
     pub updated_at: String,
-    pub closed_at: String,
+    pub deleted_at: Option<String>,
     pub admin_id: uuid::Uuid,
     pub customer_id: uuid::Uuid,
     pub technician_id: uuid::Uuid,
     pub complete_form_id: uuid::Uuid,
     pub reject_reason: String,
+    pub work_order_symptom_id: i32,
+    pub product_id: uuid::Uuid,
 }
 
 define_api_response!(WorkOrderDetailResponse, WorkOrderDetailResponseData, Option<()>);

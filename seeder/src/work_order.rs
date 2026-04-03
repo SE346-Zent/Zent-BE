@@ -62,12 +62,14 @@ pub async fn seed_random_work_orders(
                 reference_ticket: Set(format!("REF-{:05}", i + 1)),
                 created_at: Set(now),
                 updated_at: Set(now),
-                closed_at: Set(now),
+                deleted_at: Set(None),
                 admin_id: Set(Uuid::new_v4()),
                 customer_id: Set(Uuid::new_v4()),
                 technician_id: Set(Uuid::new_v4()),
                 complete_form_id: Set(Uuid::new_v4()),
                 reject_reason: Set("".to_string()),
+                work_order_symptom_id: Set(1),
+                product_id: Set(Uuid::new_v4()),
             }
         })
         .collect();

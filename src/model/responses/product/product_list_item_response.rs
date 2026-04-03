@@ -15,6 +15,7 @@ pub struct ProductListItemResponseData {
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
+    
 }
 
 define_api_response!(ProductListResponse, Vec<ProductListItemResponseData>, PaginationMeta);
