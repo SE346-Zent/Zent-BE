@@ -3,14 +3,13 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "equipments")]
+#[sea_orm(table_name = "products")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub equipment_status_id: i32,
     pub model_id: i32,
     pub customer_id: Uuid,
-    pub equipment_name: String,
+    pub product_name: String,
     pub serial_number: Option<String>,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
@@ -20,44 +19,38 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::equipment_models::Entity",
+        belongs_to = "super::product_models::Entity",
         from = "Column::ModelId",
-        to = "super::equipment_models::Column::Id",
+        to = "super::product_models::Column::Id",
         on_update = "Cascade",
         on_delete = "Restrict"
     )]
-    EquipmentModels,
-    #[sea_orm(
-        belongs_to = "super::equipment_status::Entity",
-        from = "Column::EquipmentStatusId",
-        to = "super::equipment_status::Column::Id",
-        on_update = "Cascade",
-        on_delete = "Restrict"
-    )]
-    EquipmentStatus,
+    ProductModels,
     #[sea_orm(has_many = "super::images::Entity")]
     Images,
+    #[sea_orm(has_many = "super::part_installations::Entity")]
+    PartInstallations,
     #[sea_orm(has_many = "super::parts::Entity")]
     Parts,
     #[sea_orm(has_many = "super::warranties::Entity")]
     Warranties,
 }
 
-impl Related<super::equipment_models::Entity> for Entity {
+impl Related<super::product_models::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::EquipmentModels.def()
-    }
-}
-
-impl Related<super::equipment_status::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::EquipmentStatus.def()
+        Relation::ProductModels.def()
     }
 }
 
 impl Related<super::images::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Images.def()
+    }
+}
+
+impl Related<super::part_installations::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PartInstallations.def()
     }
 }
 

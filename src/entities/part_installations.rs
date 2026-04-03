@@ -3,17 +3,13 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "images")]
+#[sea_orm(table_name = "part_installations")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub image_url: String,
-    pub part_id: Option<Uuid>,
-    pub product_id: Option<Uuid>,
-    pub captured_at: DateTimeUtc,
-    pub created_at: DateTimeUtc,
-    pub updated_at: DateTimeUtc,
-    pub deleted_at: Option<DateTimeUtc>,
+    pub product_id: Uuid,
+    pub part_number: String,
+    pub quantity: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -23,17 +19,17 @@ pub enum Relation {
         from = "Column::ProductId",
         to = "super::products::Column::Id",
         on_update = "Cascade",
-        on_delete = "Cascade"
+        on_delete = "Restrict"
     )]
     Products,
     #[sea_orm(
-        belongs_to = "super::parts::Entity",
-        from = "Column::PartId",
-        to = "super::parts::Column::Id",
+        belongs_to = "super::part_types::Entity",
+        from = "Column::PartNumber",
+        to = "super::part_types::Column::Id",
         on_update = "Cascade",
-        on_delete = "Cascade"
+        on_delete = "Restrict"
     )]
-    Parts,
+    PartTypes,
 }
 
 impl Related<super::products::Entity> for Entity {
@@ -42,9 +38,9 @@ impl Related<super::products::Entity> for Entity {
     }
 }
 
-impl Related<super::parts::Entity> for Entity {
+impl Related<super::part_types::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Parts.def()
+        Relation::PartTypes.def()
     }
 }
 

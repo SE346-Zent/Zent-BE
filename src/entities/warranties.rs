@@ -8,7 +8,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub customer_id: Uuid,
-    pub equipment_id: Uuid,
+    pub product_id: Uuid,
     pub start_date: DateTimeUtc,
     pub end_date: Option<DateTimeUtc>,
     pub warranty_status: String,
@@ -20,18 +20,18 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::equipments::Entity",
-        from = "Column::EquipmentId",
-        to = "super::equipments::Column::Id",
+        belongs_to = "super::products::Entity",
+        from = "Column::ProductId",
+        to = "super::products::Column::Id",
         on_update = "Cascade",
         on_delete = "Cascade"
     )]
-    Equipments,
+    Products,
 }
 
-impl Related<super::equipments::Entity> for Entity {
+impl Related<super::products::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Equipments.def()
+        Relation::Products.def()
     }
 }
 

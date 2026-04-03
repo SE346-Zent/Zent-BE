@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::model::responses::common::pagination_meta::PaginationQuery;
 
 #[derive(Deserialize, IntoParams, Debug)]
-pub struct EquipmentListQuery {
+pub struct ProductListQuery {
     #[serde(rename = "customerId")]
     pub customer_id: Uuid,
     #[serde(flatten)]

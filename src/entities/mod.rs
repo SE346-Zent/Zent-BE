@@ -3,10 +3,10 @@
 pub mod prelude;
 
 pub mod account_status;
-pub mod equipment_models;
-pub mod equipment_status;
-pub mod equipments;
+pub mod product_models;
+pub mod products;
 pub mod images;
+pub mod part_installations;
 pub mod part_status;
 pub mod part_types;
 pub mod parts;

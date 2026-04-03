@@ -9,25 +9,11 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(EquipmentModels::Table)
+                    .table(ProductModels::Table)
                     .if_not_exists()
-                    .col(pk_auto(EquipmentModels::Id))
-                    .col(string(EquipmentModels::ModelName))
-                    .col(string(EquipmentModels::ModelCode))
-                    .col(timestamp(CreatedAt))
-                    .col(timestamp(UpdatedAt))
-                    .col(timestamp_null(DeletedAt))
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(EquipmentStatus::Table)
-                    .if_not_exists()
-                    .col(pk_auto(EquipmentStatus::Id))
-                    .col(string(EquipmentStatus::Name))
+                    .col(pk_auto(ProductModels::Id))
+                    .col(string(ProductModels::ModelName))
+                    .col(string(ProductModels::ModelCode))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -66,30 +52,22 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Equipments::Table)
+                    .table(Products::Table)
                     .if_not_exists()
-                    .col(uuid(Equipments::Id).primary_key())
-                    .col(integer(Equipments::EquipmentStatusId))
-                    .col(integer(Equipments::ModelId))
-                    .col(uuid(Equipments::CustomerId))
-                    .col(string(Equipments::EquipmentName))
-                    .col(string_null(Equipments::SerialNumber))
+                    .col(uuid(Products::Id).primary_key())
+                    .col(integer(Products::ProductStatusId))
+                    .col(integer(Products::ModelId))
+                    .col(uuid(Products::CustomerId))
+                    .col(string(Products::ProductName))
+                    .col(string_null(Products::SerialNumber))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_equipments_status")
-                            .from(Equipments::Table, Equipments::EquipmentStatusId)
-                            .to(EquipmentStatus::Table, EquipmentStatus::Id)
-                            .on_delete(ForeignKeyAction::Restrict)
-                            .on_update(ForeignKeyAction::Cascade),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_equipments_model")
-                            .from(Equipments::Table, Equipments::ModelId)
-                            .to(EquipmentModels::Table, EquipmentModels::Id)
+                            .name("fk_products_model")
+                            .from(Products::Table, Products::ModelId)
+                            .to(ProductModels::Table, ProductModels::Id)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -103,7 +81,7 @@ impl MigrationTrait for Migration {
                     .table(Parts::Table)
                     .if_not_exists()
                     .col(uuid(Parts::Id).primary_key())
-                    .col(uuid_null(Parts::EquipmentId))
+                    .col(uuid_null(Parts::ProductId))
                     .col(integer(Parts::PartStatusId))
                     .col(uuid(Parts::CustomerId))
                     .col(string(Parts::PartName))
@@ -123,9 +101,9 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_parts_equipment")
-                            .from(Parts::Table, Parts::EquipmentId)
-                            .to(Equipments::Table, Equipments::Id)
+                            .name("fk_parts_product")
+                            .from(Parts::Table, Parts::ProductId)
+                            .to(Products::Table, Products::Id)
                             .on_delete(ForeignKeyAction::SetNull)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -140,7 +118,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(Warranties::Id).primary_key())
                     .col(uuid(Warranties::CustomerId))
-                    .col(uuid(Warranties::EquipmentId))
+                    .col(uuid(Warranties::ProductId))
                     .col(timestamp(Warranties::StartDate))
                     .col(timestamp_null(Warranties::EndDate))
                     .col(string(Warranties::WarrantyStatus))
@@ -149,9 +127,9 @@ impl MigrationTrait for Migration {
                     .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_warranty_equipment")
-                            .from(Warranties::Table, Warranties::EquipmentId)
-                            .to(Equipments::Table, Equipments::Id)
+                            .name("fk_warranty_product")
+                            .from(Warranties::Table, Warranties::ProductId)
+                            .to(Products::Table, Products::Id)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -167,7 +145,7 @@ impl MigrationTrait for Migration {
                     .col(uuid(Images::Id).primary_key())
                     .col(string(Images::ImageURL))
                     .col(uuid_null(Images::PartId))
-                    .col(uuid_null(Images::EquipmentId))
+                    .col(uuid_null(Images::ProductId))
                     .col(timestamp(Images::CapturedAt))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
@@ -182,9 +160,9 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_images_equipment")
-                            .from(Images::Table, Images::EquipmentId)
-                            .to(Equipments::Table, Equipments::Id)
+                            .name("fk_images_product")
+                            .from(Images::Table, Images::ProductId)
+                            .to(Products::Table, Products::Id)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -199,11 +177,10 @@ impl MigrationTrait for Migration {
         manager.drop_table(Table::drop().table(Images::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Warranties::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Parts::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(Equipments::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(Products::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(PartTypes::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(PartStatus::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(EquipmentStatus::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(EquipmentModels::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(ProductModels::Table).to_owned()).await?;
 
         Ok(())
     }
@@ -223,7 +200,7 @@ enum Parts
 {
     Table,
     Id,
-    EquipmentId,
+    ProductId,
     PartStatusId,
     CustomerId,
     PartName,
@@ -233,19 +210,19 @@ enum Parts
 }
 
 #[derive(DeriveIden)]
-enum Equipments
+enum Products
 {
     Table,
     Id,
-    EquipmentStatusId,
+    ProductStatusId,
     ModelId,
     CustomerId,
-    EquipmentName,
+    ProductName,
     SerialNumber,   
 }
 
 #[derive(DeriveIden)]
-enum EquipmentModels
+enum ProductModels
 {
     Table,
     Id,
@@ -255,14 +232,6 @@ enum EquipmentModels
 
 #[derive(DeriveIden)]
 enum PartStatus
-{
-    Table,
-    Id,
-    Name    
-}
-
-#[derive(DeriveIden)]
-enum EquipmentStatus
 {
     Table,
     Id,
@@ -283,7 +252,7 @@ enum Warranties
     Table,
     Id,
     CustomerId,
-    EquipmentId,
+    ProductId,
     StartDate,
     EndDate,
     WarrantyStatus
@@ -296,7 +265,7 @@ enum Images
     Id,
     ImageURL,
     PartId,
-    EquipmentId,
+    ProductId,
     CapturedAt
 }
 

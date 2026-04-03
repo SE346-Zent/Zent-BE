@@ -49,6 +49,6 @@ docs/build/
 # Workspace scratchpad for feature specs
 specs/
 
-TODO.txt
+TODO*
 tasks/
 nginx/

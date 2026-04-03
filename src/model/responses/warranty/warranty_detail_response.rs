@@ -9,7 +9,7 @@ use crate::define_api_response;
 pub struct WarrantyDetailResponseData {
     pub id: Uuid,
     pub customer_id: Uuid,
-    pub equipment_id: Uuid,
+    pub product_id: Uuid,
     pub start_date: String,
     pub end_date: Option<String>,
     pub warranty_status: String,

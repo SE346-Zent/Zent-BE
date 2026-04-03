@@ -47,7 +47,8 @@ impl MigrationTrait for Migration {
                     .col(uuid(WorkOrders::CustomerId))
                     .col(uuid(WorkOrders::TechnicianId))
                     .col(uuid(WorkOrders::CompleteFormId))
-                    .col(uuid(WorkOrders::RejectReason))
+                    .col(string(WorkOrders::RejectReason))
+                    .col(string(WorkOrders::WorkOrderSymptomId))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_status")
@@ -93,6 +94,14 @@ impl MigrationTrait for Migration {
                             .name("fk_work_order_reject_form")
                             .from(WorkOrders::Table, WorkOrders::RejectReason)
                             .to(WorkOrderClosingForms::Table, WorkOrderClosingForms::Id)
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_work_order_symptom")
+                            .from(WorkOrders::Table, WorkOrders::WorkOrderSymptomId)
+                            .to(WorkOrderSymptoms::Table, WorkOrderSymptoms::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
                     )
@@ -159,7 +168,6 @@ enum WorkOrderClosingForms {
     Diagnosis,
 }
 
-// TODO: reject form ID
 
 #[derive(DeriveIden)]
 enum WorkOrders
@@ -172,6 +180,7 @@ enum WorkOrders
     TechnicianId,
     AdminId,
     WorkOrderStatusId,
+    WorkOrderSymptomId,
     FirstName,
     LastName,
     Email,
@@ -204,10 +213,4 @@ enum WorkOrderStatus {
 enum Users {
     Table,
     Id,
-    FullName,
-    Email,
-    PasswordHash,
-    PhoneNumber,
-    AccountStatus,
-    RoleID,
 }
