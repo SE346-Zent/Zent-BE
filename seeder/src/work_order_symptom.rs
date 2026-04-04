@@ -2,7 +2,7 @@ use anyhow::Result;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::collections::HashMap;
 use zent_be::entities::work_order_symptoms;
-
+use chrono::Utc;
 
 pub const WORK_ORDER_SYMPTOMS: &[&str] = &[
     "Active Noise Cancelling(ANC)",
@@ -59,7 +59,7 @@ pub const WORK_ORDER_SYMPTOMS: &[&str] = &[
 pub async fn seed_work_order_symptoms(db: &DatabaseConnection) -> Result<HashMap<String, i32>> 
 {
     let mut map: HashMap<String, i32> = HashMap::new();
-
+    let now = Utc::now();
     for &name in WORK_ORDER_SYMPTOMS
     {
         let existing = work_order_symptoms::Entity::find()
@@ -76,6 +76,8 @@ pub async fn seed_work_order_symptoms(db: &DatabaseConnection) -> Result<HashMap
                 let inserted = work_order_symptoms::ActiveModel 
                 {
                     symptom_names: Set(name.to_string()),
+                    created_at: Set(now),
+                    updated_at: Set(now),
                     ..Default::default()
                 }
                 .insert(db)

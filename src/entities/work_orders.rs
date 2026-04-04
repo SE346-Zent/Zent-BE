@@ -65,14 +65,7 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     Users1,
-    #[sea_orm(
-        belongs_to = "super::work_order_closing_forms::Entity",
-        from = "Column::RejectReason",
-        to = "super::work_order_closing_forms::Column::Id",
-        on_update = "Cascade",
-        on_delete = "Restrict"
-    )]
-    WorkOrderClosingForms2,
+
     #[sea_orm(
         belongs_to = "super::work_order_closing_forms::Entity",
         from = "Column::CompleteFormId",

@@ -46,6 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Migrator::up(&db, None).await.expect("Failed to run db migrations");
     tracing::info!("DB migrations applied successfully");
 
+
     // Connect to RabbitMQ using configured URI mapping efficiently
     let rabbitmq = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url)
         .await

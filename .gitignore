@@ -52,3 +52,4 @@ specs/
 TODO*
 tasks/
 nginx/
+db_seed.rs

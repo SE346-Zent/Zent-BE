@@ -24,7 +24,18 @@ pub async fn seed_random_work_orders(
     db: &DatabaseConnection,
     count: usize,
     seed: u64,
+    user_ids: &[Uuid],
+    product_ids: &[Uuid],
+    closing_form_ids: &[Uuid],
+    work_order_symptoms: &std::collections::HashMap<String, i32>,
 ) -> Result<()> {
+    if user_ids.is_empty() || product_ids.is_empty() {
+        // Can't seed without users and products
+        return Ok(());
+    }
+
+    let symptom_ids = work_order_symptoms.values().cloned().collect::<Vec<i32>>();
+
     let valid_statuses = work_order_status::Entity::find().all(db).await?;
     if valid_statuses.is_empty() {
         anyhow::bail!("Cannot seed work orders: no rows found in work_order_status.");
@@ -63,13 +74,13 @@ pub async fn seed_random_work_orders(
                 created_at: Set(now),
                 updated_at: Set(now),
                 deleted_at: Set(None),
-                admin_id: Set(Uuid::new_v4()),
-                customer_id: Set(Uuid::new_v4()),
-                technician_id: Set(Uuid::new_v4()),
-                complete_form_id: Set(Uuid::new_v4()),
+                admin_id: Set(*user_ids.choose(&mut rng).unwrap()),
+                customer_id: Set(*user_ids.choose(&mut rng).unwrap()),
+                technician_id: Set(*user_ids.choose(&mut rng).unwrap()),
+                complete_form_id: if closing_form_ids.is_empty() { Set(Uuid::new_v4()) /* Will error if constraint strict, so maybe pick optionally if allowed */ } else { Set(*closing_form_ids.choose(&mut rng).unwrap()) },
                 reject_reason: Set("".to_string()),
-                work_order_symptom_id: Set(1),
-                product_id: Set(Uuid::new_v4()),
+                work_order_symptom_id: Set(*symptom_ids.choose(&mut rng).unwrap_or(&1)),
+                product_id: Set(*product_ids.choose(&mut rng).unwrap()),
             }
         })
         .collect();

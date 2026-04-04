@@ -28,15 +28,16 @@ pub struct PartsFile {
 
 fn load_parts_data() -> Result<PartsFile> {
     // Correct relative path when running from workspace root
-    let content = std::fs::read_to_string("seeder/resources/parts.json")?;
+    let content = std::fs::read_to_string("resources/parts.json")?;
     let data: PartsFile = serde_json::from_str(&content)?;
     Ok(data)
 }
 
-pub async fn seed_part_types(db: &DatabaseConnection) -> Result<()> {
+pub async fn seed_part_types(db: &DatabaseConnection, part_statuses: &HashMap<String, i32>) -> Result<()> {
     let data = load_parts_data()?;
     let mut records = Vec::new();
     let now = Utc::now();
+    let default_status = *part_statuses.get("Production").unwrap_or(&1);
 
     println!("  Loaded {} part types from parts.json.", data.part_types.len());
 
@@ -45,7 +46,7 @@ pub async fn seed_part_types(db: &DatabaseConnection) -> Result<()> {
             part_number: Set(pt.part_number),
             commodity_type: Set(pt.commodity_type),
             description: Set(pt.description),
-            part_status_id: Set(1),
+            part_status_id: Set(default_status),
             created_at: Set(now),
             updated_at: Set(now),
             deleted_at: Set(None),
@@ -83,10 +84,11 @@ pub async fn seed_part_types(db: &DatabaseConnection) -> Result<()> {
     Ok(())
 }
 
-pub async fn seed_part_installations(db: &DatabaseConnection) -> Result<()> {
+pub async fn seed_part_by_model(db: &DatabaseConnection, part_statuses: &HashMap<String, i32>) -> Result<()> {
     let data = load_parts_data()?;
     println!("  Loaded installation mappings for {} models.", data.installations.len());
     let now = Utc::now();
+    let default_status = *part_statuses.get("Production").unwrap_or(&1);
 
     // Get all products with their model info
     // SeaORM finding all products
@@ -106,7 +108,7 @@ pub async fn seed_part_installations(db: &DatabaseConnection) -> Result<()> {
                         product_id: Set(p.id),
                         part_number: Set(pt.part_number.clone()),
                         quantity: Set(pt.quantity),
-                        part_status_id: Set(1),
+                        part_status_id: Set(default_status),
                         created_at: Set(now),
                         updated_at: Set(now),
                         deleted_at: Set(None),

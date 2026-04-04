@@ -6,7 +6,7 @@ use seeder::{
     UserSeedConfig, seed_account_statuses, seed_product_models, 
     seed_random_products, seed_random_warranties, seed_random_work_orders, seed_roles,
     seed_users, seed_work_order_closing_forms, seed_work_order_statuses,
-    seed_part_types, seed_part_installations,
+    seed_part_types, seed_part_by_model, seed_part_statuses, seed_work_order_symptoms
 };
 use serde_json::to_string_pretty;
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ use std::path::PathBuf;
 #[command(version, about = "Seed the zent_be database with fake data", long_about = None)]
 struct Args {
     /// Database connection URL
-    #[arg(short, long)]
+    #[arg(short, long, env="database_url")]
     db_url: Option<String>,
 
     /// Number of users to generate
@@ -62,13 +62,18 @@ async fn main() -> Result<()> {
         } else if args.db_url.is_none() || args.num_users.is_none() {
             prompt_missing(&args)?
         } else {
+            let mut forms = args.closing_forms.unwrap_or(0);
+            let wos = args.work_orders.unwrap_or(0);
+            if wos > 0 && forms == 0 {
+                forms = wos; // Auto-generate forms for the work orders to satisfy `complete_form_id` FK
+            }
             (
                 args.db_url.clone().unwrap(),
                 args.num_users.unwrap(),
-                args.work_orders.unwrap_or(0),
+                wos,
                 args.products.unwrap_or(0),
                 args.warranties.unwrap_or(0),
-                args.closing_forms.unwrap_or(0),
+                forms,
                 args.rng_seed,
             )
         };
@@ -88,8 +93,14 @@ async fn main() -> Result<()> {
     println!("\n--- Seeding Work Order Statuses ---");
     let _ = seed_work_order_statuses(&db).await?;
 
+    println!("\n--- Seeding Work Order Symptoms ---");
+    let wo_symptoms = seed_work_order_symptoms(&db).await?;
+
     println!("\n--- Seeding Product Models ---");
     let prod_models = seed_product_models(&db).await?;
+    
+    println!("\n--- Seeding Part Statuses ---");
+    let part_statuses = seed_part_statuses(&db).await?;
 
     // -----------------------------------------------------------------------
     // Step 2: seed users FIRST (products & warranties need customer_id)
@@ -122,15 +133,7 @@ async fn main() -> Result<()> {
     }
 
     // -----------------------------------------------------------------------
-    // Step 4: seed work orders
-    // -----------------------------------------------------------------------
-    if num_work_orders > 0 {
-        println!("\n--- Seeding Work Orders ({}) ---", num_work_orders);
-        seed_random_work_orders(&db, num_work_orders, rng_seed).await?;
-    }
-
-    // -----------------------------------------------------------------------
-    // Step 5: seed products (needs users, product_status, product_models)
+    // Step 4: seed products (needs users, product_status, product_models)
     // -----------------------------------------------------------------------
     let mut product_ids = Vec::new();
     if num_products > 0 {
@@ -145,10 +148,26 @@ async fn main() -> Result<()> {
         .await?;
         
         println!("\n--- Seeding Part Types ---");
-        seed_part_types(&db).await?;
+        seed_part_types(&db, &part_statuses).await?;
         
-        println!("\n--- Seeding Part Installations ---");
-        seed_part_installations(&db).await?;
+        println!("\n--- Seeding Parts By Model ---");
+        seed_part_by_model(&db, &part_statuses).await?;
+    }
+
+    // -----------------------------------------------------------------------
+    // Step 5: seed work orders
+    // -----------------------------------------------------------------------
+    if num_work_orders > 0 {
+        println!("\n--- Seeding Work Orders ({}) ---", num_work_orders);
+        seed_random_work_orders(
+            &db, 
+            num_work_orders, 
+            rng_seed, 
+            &user_ids, 
+            &product_ids, 
+            &_closing_form_ids, 
+            &wo_symptoms
+        ).await?;
     }
 
     // -----------------------------------------------------------------------

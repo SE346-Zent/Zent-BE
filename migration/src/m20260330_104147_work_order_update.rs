@@ -90,14 +90,7 @@ impl MigrationTrait for Migration {
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
                     )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_work_order_closing_form")
-                            .from(WorkOrders::Table, WorkOrders::RejectReason)
-                            .to(WorkOrderClosingForms::Table, WorkOrderClosingForms::Id)
-                            .on_update(ForeignKeyAction::Cascade)
-                            .on_delete(ForeignKeyAction::Restrict)
-                    )
+
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_symptom")
