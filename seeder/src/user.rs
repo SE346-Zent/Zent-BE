@@ -101,7 +101,7 @@ pub async fn seed_users(
                 format!("{}+{}@{}", local, i, domain)
             };
             let phone_number: String = PhoneNumber().fake_with_rng(&mut rng);
-            let password: String = Password(12..16).fake_with_rng(&mut rng);
+            let password: String = "hungdepzai123".to_string();
 
             let (role_name, role_id) = role_entries.choose(&mut rng).unwrap();
             let (status_name, status_id) = status_entries.choose(&mut rng).unwrap();
@@ -114,8 +114,8 @@ pub async fn seed_users(
                 password,
                 role_id: *role_id,
                 role_name: role_name.clone(),
-                account_status_id: *status_id,
-                account_status_name: status_name.clone(),
+                account_status_id: 1,
+                account_status_name: "Active".to_string(),
             }
         })
         .collect();
