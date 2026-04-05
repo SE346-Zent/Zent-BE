@@ -14,6 +14,7 @@ impl MigrationTrait for Migration {
                     .col(pk_auto(ProductModels::Id))
                     .col(string(ProductModels::ModelName))
                     .col(string(ProductModels::ModelCode))
+                    .col(string_null(ProductModels::Description))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -59,8 +60,7 @@ impl MigrationTrait for Migration {
                     .col(uuid(Products::Id).primary_key())
                     .col(integer(Products::ModelId))
                     .col(uuid(Products::CustomerId))
-                    .col(string(Products::ProductName))
-                    .col(string_null(Products::SerialNumber))
+                    .col(string(Products::SerialNumber))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -166,7 +166,6 @@ enum Products
     Id,
     ModelId,
     CustomerId,
-    ProductName,
     SerialNumber,   
 }
 
@@ -176,7 +175,8 @@ enum ProductModels
     Table,
     Id,
     ModelName,
-    ModelCode
+    ModelCode,
+    Description
 }
 
 #[derive(DeriveIden)]

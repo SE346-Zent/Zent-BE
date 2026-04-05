@@ -41,25 +41,19 @@ pub async fn seed_random_products(
 
     let records: Vec<products::ActiveModel> = (0..count)
         .map(|i| {
-            let (model_name, model_id) = model_entries.choose(&mut rng).unwrap();
+            let (_, model_id) = model_entries.choose(&mut rng).unwrap();
             let &customer_id = customer_ids.choose(&mut rng).unwrap();
 
             let id = Uuid::new_v4();
             inserted_ids.push(id);
 
-            let product_name = format!("{} #{}", model_name, i + 1);
-            let serial_number = if i % 3 == 0 {
-                None
-            } else {
-                let noun: String = BsNoun().fake_with_rng(&mut rng);
-                Some(format!("SN-{}-{:05}", noun.to_uppercase().replace(' ', ""), i))
-            };
+            let noun: String = BsNoun().fake_with_rng(&mut rng);
+            let serial_number = format!("SN-{}-{:05}", noun.to_uppercase().replace(' ', ""), i);
 
             products::ActiveModel {
                 id: Set(id),
                 model_id: Set(**model_id),
                 customer_id: Set(customer_id),
-                product_name: Set(product_name),
                 serial_number: Set(serial_number),
                 created_at: Set(now),
                 updated_at: Set(now),

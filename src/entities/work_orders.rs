@@ -65,7 +65,6 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     Users1,
-
     #[sea_orm(
         belongs_to = "super::work_order_closing_forms::Entity",
         from = "Column::CompleteFormId",
@@ -73,7 +72,7 @@ pub enum Relation {
         on_update = "Cascade",
         on_delete = "Restrict"
     )]
-    WorkOrderClosingForms1,
+    WorkOrderClosingForms,
     #[sea_orm(
         belongs_to = "super::work_order_status::Entity",
         from = "Column::WorkOrderStatusId",
@@ -95,6 +94,12 @@ pub enum Relation {
 impl Related<super::products::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Products.def()
+    }
+}
+
+impl Related<super::work_order_closing_forms::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderClosingForms.def()
     }
 }
 

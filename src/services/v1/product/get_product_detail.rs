@@ -24,7 +24,6 @@ pub async fn get_product_detail_service(
         id: product_model.id,
         model_id: product_model.model_id,
         customer_id: product_model.customer_id,
-        product_name: product_model.product_name,
         serial_number: product_model.serial_number,
         created_at: product_model.created_at.to_string(),
         updated_at: product_model.updated_at.to_string(),

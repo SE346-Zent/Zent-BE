@@ -4,6 +4,5 @@ pub mod account;
 pub mod work_order;
 pub mod common;
 pub mod product;
-pub mod part;
 pub mod warranty;
 pub mod image;

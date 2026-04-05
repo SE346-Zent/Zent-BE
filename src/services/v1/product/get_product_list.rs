@@ -43,7 +43,6 @@ fn map_product_list_item(model: products::Model) -> ProductListItemResponseData 
         id: model.id,
         model_id: model.model_id,
         customer_id: model.customer_id,
-        product_name: model.product_name,
         serial_number: model.serial_number,
         created_at: model.created_at.to_string(),
         updated_at: model.updated_at.to_string(),
