@@ -12,7 +12,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                 .table(PartsByModel::Table)
                 .if_not_exists()
-                .col(uuid(PartsByModel::Id).primary_key())
+                .col(string(PartsByModel::MfgPart).primary_key())
                 .col(uuid(PartsByModel::ProductId))
                 .col(string(PartsByModel::PartNumber))
                 .col(integer(PartsByModel::Quantity))
@@ -77,7 +77,7 @@ enum PartTypes {
 enum PartsByModel 
 {
     Table,
-    Id,
+    MfgPart,
     PartNumber,
     ProductId,
     PartStatusId,

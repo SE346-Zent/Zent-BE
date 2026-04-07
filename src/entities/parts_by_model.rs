@@ -6,7 +6,7 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "parts_by_model")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: Uuid,
+    pub mfg_part: String,
     pub product_id: Uuid,
     pub part_number: String,
     pub quantity: i32,

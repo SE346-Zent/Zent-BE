@@ -104,7 +104,7 @@ pub async fn seed_part_by_model(db: &DatabaseConnection, part_statuses: &HashMap
             if let Some(parts) = data.installations.get(model_name) {
                 for pt in parts {
                     installations.push(parts_by_model::ActiveModel {
-                        id: Set(Uuid::new_v4()),
+                        mfg_part: Set(format!("{}-{}-{}", p.id, pt.part_number, rand::random::<u32>())),
                         product_id: Set(p.id),
                         part_number: Set(pt.part_number.clone()),
                         quantity: Set(pt.quantity),
