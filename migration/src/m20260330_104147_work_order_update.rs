@@ -30,24 +30,25 @@ impl MigrationTrait for Migration {
                     .col(uuid(WorkOrders::Id).primary_key())
                     .col(string(WorkOrders::FirstName))
                     .col(string(WorkOrders::LastName))
-                    .col(string(WorkOrders::Email))
-                    .col(string(WorkOrders::PhoneNumber))
+                    .col(string_null(WorkOrders::Email))
+                    .col(string_null(WorkOrders::PhoneNumber))
                     .col(integer(WorkOrders::WorkOrderStatusId))
                     .col(string(WorkOrders::Country))
                     .col(string(WorkOrders::State))
                     .col(string(WorkOrders::City))
                     .col(string(WorkOrders::Address))
-                    .col(string(WorkOrders::Building))
+                    .col(string_null(WorkOrders::Building))
                     .col(timestamp(WorkOrders::Appointment))
-                    .col(string(WorkOrders::ReferenceTicket))
+                    .col(uuid_null(WorkOrders::ReferenceTicket))
+                    .col(string(WorkOrders::Description))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
                     .col(uuid(WorkOrders::AdminId))
                     .col(uuid(WorkOrders::CustomerId))
-                    .col(uuid(WorkOrders::TechnicianId))
-                    .col(uuid(WorkOrders::CompleteFormId))
-                    .col(string(WorkOrders::RejectReason))
+                    .col(uuid_null(WorkOrders::TechnicianId))
+                    .col(uuid_null(WorkOrders::CompleteFormId))
+                    .col(string_null(WorkOrders::RejectReason))
                     .col(integer(WorkOrders::WorkOrderSymptomId))
                     .col(uuid(WorkOrders::ProductId))
                     .foreign_key(
@@ -207,6 +208,7 @@ enum WorkOrders
     Building,
     Appointment,
     ReferenceTicket,
+    Description,
 }
 
 #[derive(DeriveIden)]

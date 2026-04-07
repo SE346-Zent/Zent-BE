@@ -44,7 +44,7 @@ impl MigrationTrait for Migration {
                     .col(string(PartTypes::PartNumber).primary_key())
                     .col(string(PartTypes::CommodityType))
                     .col(string(PartTypes::Description))
-                    .col(integer(PartTypes::PartStatusId))
+                    .col(integer(PartTypes::PartMfgStatusId))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -193,7 +193,7 @@ enum PartTypes {
     PartNumber,
     CommodityType,
     Description,
-    PartStatusId
+    PartMfgStatusId
 }
 
 #[derive(DeriveIden)]
