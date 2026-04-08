@@ -12,12 +12,47 @@ impl MigrationTrait for Migration {
                     .table(WorkOrderClosingForms::Table)
                     .if_not_exists()
                     .col(uuid(WorkOrderClosingForms::Id).primary_key())
-                    .col(string(WorkOrderClosingForms::WorkOrderCounting))
+                    .col(string(WorkOrderClosingForms::WorkOrderNumber))
                     .col(string(WorkOrderClosingForms::MTM))
+                    .col(uuid(WorkOrderClosingForms::WorkOrderId))
                     .col(string(WorkOrderClosingForms::SerialNumber))
                     .col(string(WorkOrderClosingForms::Diagnosis))
+                    .col(string(WorkOrderClosingForms::SignatureUrl))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_table(
+                Table::create()
+                    .table(RejectionForm::Table)
+                    .if_not_exists()
+                    .col(uuid(RejectionForm::RejectFormId).primary_key())
+                    .col(string(RejectionForm::RejectReason))
+                    .col(uuid(RejectionForm::ApproverId))
+                    .col(boolean(RejectionForm::Approved))
+                    .col(string_null(RejectionForm::ReviewReason))
+                    .col(uuid(RejectionForm::WorkOrderId))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(UpdatedAt))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_rejection_form_work_order")
+                            .from(RejectionForm::Table, RejectionForm::WorkOrderId)
+                            .to(WorkOrders::Table, WorkOrders::Id)
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_rejection_form_approver")
+                            .from(RejectionForm::Table, RejectionForm::ApproverId)
+                            .to(Users::Table, Users::Id)
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
+                    )
                     .to_owned(),
             )
             .await?;
@@ -44,9 +79,9 @@ impl MigrationTrait for Migration {
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
-                    .col(uuid(WorkOrders::AdminId))
+                    .col(uuid(WorkOrders::AssignerAdminId))
                     .col(uuid(WorkOrders::CustomerId))
-                    .col(uuid_null(WorkOrders::TechnicianId))
+                    .col(uuid_null(WorkOrders::AssignedTechnicianId))
                     .col(uuid_null(WorkOrders::CompleteFormId))
                     .col(string_null(WorkOrders::RejectReason))
                     .col(integer(WorkOrders::WorkOrderSymptomId))
@@ -62,7 +97,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_admin")
-                            .from(WorkOrders::Table, WorkOrders::AdminId)
+                            .from(WorkOrders::Table, WorkOrders::AssignerAdminId)
                             .to(Users::Table, Users::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
@@ -78,7 +113,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_technician")
-                            .from(WorkOrders::Table, WorkOrders::TechnicianId)
+                            .from(WorkOrders::Table, WorkOrders::AssignedTechnicianId)
                             .to(Users::Table, Users::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
@@ -171,10 +206,12 @@ struct DeletedAt;
 enum WorkOrderClosingForms {
     Table,
     Id,
-    WorkOrderCounting,
+    WorkOrderNumber,
+    WorkOrderId,
     MTM,
     SerialNumber,
     Diagnosis,
+    SignatureUrl
 }
 
 #[derive(DeriveIden)]
@@ -192,8 +229,8 @@ enum WorkOrders
     CompleteFormId,
     RejectReason,
     CustomerId,
-    TechnicianId,
-    AdminId,
+    AssignedTechnicianId,
+    AssignerAdminId,
     WorkOrderStatusId,
     WorkOrderSymptomId,
     ProductId,
@@ -209,6 +246,18 @@ enum WorkOrders
     Appointment,
     ReferenceTicket,
     Description,
+}
+
+#[derive(DeriveIden)]
+enum RejectionForm
+{
+    Table,
+    RejectFormId,
+    RejectReason,
+    ApproverId,
+    Approved,
+    ReviewReason,
+    WorkOrderId,
 }
 
 #[derive(DeriveIden)]
