@@ -11,9 +11,8 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(ProductModels::Table)
                     .if_not_exists()
-                    .col(pk_auto(ProductModels::Id))
+                    .col(string(ProductModels::ModelCode).primary_key())
                     .col(string(ProductModels::ModelName))
-                    .col(string(ProductModels::ModelCode))
                     .col(string_null(ProductModels::Description))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
@@ -58,7 +57,7 @@ impl MigrationTrait for Migration {
                     .table(Products::Table)
                     .if_not_exists()
                     .col(uuid(Products::Id).primary_key())
-                    .col(integer(Products::ModelId))
+                    .col(string(Products::ModelId))
                     .col(uuid(Products::CustomerId))
                     .col(string(Products::SerialNumber))
                     .col(timestamp(CreatedAt))
@@ -68,7 +67,7 @@ impl MigrationTrait for Migration {
                         ForeignKey::create()
                             .name("fk_products_model")
                             .from(Products::Table, Products::ModelId)
-                            .to(ProductModels::Table, ProductModels::Id)
+                            .to(ProductModels::Table, ProductModels::ModelCode)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -173,7 +172,6 @@ enum Products
 enum ProductModels
 {
     Table,
-    Id,
     ModelName,
     ModelCode,
     Description

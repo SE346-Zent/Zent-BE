@@ -75,29 +75,6 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // PartsByProduct
-        manager
-            .create_table(
-                Table::create()
-                    .table(PartsByProduct::Table)
-                    .if_not_exists()
-                    .col(uuid(PartsByProduct::Id).primary_key())
-                    .col(uuid(PartsByProduct::ProductId))
-                    .col(timestamp(CreatedAt))
-                    .col(timestamp(UpdatedAt))
-                    .col(timestamp_null(DeletedAt))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_parts_by_product_products")
-                            .from(PartsByProduct::Table, PartsByProduct::ProductId)
-                            .to(Products::Table, Products::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
         // Update PartsByModel to add missing references
         manager
             .alter_table(
@@ -121,7 +98,7 @@ impl MigrationTrait for Migration {
                             .from_tbl(PartsByModel::Table)
                             .from_col(PartsByModel::ModelId)
                             .to_tbl(ProductModels::Table)
-                            .to_col(ProductModels::Id)
+                            .to_col(ProductModels::ModelCode)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -145,7 +122,6 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        manager.drop_table(Table::drop().table(PartsByProduct::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(PartsByMachine::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Parts::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(PartCatalog::Table).to_owned()).await?;
@@ -185,13 +161,6 @@ enum PartsByMachine {
 }
 
 #[derive(DeriveIden)]
-enum PartsByProduct {
-    Table,
-    Id,
-    ProductId,
-}
-
-#[derive(DeriveIden)]
 enum PartTypes {
     Table,
     PartNumber,
@@ -213,5 +182,5 @@ enum PartsByModel {
 #[derive(DeriveIden)]
 enum ProductModels {
     Table,
-    Id,
+    ModelCode,
 }

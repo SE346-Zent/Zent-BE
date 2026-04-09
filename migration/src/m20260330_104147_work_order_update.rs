@@ -14,12 +14,28 @@ impl MigrationTrait for Migration {
                     .col(uuid(WorkOrderClosingForms::Id).primary_key())
                     .col(string(WorkOrderClosingForms::WorkOrderNumber))
                     .col(string(WorkOrderClosingForms::MTM))
-                    .col(uuid(WorkOrderClosingForms::WorkOrderId))
                     .col(string(WorkOrderClosingForms::SerialNumber))
+                    .col(uuid(WorkOrderClosingForms::WorkOrderId))
                     .col(string(WorkOrderClosingForms::Diagnosis))
                     .col(string(WorkOrderClosingForms::SignatureUrl))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_work_order_closing_forms_product_models")
+                            .from(WorkOrderClosingForms::Table, WorkOrderClosingForms::MTM)
+                            .to(ProductModels::Table, ProductModels::ModelCode)
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_work_order_closing_forms_work_orders")
+                            .from(WorkOrderClosingForms::Table, WorkOrderClosingForms::WorkOrderId)
+                            .to(WorkOrders::Table, WorkOrders::Id)
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
+                    )
                     .to_owned(),
             )
             .await?;
@@ -279,4 +295,10 @@ enum WorkOrderStatus {
 enum Users {
     Table,
     Id,
+}
+
+#[derive(DeriveIden)]
+enum ProductModels {
+    Table,
+    ModelCode,
 }
