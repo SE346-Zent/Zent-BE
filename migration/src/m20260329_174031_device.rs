@@ -59,6 +59,7 @@ impl MigrationTrait for Migration {
                     .col(uuid(Products::Id).primary_key())
                     .col(string(Products::ModelId))
                     .col(uuid(Products::CustomerId))
+                    .col(string(Products::ProductName))
                     .col(string(Products::SerialNumber))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
@@ -94,6 +95,14 @@ impl MigrationTrait for Migration {
                             .name("fk_warranty_product")
                             .from(Warranties::Table, Warranties::ProductId)
                             .to(Products::Table, Products::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_warranty_customer")
+                            .from(Warranties::Table, Warranties::CustomerId)
+                            .to(Users::Table, Users::Id)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -166,6 +175,7 @@ enum Products
     ModelId,
     CustomerId,
     SerialNumber,   
+    ProductName
 }
 
 #[derive(DeriveIden)]
@@ -217,5 +227,10 @@ enum Images
     CapturedAt
 }
 
-
+#[derive(DeriveIden)]
+enum Users
+{
+    Table,
+    Id
+}
 

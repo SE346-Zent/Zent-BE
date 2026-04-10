@@ -37,10 +37,12 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(Parts::Id).primary_key())
                     .col(uuid(Parts::CatalogId))
+                    .col(uuid(Parts::ProductId))
                     .col(string(Parts::SerialNumber))
                     .col(uuid(Parts::PartStatusId))
                     .col(timestamp(Parts::MFD))
-                    .col(timestamp_null(Parts::AssemblyDate))
+                    .col(timestamp(Parts::InstalledDate))
+                    .col(timestamp_null(Parts::RemovedDate))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -60,52 +62,60 @@ impl MigrationTrait for Migration {
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_parts_product")
+                            .from(Parts::Table, Parts::ProductId)
+                            .to(Products::Table, Products::Id)
+                            .on_delete(ForeignKeyAction::Restrict)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
 
         // Update PartsByModel to add missing references
+        // SQLite only supports one alter operation per statement
         manager
             .alter_table(
                 Table::alter()
                     .table(PartsByModel::Table)
                     .add_column(uuid_null(PartsByModel::CatalogId))
-                    .add_column(integer_null(PartsByModel::ModelId))
-                    .add_foreign_key(
-                        TableForeignKey::new()
-                            .name("fk_parts_by_model_part_catalog")
-                            .from_tbl(PartsByModel::Table)
-                            .from_col(PartsByModel::CatalogId)
-                            .to_tbl(PartCatalog::Table)
-                            .to_col(PartCatalog::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade),
-                    )
-                    .add_foreign_key(
-                        TableForeignKey::new()
-                            .name("fk_parts_by_model_product_models")
-                            .from_tbl(PartsByModel::Table)
-                            .from_col(PartsByModel::ModelId)
-                            .to_tbl(ProductModels::Table)
-                            .to_col(ProductModels::ModelCode)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade),
-                    )
                     .to_owned(),
             )
             .await?;
+
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(PartsByModel::Table)
+                    .add_column(integer_null(PartsByModel::ModelId))
+                    .to_owned(),
+            )
+            .await?;
+
+        // Note: SQLite does not support adding foreign key constraints to existing tables.
+        // FK relationships for CatalogId -> PartCatalog and ModelId -> ProductModels
+        // are enforced at the application/ORM level.
 
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Drop added columns (no FK to drop since SQLite doesn't support ALTER TABLE ADD FK)
         manager
             .alter_table(
                 Table::alter()
                     .table(PartsByModel::Table)
-                    .drop_foreign_key(Alias::new("fk_parts_by_model_product_models"))
-                    .drop_foreign_key(Alias::new("fk_parts_by_model_part_catalog"))
                     .drop_column(PartsByModel::ModelId)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(PartsByModel::Table)
                     .drop_column(PartsByModel::CatalogId)
                     .to_owned(),
             )
@@ -139,10 +149,12 @@ enum Parts {
     Table,
     Id,
     CatalogId,
+    ProductId,
     SerialNumber,
     PartStatusId,
     MFD,
-    AssemblyDate
+    InstalledDate,
+    RemovedDate
 }
 
 #[derive(DeriveIden)]

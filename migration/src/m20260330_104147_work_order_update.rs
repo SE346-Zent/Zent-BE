@@ -99,7 +99,7 @@ impl MigrationTrait for Migration {
                     .col(uuid(WorkOrders::CustomerId))
                     .col(uuid_null(WorkOrders::AssignedTechnicianId))
                     .col(uuid_null(WorkOrders::CompleteFormId))
-                    .col(string_null(WorkOrders::RejectReason))
+                    .col(uuid_null(WorkOrders::RejectFormId))
                     .col(integer(WorkOrders::WorkOrderSymptomId))
                     .col(uuid(WorkOrders::ProductId))
                     .foreign_key(
@@ -156,6 +156,14 @@ impl MigrationTrait for Migration {
                             .name("fk_work_order_product")
                             .from(WorkOrders::Table, WorkOrders::ProductId)
                             .to(Products::Table, Products::Id)
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_work_order_reject_form")
+                            .from(WorkOrders::Table, WorkOrders::RejectFormId)
+                            .to(RejectionForm::Table, RejectionForm::RejectFormId)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
                     )
@@ -243,7 +251,7 @@ enum WorkOrders
     Table,
     Id,
     CompleteFormId,
-    RejectReason,
+    RejectFormId,
     CustomerId,
     AssignedTechnicianId,
     AssignerAdminId,
