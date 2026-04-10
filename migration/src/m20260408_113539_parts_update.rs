@@ -37,6 +37,10 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(Parts::Id).primary_key())
                     .col(uuid(Parts::CatalogId))
+                    .col(string(Parts::SerialNumber))
+                    .col(uuid(Parts::PartStatusId))
+                    .col(timestamp(Parts::MFD))
+                    .col(timestamp_null(Parts::AssemblyDate))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -48,27 +52,12 @@ impl MigrationTrait for Migration {
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
-                    .to_owned(),
-            )
-            .await?;
-
-        // PartsByMachine
-        manager
-            .create_table(
-                Table::create()
-                    .table(PartsByMachine::Table)
-                    .if_not_exists()
-                    .col(uuid(PartsByMachine::Id).primary_key())
-                    .col(uuid(PartsByMachine::PartId))
-                    .col(timestamp(CreatedAt))
-                    .col(timestamp(UpdatedAt))
-                    .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_parts_by_machine_parts")
-                            .from(PartsByMachine::Table, PartsByMachine::PartId)
-                            .to(Parts::Table, Parts::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
+                            .name("fk_parts_part_status")
+                            .from(Parts::Table, Parts::PartStatusId)
+                            .to(PartStatus::Table, PartStatus::Id)
+                            .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
@@ -122,7 +111,6 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        manager.drop_table(Table::drop().table(PartsByMachine::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Parts::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(PartCatalog::Table).to_owned()).await?;
 
@@ -151,13 +139,10 @@ enum Parts {
     Table,
     Id,
     CatalogId,
-}
-
-#[derive(DeriveIden)]
-enum PartsByMachine {
-    Table,
-    Id,
-    PartId,
+    SerialNumber,
+    PartStatusId,
+    MFD,
+    AssemblyDate
 }
 
 #[derive(DeriveIden)]
@@ -177,6 +162,12 @@ enum PartsByModel {
     Table,
     CatalogId,
     ModelId,
+}
+
+#[derive(DeriveIden)]
+enum PartStatus {
+    Table,
+    Id,
 }
 
 #[derive(DeriveIden)]
