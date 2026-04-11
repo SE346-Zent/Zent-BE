@@ -47,6 +47,14 @@ impl MigrationTrait for Migration {
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_PartTypes_PartStatus")
+                            .from(PartTypes::Table, PartTypes::PartMfgStatusId)
+                            .to(PartStatus::Table, PartStatus::Id)
+                            .on_delete(ForeignKeyAction::Restrict)
+                            .on_update(ForeignKeyAction::Cascade)
+                    )
                     .to_owned(),
             )
             .await?;
@@ -85,7 +93,7 @@ impl MigrationTrait for Migration {
                     .col(uuid(Warranties::CustomerId))
                     .col(uuid(Warranties::ProductId))
                     .col(timestamp(Warranties::StartDate))
-                    .col(timestamp_null(Warranties::EndDate))
+                    .col(timestamp(Warranties::EndDate))
                     .col(string(Warranties::WarrantyStatus))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
@@ -110,44 +118,50 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // AddNewPartForm (referenced by Images.AddNewPartFormId)
         manager
             .create_table(
                 Table::create()
-                    .table(Images::Table)
+                    .table(AddNewPartForm::Table)
                     .if_not_exists()
-                    .col(uuid(Images::Id).primary_key())
-                    .col(string(Images::ImageURL))
-                    .col(uuid_null(Images::PartId))
-                    .col(uuid_null(Images::ProductId))
-                    .col(timestamp(Images::CapturedAt))
+                    .col(uuid(AddNewPartForm::Id).primary_key())
+                    .col(string(AddNewPartForm::PartNumber))
+                    .col(integer(AddNewPartForm::PartTypesId))
+                    .col(string(AddNewPartForm::MTM))
+                    .col(string(AddNewPartForm::SerialNumber))
+                    .col(string_null(AddNewPartForm::Description))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_images_part")
-                            .from(Images::Table, Images::PartId)
+                            .name("fk_add_new_part_form_part_type")
+                            .from(AddNewPartForm::Table, AddNewPartForm::PartNumber)
                             .to(PartTypes::Table, PartTypes::PartNumber)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade),
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_images_product")
-                            .from(Images::Table, Images::ProductId)
-                            .to(Products::Table, Products::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade),
+                            .name("fk_add_new_part_form_product_model")
+                            .from(AddNewPartForm::Table, AddNewPartForm::MTM)
+                            .to(ProductModels::Table, ProductModels::ModelCode)
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
                     )
                     .to_owned(),
             )
             .await?;
 
+        // NOTE: Images table is created in work_order_update migration
+        // because it needs FK references to WorkOrders and WorkOrderClosingForms
+        // which are created there.
+
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager.drop_table(Table::drop().table(Images::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(AddNewPartForm::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Warranties::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Products::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(PartTypes::Table).to_owned()).await?;
@@ -217,14 +231,15 @@ enum Warranties
 }
 
 #[derive(DeriveIden)]
-enum Images
+enum AddNewPartForm
 {
     Table,
     Id,
-    ImageURL,
-    PartId,
-    ProductId,
-    CapturedAt
+    PartNumber,
+    PartTypesId,
+    MTM,
+    SerialNumber,
+    Description,
 }
 
 #[derive(DeriveIden)]
@@ -233,4 +248,3 @@ enum Users
     Table,
     Id
 }
-

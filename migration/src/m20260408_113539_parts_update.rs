@@ -6,30 +6,8 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // PartCatalog
-        manager
-            .create_table(
-                Table::create()
-                    .table(PartCatalog::Table)
-                    .if_not_exists()
-                    .col(uuid(PartCatalog::Id).primary_key())
-                    .col(string(PartCatalog::PartNumber))
-                    .col(timestamp(CreatedAt))
-                    .col(timestamp(UpdatedAt))
-                    .col(timestamp_null(DeletedAt))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_part_catalog_part_types")
-                            .from(PartCatalog::Table, PartCatalog::PartNumber)
-                            .to(PartTypes::Table, PartTypes::PartNumber)
-                            .on_delete(ForeignKeyAction::Restrict)
-                            .on_update(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        // Parts
+        // Parts table
+        // PartCatalog and PartCondition are now created in the part migration
         manager
             .create_table(
                 Table::create()
@@ -74,55 +52,11 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // Update PartsByModel to add missing references
-        // SQLite only supports one alter operation per statement
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(PartsByModel::Table)
-                    .add_column(uuid_null(PartsByModel::CatalogId))
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(PartsByModel::Table)
-                    .add_column(integer_null(PartsByModel::ModelId))
-                    .to_owned(),
-            )
-            .await?;
-
-        // Note: SQLite does not support adding foreign key constraints to existing tables.
-        // FK relationships for CatalogId -> PartCatalog and ModelId -> ProductModels
-        // are enforced at the application/ORM level.
-
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // Drop added columns (no FK to drop since SQLite doesn't support ALTER TABLE ADD FK)
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(PartsByModel::Table)
-                    .drop_column(PartsByModel::ModelId)
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(PartsByModel::Table)
-                    .drop_column(PartsByModel::CatalogId)
-                    .to_owned(),
-            )
-            .await?;
-
         manager.drop_table(Table::drop().table(Parts::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(PartCatalog::Table).to_owned()).await?;
 
         Ok(())
     }
@@ -137,11 +71,12 @@ struct UpdatedAt;
 #[derive(DeriveIden)]
 struct DeletedAt;
 
+// Iden declarations for FK references to tables created in earlier migrations
+
 #[derive(DeriveIden)]
 enum PartCatalog {
     Table,
     Id,
-    PartNumber,
 }
 
 #[derive(DeriveIden)]
@@ -158,32 +93,13 @@ enum Parts {
 }
 
 #[derive(DeriveIden)]
-enum PartTypes {
-    Table,
-    PartNumber,
-}
-
-#[derive(DeriveIden)]
 enum Products {
     Table,
     Id,
 }
 
 #[derive(DeriveIden)]
-enum PartsByModel {
-    Table,
-    CatalogId,
-    ModelId,
-}
-
-#[derive(DeriveIden)]
 enum PartStatus {
     Table,
     Id,
-}
-
-#[derive(DeriveIden)]
-enum ProductModels {
-    Table,
-    ModelCode,
 }

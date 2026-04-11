@@ -7,6 +7,45 @@ pub struct Migration;
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
 
+        // PartCatalog (moved from parts_update, needed by PartsByModel.CatalogId)
+        manager
+            .create_table(
+                Table::create()
+                    .table(PartCatalog::Table)
+                    .if_not_exists()
+                    .col(uuid(PartCatalog::Id).primary_key())
+                    .col(string(PartCatalog::PartNumber))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(UpdatedAt))
+                    .col(timestamp_null(DeletedAt))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_part_catalog_part_types")
+                            .from(PartCatalog::Table, PartCatalog::PartNumber)
+                            .to(PartTypes::Table, PartTypes::PartNumber)
+                            .on_delete(ForeignKeyAction::Restrict)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // PartCondition (moved from parts_update, needed by PartsByModel.PartConditionId)
+        manager
+            .create_table(
+                Table::create()
+                    .table(PartCondition::Table)
+                    .if_not_exists()
+                    .col(pk_auto(PartCondition::Id))
+                    .col(string(PartCondition::ConditionName))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(UpdatedAt))
+                    .col(timestamp_null(DeletedAt))
+                    .to_owned()
+            )
+            .await?;
+
+        // PartsByModel with all columns and FK constraints
         manager
             .create_table(
                 Table::create()
@@ -17,6 +56,9 @@ impl MigrationTrait for Migration {
                 .col(string(PartsByModel::PartNumber))
                 .col(integer(PartsByModel::Quantity))
                 .col(integer(PartsByModel::PartStatusId))
+                .col(uuid_null(PartsByModel::CatalogId))
+                .col(integer(PartsByModel::PartConditionId))
+                .col(string_null(PartsByModel::ModelId))
                 .col(timestamp(CreatedAt))
                 .col(timestamp(UpdatedAt))
                 .col(timestamp_null(DeletedAt))
@@ -27,7 +69,6 @@ impl MigrationTrait for Migration {
                         .to(PartTypes::Table, PartTypes::PartNumber)
                         .on_update(ForeignKeyAction::Cascade)
                         .on_delete(ForeignKeyAction::Restrict),
-
                     )
                 .foreign_key(
                     ForeignKey::create()
@@ -45,15 +86,45 @@ impl MigrationTrait for Migration {
                     .on_update(ForeignKeyAction::Cascade)
                     .on_delete(ForeignKeyAction::Restrict)
                 )
+                .foreign_key(
+                    ForeignKey::create()
+                    .name("fk_part_by_model_catalog")
+                    .from(PartsByModel::Table, PartsByModel::CatalogId)
+                    .to(PartCatalog::Table, PartCatalog::Id)
+                    .on_update(ForeignKeyAction::Cascade)
+                    .on_delete(ForeignKeyAction::Restrict)
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                    .name("fk_part_by_model_condition")
+                    .from(PartsByModel::Table, PartsByModel::PartConditionId)
+                    .to(PartCondition::Table, PartCondition::Id)
+                    .on_update(ForeignKeyAction::Cascade)
+                    .on_delete(ForeignKeyAction::Restrict)
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                    .name("fk_part_by_model_product_model")
+                    .from(PartsByModel::Table, PartsByModel::ModelId)
+                    .to(ProductModels::Table, ProductModels::ModelCode)
+                    .on_update(ForeignKeyAction::Cascade)
+                    .on_delete(ForeignKeyAction::Restrict)
+                )
                 .to_owned()   
             )
         .await
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        
+        // Drop in reverse dependency order
         manager
             .drop_table(Table::drop().table(PartsByModel::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(PartCondition::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(PartCatalog::Table).to_owned())
             .await
     }
 }
@@ -82,6 +153,9 @@ enum PartsByModel
     ProductId,
     PartStatusId,
     Quantity,
+    CatalogId,
+    PartConditionId,
+    ModelId,
 }
 
 #[derive(DeriveIden)]
@@ -96,4 +170,24 @@ enum PartStatus
 {
     Table,
     Id,
+}
+
+#[derive(DeriveIden)]
+enum PartCatalog {
+    Table,
+    Id,
+    PartNumber,
+}
+
+#[derive(DeriveIden)]
+enum PartCondition {
+    Table,
+    Id,
+    ConditionName,
+}
+
+#[derive(DeriveIden)]
+enum ProductModels {
+    Table,
+    ModelCode,
 }
