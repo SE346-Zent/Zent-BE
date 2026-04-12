@@ -57,7 +57,6 @@ impl MigrationTrait for Migration {
                 .col(integer(PartsByModel::Quantity))
                 .col(integer(PartsByModel::PartStatusId))
                 .col(uuid_null(PartsByModel::CatalogId))
-                .col(integer(PartsByModel::PartConditionId))
                 .col(string_null(PartsByModel::ModelId))
                 .col(timestamp(CreatedAt))
                 .col(timestamp(UpdatedAt))
@@ -91,14 +90,6 @@ impl MigrationTrait for Migration {
                     .name("fk_part_by_model_catalog")
                     .from(PartsByModel::Table, PartsByModel::CatalogId)
                     .to(PartCatalog::Table, PartCatalog::Id)
-                    .on_update(ForeignKeyAction::Cascade)
-                    .on_delete(ForeignKeyAction::Restrict)
-                )
-                .foreign_key(
-                    ForeignKey::create()
-                    .name("fk_part_by_model_condition")
-                    .from(PartsByModel::Table, PartsByModel::PartConditionId)
-                    .to(PartCondition::Table, PartCondition::Id)
                     .on_update(ForeignKeyAction::Cascade)
                     .on_delete(ForeignKeyAction::Restrict)
                 )
@@ -154,7 +145,6 @@ enum PartsByModel
     PartStatusId,
     Quantity,
     CatalogId,
-    PartConditionId,
     ModelId,
 }
 

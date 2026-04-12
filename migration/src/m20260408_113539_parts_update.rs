@@ -17,7 +17,7 @@ impl MigrationTrait for Migration {
                     .col(uuid(Parts::CatalogId))
                     .col(uuid(Parts::ProductId))
                     .col(string(Parts::SerialNumber))
-                    .col(uuid(Parts::PartStatusId))
+                    .col(uuid(Parts::PartConditionId))
                     .col(timestamp(Parts::MFD))
                     .col(timestamp(Parts::InstalledDate))
                     .col(timestamp_null(Parts::RemovedDate))
@@ -34,9 +34,9 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_parts_part_status")
-                            .from(Parts::Table, Parts::PartStatusId)
-                            .to(PartStatus::Table, PartStatus::Id)
+                            .name("fk_parts_part_condition")
+                            .from(Parts::Table, Parts::PartConditionId)
+                            .to(PartCondition::Table, PartCondition::Id)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -86,7 +86,7 @@ enum Parts {
     CatalogId,
     ProductId,
     SerialNumber,
-    PartStatusId,
+    PartConditionId,
     MFD,
     InstalledDate,
     RemovedDate
@@ -100,6 +100,12 @@ enum Products {
 
 #[derive(DeriveIden)]
 enum PartStatus {
+    Table,
+    Id,
+}
+
+#[derive(DeriveIden)]
+enum PartCondition {
     Table,
     Id,
 }
