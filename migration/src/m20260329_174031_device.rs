@@ -41,20 +41,11 @@ impl MigrationTrait for Migration {
                     .table(PartTypes::Table)
                     .if_not_exists()
                     .col(string(PartTypes::PartNumber).primary_key())
-                    .col(string(PartTypes::CommodityType))
-                    .col(string(PartTypes::Description))
-                    .col(integer(PartTypes::PartMfgStatusId))
+                    .col(string(PartTypes::PartTypeName))
+                    .col(string_null(PartTypes::Description))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_PartTypes_PartStatus")
-                            .from(PartTypes::Table, PartTypes::PartMfgStatusId)
-                            .to(PartStatus::Table, PartStatus::Id)
-                            .on_delete(ForeignKeyAction::Restrict)
-                            .on_update(ForeignKeyAction::Cascade)
-                    )
                     .to_owned(),
             )
             .await?;
@@ -213,9 +204,8 @@ enum PartStatus
 enum PartTypes {
     Table,
     PartNumber,
-    CommodityType,
+    PartTypeName,
     Description,
-    PartMfgStatusId
 }
 
 #[derive(DeriveIden)]

@@ -15,6 +15,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(PartCatalog::Id).primary_key())
                     .col(string(PartCatalog::PartNumber))
+                    .col(integer(PartCatalog::PartMfgStatusId))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -23,6 +24,14 @@ impl MigrationTrait for Migration {
                             .name("fk_part_catalog_part_types")
                             .from(PartCatalog::Table, PartCatalog::PartNumber)
                             .to(PartTypes::Table, PartTypes::PartNumber)
+                            .on_delete(ForeignKeyAction::Restrict)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_part_catalog_part_mfg_status")
+                            .from(PartCatalog::Table, PartCatalog::PartMfgStatusId)
+                            .to(PartStatus::Table, PartStatus::Id)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -167,6 +176,7 @@ enum PartCatalog {
     Table,
     Id,
     PartNumber,
+    PartMfgStatusId
 }
 
 #[derive(DeriveIden)]
