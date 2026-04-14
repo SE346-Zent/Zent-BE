@@ -53,3 +53,5 @@ TODO*
 tasks/
 nginx/
 db_seed.rs
+convert.py 
+header_finder.py 
