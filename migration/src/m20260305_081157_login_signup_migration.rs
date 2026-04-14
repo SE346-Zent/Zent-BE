@@ -12,12 +12,12 @@ impl MigrationTrait for Migration {
                     .table(Users::Table)
                     .if_not_exists()
                     .col(uuid(Users::Id).primary_key())
-                    .col(string(Users::FullName))
-                    .col(string_uniq(Users::Email))
-                    .col(string(Users::PasswordHash))
-                    .col(string(Users::PhoneNumber))
                     .col(integer(Users::AccountStatus))
                     .col(integer(Users::RoleID))
+                    .col(string_uniq(Users::Email))
+                    .col(string(Users::FullName))
+                    .col(string(Users::PasswordHash))
+                    .col(string(Users::PhoneNumber))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -135,12 +135,12 @@ struct DeletedAt;
 enum Users {
     Table,
     Id,
-    FullName,
-    Email,
-    PasswordHash,
-    PhoneNumber,
     AccountStatus,
     RoleID,
+    Email,
+    FullName,
+    PasswordHash,
+    PhoneNumber,
 }
 
 #[derive(DeriveIden)]

@@ -41,8 +41,8 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(WorkOrderClosingForms::Id).primary_key())
                     .col(string(WorkOrderClosingForms::MTM))
-                    .col(string(WorkOrderClosingForms::SerialNumber))
                     .col(uuid(WorkOrderClosingForms::WorkOrderId))
+                    .col(string(WorkOrderClosingForms::SerialNumber))
                     .col(string(WorkOrderClosingForms::Diagnosis))
                     .col(string(WorkOrderClosingForms::SignatureUrl))
                     .col(timestamp(CreatedAt))
@@ -65,11 +65,11 @@ impl MigrationTrait for Migration {
                     .table(RejectionForm::Table)
                     .if_not_exists()
                     .col(uuid(RejectionForm::RejectFormId).primary_key())
-                    .col(string(RejectionForm::RejectReason))
                     .col(uuid(RejectionForm::ApproverId))
+                    .col(uuid(RejectionForm::WorkOrderId))
+                    .col(string(RejectionForm::RejectReason))
                     .col(boolean(RejectionForm::Approved))
                     .col(string_null(RejectionForm::ReviewReason))
-                    .col(uuid(RejectionForm::WorkOrderId))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .foreign_key(
@@ -90,23 +90,7 @@ impl MigrationTrait for Migration {
                     .table(WorkOrders::Table)
                     .if_not_exists()
                     .col(uuid(WorkOrders::Id).primary_key())
-                    .col(string(WorkOrders::FirstName))
-                    .col(string(WorkOrders::LastName))
-                    .col(string_null(WorkOrders::Email))
-                    .col(string(WorkOrders::WorkOrderNumber))
-                    .col(string_null(WorkOrders::PhoneNumber))
                     .col(integer(WorkOrders::WorkOrderStatusId))
-                    .col(string(WorkOrders::Country))
-                    .col(string(WorkOrders::State))
-                    .col(string(WorkOrders::City))
-                    .col(string(WorkOrders::Address))
-                    .col(string_null(WorkOrders::Building))
-                    .col(timestamp(WorkOrders::Appointment))
-                    .col(uuid_null(WorkOrders::ReferenceTicket))
-                    .col(string(WorkOrders::Description))
-                    .col(timestamp(CreatedAt))
-                    .col(timestamp(UpdatedAt))
-                    .col(timestamp_null(DeletedAt))
                     .col(uuid(WorkOrders::AssignerAdminId))
                     .col(uuid(WorkOrders::CustomerId))
                     .col(uuid_null(WorkOrders::AssignedTechnicianId))
@@ -114,6 +98,22 @@ impl MigrationTrait for Migration {
                     .col(uuid_null(WorkOrders::RejectFormId))
                     .col(integer(WorkOrders::WorkOrderSymptomId))
                     .col(uuid(WorkOrders::ProductId))
+                    .col(uuid_null(WorkOrders::ReferenceTicket))
+                    .col(string(WorkOrders::WorkOrderNumber))
+                    .col(string(WorkOrders::FirstName))
+                    .col(string(WorkOrders::LastName))
+                    .col(string_null(WorkOrders::Email))
+                    .col(string_null(WorkOrders::PhoneNumber))
+                    .col(string(WorkOrders::Country))
+                    .col(string(WorkOrders::State))
+                    .col(string(WorkOrders::City))
+                    .col(string(WorkOrders::Address))
+                    .col(string_null(WorkOrders::Building))
+                    .col(timestamp(WorkOrders::Appointment))
+                    .col(string(WorkOrders::Description))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(UpdatedAt))
+                    .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_work_order_status")
@@ -191,44 +191,74 @@ impl MigrationTrait for Migration {
         // The RejectionForm.WorkOrderId -> WorkOrders.Id relationship
         // is also enforced at the application/ORM level for SQLite.
 
-        // Images table: created here because it needs FK references to
-        // WorkOrders, WorkOrderClosingForms (created above), and
-        // AddNewPartForm (created in device migration).
+        // AddPartRequestImages table
         manager
             .create_table(
                 Table::create()
-                    .table(Images::Table)
+                    .table(AddPartRequestImages::Table)
                     .if_not_exists()
-                    .col(uuid(Images::Id).primary_key())
-                    .col(string(Images::ImageURL))
-                    .col(uuid_null(Images::WorkOrderId))
-                    .col(uuid_null(Images::WorkOrderClosingFormId))
-                    .col(uuid_null(Images::AddNewPartFormId))
-                    .col(timestamp(Images::CapturedAt))
+                    .col(uuid(AddPartRequestImages::Id).primary_key())
+                    .col(uuid(AddPartRequestImages::AddPartRequestId))
+                    .col(string(AddPartRequestImages::ImageURL))
+                    .col(timestamp(AddPartRequestImages::CapturedAt))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_images_work_order")
-                            .from(Images::Table, Images::WorkOrderId)
+                            .name("fk_add_part_request_images_add_new_part_form")
+                            .from(AddPartRequestImages::Table, AddPartRequestImages::AddPartRequestId)
+                            .to(AddNewPartForm::Table, AddNewPartForm::Id)
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // WorkOrderImages table
+        manager
+            .create_table(
+                Table::create()
+                    .table(WorkOrderImages::Table)
+                    .if_not_exists()
+                    .col(uuid(WorkOrderImages::Id).primary_key())
+                    .col(uuid(WorkOrderImages::WorkOrderId))
+                    .col(string(WorkOrderImages::ImageURL))
+                    .col(timestamp(WorkOrderImages::CapturedAt))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(UpdatedAt))
+                    .col(timestamp_null(DeletedAt))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_work_order_images_work_order")
+                            .from(WorkOrderImages::Table, WorkOrderImages::WorkOrderId)
                             .to(WorkOrders::Table, WorkOrders::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
                     )
+                    .to_owned(),
+            )
+            .await?;
+
+        // WorkOrderClosingFormImages table
+        manager
+            .create_table(
+                Table::create()
+                    .table(WorkOrderClosingFormImages::Table)
+                    .if_not_exists()
+                    .col(uuid(WorkOrderClosingFormImages::Id).primary_key())
+                    .col(uuid(WorkOrderClosingFormImages::WorkOrderClosingFormId))
+                    .col(string(WorkOrderClosingFormImages::ImageURL))
+                    .col(timestamp(WorkOrderClosingFormImages::CapturedAt))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(UpdatedAt))
+                    .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_images_work_order_closing_form")
-                            .from(Images::Table, Images::WorkOrderClosingFormId)
+                            .name("fk_work_order_closing_form_images_form")
+                            .from(WorkOrderClosingFormImages::Table, WorkOrderClosingFormImages::WorkOrderClosingFormId)
                             .to(WorkOrderClosingForms::Table, WorkOrderClosingForms::Id)
-                            .on_update(ForeignKeyAction::Cascade)
-                            .on_delete(ForeignKeyAction::Restrict)
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_images_add_new_part_form")
-                            .from(Images::Table, Images::AddNewPartFormId)
-                            .to(AddNewPartForm::Table, AddNewPartForm::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
                     )
@@ -242,7 +272,13 @@ impl MigrationTrait for Migration {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         // Drop in reverse dependency order
         manager
-            .drop_table(Table::drop().table(Images::Table).to_owned())
+            .drop_table(Table::drop().table(WorkOrderClosingFormImages::Table).if_exists().to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(WorkOrderImages::Table).if_exists().to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(AddPartRequestImages::Table).if_exists().to_owned())
             .await?;
         manager
             .drop_table(Table::drop().table(WorkOrders::Table).to_owned())
@@ -274,9 +310,8 @@ struct DeletedAt;
 enum WorkOrderClosingForms {
     Table,
     Id,
-    
-    WorkOrderId,
     MTM,
+    WorkOrderId,
     SerialNumber,
     Diagnosis,
     SignatureUrl
@@ -294,15 +329,16 @@ enum WorkOrders
 {
     Table,
     Id,
+    WorkOrderStatusId,
+    AssignerAdminId,
+    CustomerId,
+    AssignedTechnicianId,
     CompleteFormId,
     RejectFormId,
-    CustomerId,
-    WorkOrderNumber,
-    AssignedTechnicianId,
-    AssignerAdminId,
-    WorkOrderStatusId,
     WorkOrderSymptomId,
     ProductId,
+    ReferenceTicket,
+    WorkOrderNumber,
     FirstName,
     LastName,
     Email,
@@ -313,7 +349,6 @@ enum WorkOrders
     Address,
     Building,
     Appointment,
-    ReferenceTicket,
     Description,
 }
 
@@ -322,11 +357,11 @@ enum RejectionForm
 {
     Table,
     RejectFormId,
-    RejectReason,
     ApproverId,
+    WorkOrderId,
+    RejectReason,
     Approved,
     ReviewReason,
-    WorkOrderId,
 }
 
 #[derive(DeriveIden)]
@@ -357,15 +392,30 @@ enum ProductModels {
 }
 
 #[derive(DeriveIden)]
-enum Images
-{
+enum AddPartRequestImages {
     Table,
     Id,
+    AddPartRequestId,
     ImageURL,
+    CapturedAt,
+}
+
+#[derive(DeriveIden)]
+enum WorkOrderImages {
+    Table,
+    Id,
     WorkOrderId,
+    ImageURL,
+    CapturedAt,
+}
+
+#[derive(DeriveIden)]
+enum WorkOrderClosingFormImages {
+    Table,
+    Id,
     WorkOrderClosingFormId,
-    AddNewPartFormId,
-    CapturedAt
+    ImageURL,
+    CapturedAt,
 }
 
 #[derive(DeriveIden)]

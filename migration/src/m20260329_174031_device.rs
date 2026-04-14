@@ -56,8 +56,8 @@ impl MigrationTrait for Migration {
                     .table(Products::Table)
                     .if_not_exists()
                     .col(uuid(Products::Id).primary_key())
-                    .col(string(Products::ModelId))
                     .col(uuid(Products::CustomerId))
+                    .col(string(Products::ModelId))
                     .col(string(Products::ProductName))
                     .col(string(Products::SerialNumber))
                     .col(timestamp(CreatedAt))
@@ -117,7 +117,7 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // AddNewPartForm (referenced by Images.AddNewPartFormId)
+        // AddNewPartForm (referenced by AddPartRequestImages.AddPartRequestId)
         manager
             .create_table(
                 Table::create()
@@ -125,8 +125,8 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(AddNewPartForm::Id).primary_key())
                     .col(string(AddNewPartForm::PartNumber))
-                    .col(integer(AddNewPartForm::PartTypesId))
                     .col(string(AddNewPartForm::MTM))
+                    .col(integer(AddNewPartForm::PartTypesId))
                     .col(string(AddNewPartForm::SerialNumber))
                     .col(string_null(AddNewPartForm::Description))
                     .col(timestamp(CreatedAt))
@@ -152,8 +152,9 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // NOTE: Images table is created in work_order_update migration
-        // because it needs FK references to WorkOrders and WorkOrderClosingForms
+        // NOTE: The specialized Images tables (AddPartRequestImages, etc.) 
+        // are created in the work_order_update migration because they need 
+        // FK references to WorkOrders and WorkOrderClosingForms 
         // which are created there.
 
         Ok(())
@@ -185,10 +186,10 @@ enum Products
 {
     Table,
     Id,
-    ModelId,
     CustomerId,
+    ModelId,
+    ProductName,
     SerialNumber,   
-    ProductName
 }
 
 #[derive(DeriveIden)]
@@ -234,8 +235,8 @@ enum AddNewPartForm
     Table,
     Id,
     PartNumber,
-    PartTypesId,
     MTM,
+    PartTypesId,
     SerialNumber,
     Description,
 }

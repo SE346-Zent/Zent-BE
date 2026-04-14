@@ -60,35 +60,16 @@ impl MigrationTrait for Migration {
                 Table::create()
                 .table(PartsByModel::Table)
                 .if_not_exists()
-                .col(string(PartsByModel::MfgPart).primary_key())
-                .col(uuid(PartsByModel::ProductId))
-                .col(string(PartsByModel::PartNumber))
-                .col(integer(PartsByModel::Quantity))
-                .col(uuid_null(PartsByModel::CatalogId))
-                .col(string_null(PartsByModel::ModelId))
+                .col(pk_auto(PartsByModel::Id))
+                .col(uuid(PartsByModel::PartCatalogId))
+                .col(string(PartsByModel::ProductModelCode))
                 .col(timestamp(CreatedAt))
                 .col(timestamp(UpdatedAt))
                 .col(timestamp_null(DeletedAt))
                 .foreign_key(
-                        ForeignKey::create()
-                        .name("fk_part_by_model_part_type")
-                        .from(PartsByModel::Table, PartsByModel::PartNumber)
-                        .to(PartTypes::Table, PartTypes::PartNumber)
-                        .on_update(ForeignKeyAction::Cascade)
-                        .on_delete(ForeignKeyAction::Restrict),
-                    )
-                .foreign_key(
-                    ForeignKey::create()
-                    .name("fk_part_by_model_product")
-                    .from(PartsByModel::Table, PartsByModel::ProductId)
-                    .to(Products::Table, Products::Id)
-                    .on_update(ForeignKeyAction::Cascade)
-                    .on_delete(ForeignKeyAction::Restrict)
-                )
-                .foreign_key(
                     ForeignKey::create()
                     .name("fk_part_by_model_catalog")
-                    .from(PartsByModel::Table, PartsByModel::CatalogId)
+                    .from(PartsByModel::Table, PartsByModel::PartCatalogId)
                     .to(PartCatalog::Table, PartCatalog::Id)
                     .on_update(ForeignKeyAction::Cascade)
                     .on_delete(ForeignKeyAction::Restrict)
@@ -96,7 +77,7 @@ impl MigrationTrait for Migration {
                 .foreign_key(
                     ForeignKey::create()
                     .name("fk_part_by_model_product_model")
-                    .from(PartsByModel::Table, PartsByModel::ModelId)
+                    .from(PartsByModel::Table, PartsByModel::ProductModelCode)
                     .to(ProductModels::Table, ProductModels::ModelCode)
                     .on_update(ForeignKeyAction::Cascade)
                     .on_delete(ForeignKeyAction::Restrict)
@@ -139,13 +120,9 @@ enum PartTypes {
 enum PartsByModel 
 {
     Table,
-    MfgPart,
-    PartNumber,
-    ProductId,
-    PartStatusId,
-    Quantity,
-    CatalogId,
-    ModelId,
+    Id,
+    PartCatalogId,
+    ProductModelCode,
 }
 
 #[derive(DeriveIden)]

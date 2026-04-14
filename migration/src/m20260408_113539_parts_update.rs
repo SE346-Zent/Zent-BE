@@ -16,8 +16,8 @@ impl MigrationTrait for Migration {
                     .col(uuid(Parts::Id).primary_key())
                     .col(uuid(Parts::CatalogId))
                     .col(uuid(Parts::ProductId))
-                    .col(string(Parts::SerialNumber))
                     .col(uuid(Parts::PartConditionId))
+                    .col(string(Parts::SerialNumber))
                     .col(timestamp(Parts::MFD))
                     .col(timestamp(Parts::InstalledDate))
                     .col(timestamp_null(Parts::RemovedDate))
@@ -85,8 +85,8 @@ enum Parts {
     Id,
     CatalogId,
     ProductId,
-    SerialNumber,
     PartConditionId,
+    SerialNumber,
     MFD,
     InstalledDate,
     RemovedDate
