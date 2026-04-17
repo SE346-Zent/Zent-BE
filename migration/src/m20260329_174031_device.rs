@@ -116,7 +116,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(NewPartForms::Id).primary_key())
                     .col(string(NewPartForms::PartNumber))
-                    .col(integer(NewPartForms::PartTypeId))
+                    .col(string(NewPartForms::PartTypeName))
                     .col(string_null(NewPartForms::ModelCode))
                     .col(string(NewPartForms::SerialNumber))
                     .col(string_null(NewPartForms::Description))
@@ -126,7 +126,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_new_part_form_part_type")
-                            .from(NewPartForms::Table, NewPartForms::PartTypeId)
+                            .from(NewPartForms::Table, NewPartForms::PartTypeName)
                             .to(PartTypes::Table, PartTypes::PartTypeName)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
@@ -219,7 +219,7 @@ enum NewPartForms
     Table,
     Id,
     PartNumber,
-    PartTypeId,
+    PartTypeName,
     ModelCode,
     SerialNumber,
     Description,
