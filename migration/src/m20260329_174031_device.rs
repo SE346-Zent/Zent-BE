@@ -24,13 +24,10 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(PartStatus::Table)
+                    .table(PartMfgStatuses::Table)
                     .if_not_exists()
-                    .col(pk_auto(PartStatus::Id))
-                    .col(string(PartStatus::Name))
-                    .col(timestamp(CreatedAt))
-                    .col(timestamp(UpdatedAt))
-                    .col(timestamp_null(DeletedAt))
+                    .col(pk_auto(PartMfgStatuses::Id))
+                    .col(string(PartMfgStatuses::Name))
                     .to_owned(),
             )
             .await?;
@@ -40,12 +37,8 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(PartTypes::Table)
                     .if_not_exists()
-                    .col(string(PartTypes::PartNumber).primary_key())
-                    .col(string(PartTypes::PartTypeName))
+                    .col(string(PartTypes::PartTypeName).primary_key())
                     .col(string_null(PartTypes::Description))
-                    .col(timestamp(CreatedAt))
-                    .col(timestamp(UpdatedAt))
-                    .col(timestamp_null(DeletedAt))
                     .to_owned(),
             )
             .await?;
@@ -56,8 +49,8 @@ impl MigrationTrait for Migration {
                     .table(Products::Table)
                     .if_not_exists()
                     .col(uuid(Products::Id).primary_key())
+                    .col(string(Products::ProductModelCode))
                     .col(uuid(Products::CustomerId))
-                    .col(string(Products::ModelId))
                     .col(string(Products::ProductName))
                     .col(string(Products::SerialNumber))
                     .col(timestamp(CreatedAt))
@@ -66,7 +59,7 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_products_model")
-                            .from(Products::Table, Products::ModelId)
+                            .from(Products::Table, Products::ProductModelCode)
                             .to(ProductModels::Table, ProductModels::ModelCode)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
@@ -93,7 +86,6 @@ impl MigrationTrait for Migration {
                     .col(uuid(Warranties::ProductId))
                     .col(timestamp(Warranties::StartDate))
                     .col(timestamp(Warranties::EndDate))
-                    .col(string(Warranties::WarrantyStatus))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -117,33 +109,32 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // AddNewPartForm (referenced by AddPartRequestImages.AddPartRequestId)
         manager
             .create_table(
                 Table::create()
-                    .table(AddNewPartForm::Table)
+                    .table(NewPartForms::Table)
                     .if_not_exists()
-                    .col(uuid(AddNewPartForm::Id).primary_key())
-                    .col(string(AddNewPartForm::PartNumber))
-                    .col(string(AddNewPartForm::MTM))
-                    .col(integer(AddNewPartForm::PartTypesId))
-                    .col(string(AddNewPartForm::SerialNumber))
-                    .col(string_null(AddNewPartForm::Description))
+                    .col(uuid(NewPartForms::Id).primary_key())
+                    .col(string(NewPartForms::PartNumber))
+                    .col(integer(NewPartForms::PartTypeId))
+                    .col(string_null(NewPartForms::ModelCode))
+                    .col(string(NewPartForms::SerialNumber))
+                    .col(string_null(NewPartForms::Description))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_add_new_part_form_part_type")
-                            .from(AddNewPartForm::Table, AddNewPartForm::PartNumber)
-                            .to(PartTypes::Table, PartTypes::PartNumber)
+                            .name("fk_new_part_form_part_type")
+                            .from(NewPartForms::Table, NewPartForms::PartTypeId)
+                            .to(PartTypes::Table, PartTypes::PartTypeName)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_add_new_part_form_product_model")
-                            .from(AddNewPartForm::Table, AddNewPartForm::MTM)
+                            .name("fk_new_part_form_product_model")
+                            .from(NewPartForms::Table, NewPartForms::ModelCode)
                             .to(ProductModels::Table, ProductModels::ModelCode)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
@@ -152,20 +143,15 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // NOTE: The specialized Images tables (AddPartRequestImages, etc.) 
-        // are created in the work_order_update migration because they need 
-        // FK references to WorkOrders and WorkOrderClosingForms 
-        // which are created there.
-
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager.drop_table(Table::drop().table(AddNewPartForm::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(NewPartForms::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Warranties::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(Products::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(PartTypes::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(PartStatus::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(PartMfgStatuses::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(ProductModels::Table).to_owned()).await?;
 
         Ok(())
@@ -186,8 +172,8 @@ enum Products
 {
     Table,
     Id,
+    ProductModelCode,
     CustomerId,
-    ModelId,
     ProductName,
     SerialNumber,   
 }
@@ -202,7 +188,7 @@ enum ProductModels
 }
 
 #[derive(DeriveIden)]
-enum PartStatus
+enum PartMfgStatuses
 {
     Table,
     Id,
@@ -212,7 +198,6 @@ enum PartStatus
 #[derive(DeriveIden)]
 enum PartTypes {
     Table,
-    PartNumber,
     PartTypeName,
     Description,
 }
@@ -226,17 +211,16 @@ enum Warranties
     ProductId,
     StartDate,
     EndDate,
-    WarrantyStatus
 }
 
 #[derive(DeriveIden)]
-enum AddNewPartForm
+enum NewPartForms
 {
     Table,
     Id,
     PartNumber,
-    MTM,
-    PartTypesId,
+    PartTypeId,
+    ModelCode,
     SerialNumber,
     Description,
 }

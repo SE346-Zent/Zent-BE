@@ -15,23 +15,24 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(PartCatalog::Id).primary_key())
                     .col(string(PartCatalog::PartNumber))
-                    .col(integer(PartCatalog::PartMfgStatusId))
+                    .col(string(PartCatalog::PartTypeId))
+                    .col(integer(PartCatalog::PartMfgStatus))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_part_catalog_part_types")
-                            .from(PartCatalog::Table, PartCatalog::PartNumber)
-                            .to(PartTypes::Table, PartTypes::PartNumber)
+                            .from(PartCatalog::Table, PartCatalog::PartTypeId)
+                            .to(PartTypes::Table, PartTypes::PartTypeName)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_part_catalog_part_mfg_status")
-                            .from(PartCatalog::Table, PartCatalog::PartMfgStatusId)
-                            .to(PartStatus::Table, PartStatus::Id)
+                            .from(PartCatalog::Table, PartCatalog::PartMfgStatus)
+                            .to(PartMfgStatuses::Table, PartMfgStatuses::Id)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -39,33 +40,31 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // PartCondition (moved from parts_update, needed by PartsByModel.PartConditionId)
+        // PartConditions
         manager
             .create_table(
                 Table::create()
-                    .table(PartCondition::Table)
+                    .table(PartConditions::Table)
                     .if_not_exists()
-                    .col(pk_auto(PartCondition::Id))
-                    .col(string(PartCondition::ConditionName))
-                    .col(timestamp(CreatedAt))
-                    .col(timestamp(UpdatedAt))
-                    .col(timestamp_null(DeletedAt))
+                    .col(pk_auto(PartConditions::Id))
+                    .col(string(PartConditions::Name))
                     .to_owned()
             )
             .await?;
 
-        // PartsByModel with all columns and FK constraints
+        // PartsByModel with composite PK
         manager
             .create_table(
                 Table::create()
                 .table(PartsByModel::Table)
                 .if_not_exists()
-                .col(pk_auto(PartsByModel::Id))
                 .col(uuid(PartsByModel::PartCatalogId))
                 .col(string(PartsByModel::ProductModelCode))
-                .col(timestamp(CreatedAt))
-                .col(timestamp(UpdatedAt))
-                .col(timestamp_null(DeletedAt))
+                .primary_key(
+                    Index::create()
+                        .col(PartsByModel::PartCatalogId)
+                        .col(PartsByModel::ProductModelCode)
+                )
                 .foreign_key(
                     ForeignKey::create()
                     .name("fk_part_by_model_catalog")
@@ -93,7 +92,7 @@ impl MigrationTrait for Migration {
             .drop_table(Table::drop().table(PartsByModel::Table).to_owned())
             .await?;
         manager
-            .drop_table(Table::drop().table(PartCondition::Table).to_owned())
+            .drop_table(Table::drop().table(PartConditions::Table).to_owned())
             .await?;
         manager
             .drop_table(Table::drop().table(PartCatalog::Table).to_owned())
@@ -113,27 +112,19 @@ struct DeletedAt;
 #[derive(DeriveIden)]
 enum PartTypes {
     Table,
-    PartNumber,
+    PartTypeName,
 }
 
 #[derive(DeriveIden)]
 enum PartsByModel 
 {
     Table,
-    Id,
     PartCatalogId,
     ProductModelCode,
 }
 
 #[derive(DeriveIden)]
-enum Products
-{
-    Table,
-    Id,
-}
-
-#[derive(DeriveIden)]
-enum PartStatus
+enum PartMfgStatuses
 {
     Table,
     Id,
@@ -144,14 +135,15 @@ enum PartCatalog {
     Table,
     Id,
     PartNumber,
-    PartMfgStatusId
+    PartMfgStatus,
+    PartTypeId,
 }
 
 #[derive(DeriveIden)]
-enum PartCondition {
+enum PartConditions {
     Table,
     Id,
-    ConditionName,
+    Name,
 }
 
 #[derive(DeriveIden)]

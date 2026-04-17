@@ -77,8 +77,7 @@ impl MigrationTrait for Migration {
                     .col(string(Sessions::DeviceFingerprint))
                     .col(string_len(Sessions::IPAddress, 45))
                     .col(timestamp(CreatedAt))
-                    .col(timestamp(Sessions::ExpiresAt))
-                    .col(timestamp_null(Sessions::RevokedAt))
+                    .col(timestamp(Sessions::ExpiredAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_session_user_id")
@@ -96,9 +95,9 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_session_expires_at")
+                    .name("idx_session_expired_at")
                     .table(Sessions::Table)
-                    .col(Sessions::ExpiresAt)
+                    .col(Sessions::ExpiredAt)
                     .to_owned(),
             )
             .await?;
@@ -165,6 +164,5 @@ enum Sessions {
     UserID,
     DeviceFingerprint,
     IPAddress,
-    ExpiresAt,
-    RevokedAt,
+    ExpiredAt,
 }
