@@ -75,7 +75,7 @@ pub async fn seed_work_order_symptoms(db: &DatabaseConnection) -> Result<HashMap
             None => {
                 let inserted = work_order_symptoms::ActiveModel 
                 {
-                    symptom_names: Set(name.to_string()),
+                    name: Set(name.to_string()),
                     created_at: Set(now),
                     updated_at: Set(now),
                     ..Default::default()
