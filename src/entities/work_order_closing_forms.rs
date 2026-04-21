@@ -7,23 +7,86 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub work_order_counting: String,
-    pub mtm: String,
-    pub serial_number: String,
+    pub product_id: Uuid,
+    #[sea_orm(unique)]
+    pub work_order_id: Uuid,
     pub diagnosis: String,
+    pub signature_url: String,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::work_orders::Entity")]
+    #[sea_orm(has_many = "super::closing_form_image_links::Entity")]
+    ClosingFormImageLinks,
+    #[sea_orm(has_many = "super::part_changes::Entity")]
+    PartChanges,
+    #[sea_orm(
+        belongs_to = "super::products::Entity",
+        from = "Column::ProductId",
+        to = "super::products::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Restrict"
+    )]
+    Products,
+    #[sea_orm(
+        belongs_to = "super::work_orders::Entity",
+        from = "Column::WorkOrderId",
+        to = "super::work_orders::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Restrict"
+    )]
     WorkOrders,
+}
+
+impl Related<super::closing_form_image_links::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ClosingFormImageLinks.def()
+    }
+}
+
+impl Related<super::part_changes::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PartChanges.def()
+    }
+}
+
+impl Related<super::products::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Products.def()
+    }
 }
 
 impl Related<super::work_orders::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::WorkOrders.def()
+    }
+}
+
+impl Related<super::images::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::closing_form_image_links::Relation::Images.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::closing_form_image_links::Relation::WorkOrderClosingForms
+                .def()
+                .rev(),
+        )
+    }
+}
+
+impl Related<super::parts::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::part_changes::Relation::Parts.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::part_changes::Relation::WorkOrderClosingForms
+                .def()
+                .rev(),
+        )
     }
 }
 

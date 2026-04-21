@@ -5,10 +5,9 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "product_models")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    pub model_name: String,
+    #[sea_orm(primary_key, auto_increment = false)]
     pub model_code: String,
+    pub model_name: String,
     pub description: Option<String>,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
@@ -17,13 +16,59 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::new_part_forms::Entity")]
+    NewPartForms,
+    #[sea_orm(has_many = "super::parts_by_model::Entity")]
+    PartsByModel,
+    #[sea_orm(has_many = "super::product_model_image_links::Entity")]
+    ProductModelImageLinks,
     #[sea_orm(has_many = "super::products::Entity")]
     Products,
+}
+
+impl Related<super::new_part_forms::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::NewPartForms.def()
+    }
+}
+
+impl Related<super::parts_by_model::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PartsByModel.def()
+    }
+}
+
+impl Related<super::product_model_image_links::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ProductModelImageLinks.def()
+    }
 }
 
 impl Related<super::products::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Products.def()
+    }
+}
+
+impl Related<super::images::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::product_model_image_links::Relation::Images.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::product_model_image_links::Relation::ProductModels
+                .def()
+                .rev(),
+        )
+    }
+}
+
+impl Related<super::part_catalog::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::parts_by_model::Relation::PartCatalog.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::parts_by_model::Relation::ProductModels.def().rev())
     }
 }
 

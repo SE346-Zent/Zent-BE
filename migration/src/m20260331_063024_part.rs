@@ -15,16 +15,24 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(PartCatalog::Id).primary_key())
                     .col(string(PartCatalog::PartNumber))
-                    .col(string(PartCatalog::PartTypeId))
+                    .col(integer(PartCatalog::PartTypesId))
+                    .col(string(PartCatalog::MFGNumber))
                     .col(integer(PartCatalog::PartMfgStatus))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
+                    .index(
+                        Index::create()
+                            .name("idx_part_catalog_unique_type_mfg")
+                            .col(PartCatalog::PartTypesId)
+                            .col(PartCatalog::MFGNumber)
+                            .unique()
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_part_catalog_part_types")
-                            .from(PartCatalog::Table, PartCatalog::PartTypeId)
-                            .to(PartTypes::Table, PartTypes::PartTypeName)
+                            .from(PartCatalog::Table, PartCatalog::PartTypesId)
+                            .to(PartTypes::Table, PartTypes::Id)
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
@@ -60,6 +68,7 @@ impl MigrationTrait for Migration {
                 .if_not_exists()
                 .col(uuid(PartsByModel::PartCatalogId))
                 .col(string(PartsByModel::ProductModelCode))
+                .col(integer(PartsByModel::Quantity))
                 .primary_key(
                     Index::create()
                         .col(PartsByModel::PartCatalogId)
@@ -89,13 +98,13 @@ impl MigrationTrait for Migration {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         // Drop in reverse dependency order
         manager
-            .drop_table(Table::drop().table(PartsByModel::Table).to_owned())
+            .drop_table(Table::drop().table(PartsByModel::Table).if_exists().to_owned())
             .await?;
         manager
-            .drop_table(Table::drop().table(PartConditions::Table).to_owned())
+            .drop_table(Table::drop().table(PartConditions::Table).if_exists().to_owned())
             .await?;
         manager
-            .drop_table(Table::drop().table(PartCatalog::Table).to_owned())
+            .drop_table(Table::drop().table(PartCatalog::Table).if_exists().to_owned())
             .await
     }
 }
@@ -112,7 +121,7 @@ struct DeletedAt;
 #[derive(DeriveIden)]
 enum PartTypes {
     Table,
-    PartTypeName,
+    Id,
 }
 
 #[derive(DeriveIden)]
@@ -121,6 +130,7 @@ enum PartsByModel
     Table,
     PartCatalogId,
     ProductModelCode,
+    Quantity,
 }
 
 #[derive(DeriveIden)]
@@ -136,7 +146,8 @@ enum PartCatalog {
     Id,
     PartNumber,
     PartMfgStatus,
-    PartTypeId,
+    PartTypesId,
+    MFGNumber,
 }
 
 #[derive(DeriveIden)]

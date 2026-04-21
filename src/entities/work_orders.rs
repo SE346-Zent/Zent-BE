@@ -7,28 +7,27 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
+    pub work_order_status_id: i32,
+    pub customer_id: Uuid,
+    pub product_id: Uuid,
+    pub reference_ticket_id: Option<Uuid>,
+    pub work_order_symptom_id: i32,
+    pub description: String,
     pub first_name: String,
     pub last_name: String,
-    pub email: String,
-    pub phone_number: String,
-    pub work_order_status_id: i32,
+    pub email: Option<String>,
+    pub phone_number: Option<String>,
     pub country: String,
     pub state: String,
     pub city: String,
     pub address: String,
-    pub building: String,
+    pub building: Option<String>,
     pub appointment: DateTimeUtc,
-    pub reference_ticket: String,
+    pub assigner_id: Uuid,
+    pub assignee_id: Option<Uuid>,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
-    pub admin_id: Uuid,
-    pub customer_id: Uuid,
-    pub technician_id: Uuid,
-    pub complete_form_id: Uuid,
-    pub reject_reason: String,
-    pub work_order_symptom_id: i32,
-    pub product_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -43,7 +42,7 @@ pub enum Relation {
     Products,
     #[sea_orm(
         belongs_to = "super::users::Entity",
-        from = "Column::TechnicianId",
+        from = "Column::AssigneeId",
         to = "super::users::Column::Id",
         on_update = "Cascade",
         on_delete = "Restrict"
@@ -51,7 +50,7 @@ pub enum Relation {
     Users3,
     #[sea_orm(
         belongs_to = "super::users::Entity",
-        from = "Column::CustomerId",
+        from = "Column::AssignerId",
         to = "super::users::Column::Id",
         on_update = "Cascade",
         on_delete = "Restrict"
@@ -59,28 +58,28 @@ pub enum Relation {
     Users2,
     #[sea_orm(
         belongs_to = "super::users::Entity",
-        from = "Column::AdminId",
+        from = "Column::CustomerId",
         to = "super::users::Column::Id",
         on_update = "Cascade",
         on_delete = "Restrict"
     )]
     Users1,
-    #[sea_orm(
-        belongs_to = "super::work_order_closing_forms::Entity",
-        from = "Column::CompleteFormId",
-        to = "super::work_order_closing_forms::Column::Id",
-        on_update = "Cascade",
-        on_delete = "Restrict"
-    )]
+    #[sea_orm(has_one = "super::work_order_closing_forms::Entity")]
     WorkOrderClosingForms,
+    #[sea_orm(has_many = "super::work_order_image_links::Entity")]
+    WorkOrderImageLinks,
+    #[sea_orm(has_one = "super::work_order_reject_forms::Entity")]
+    WorkOrderRejectForms,
+    #[sea_orm(has_many = "super::work_order_state_history::Entity")]
+    WorkOrderStateHistory,
     #[sea_orm(
-        belongs_to = "super::work_order_status::Entity",
+        belongs_to = "super::work_order_statuses::Entity",
         from = "Column::WorkOrderStatusId",
-        to = "super::work_order_status::Column::Id",
+        to = "super::work_order_statuses::Column::Id",
         on_update = "Cascade",
         on_delete = "Restrict"
     )]
-    WorkOrderStatus,
+    WorkOrderStatuses,
     #[sea_orm(
         belongs_to = "super::work_order_symptoms::Entity",
         from = "Column::WorkOrderSymptomId",
@@ -89,6 +88,14 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     WorkOrderSymptoms,
+    #[sea_orm(
+        belongs_to = "Entity",
+        from = "Column::ReferenceTicketId",
+        to = "Column::Id",
+        on_update = "Cascade",
+        on_delete = "Restrict"
+    )]
+    SelfRef,
 }
 
 impl Related<super::products::Entity> for Entity {
@@ -103,15 +110,46 @@ impl Related<super::work_order_closing_forms::Entity> for Entity {
     }
 }
 
-impl Related<super::work_order_status::Entity> for Entity {
+impl Related<super::work_order_image_links::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::WorkOrderStatus.def()
+        Relation::WorkOrderImageLinks.def()
+    }
+}
+
+impl Related<super::work_order_reject_forms::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderRejectForms.def()
+    }
+}
+
+impl Related<super::work_order_state_history::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderStateHistory.def()
+    }
+}
+
+impl Related<super::work_order_statuses::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderStatuses.def()
     }
 }
 
 impl Related<super::work_order_symptoms::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::WorkOrderSymptoms.def()
+    }
+}
+
+impl Related<super::images::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::work_order_image_links::Relation::Images.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::work_order_image_links::Relation::WorkOrders
+                .def()
+                .rev(),
+        )
     }
 }
 

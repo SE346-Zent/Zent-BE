@@ -10,8 +10,7 @@ pub struct Model {
     pub customer_id: Uuid,
     pub product_id: Uuid,
     pub start_date: DateTimeUtc,
-    pub end_date: Option<DateTimeUtc>,
-    pub warranty_status: String,
+    pub end_date: DateTimeUtc,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
@@ -27,11 +26,25 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     Products,
+    #[sea_orm(
+        belongs_to = "super::users::Entity",
+        from = "Column::CustomerId",
+        to = "super::users::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    Users,
 }
 
 impl Related<super::products::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Products.def()
+    }
+}
+
+impl Related<super::users::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Users.def()
     }
 }
 

@@ -28,6 +28,9 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(pk_auto(PartMfgStatuses::Id))
                     .col(string(PartMfgStatuses::Name))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(UpdatedAt))
+                    .col(timestamp_null(DeletedAt))
                     .to_owned(),
             )
             .await?;
@@ -37,7 +40,8 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(PartTypes::Table)
                     .if_not_exists()
-                    .col(string(PartTypes::PartTypeName).primary_key())
+                    .col(pk_auto(PartTypes::Id))
+                    .col(string(PartTypes::PartTypeName).unique_key())
                     .col(string_null(PartTypes::Description))
                     .to_owned(),
             )
@@ -116,7 +120,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(NewPartForms::Id).primary_key())
                     .col(string(NewPartForms::PartNumber))
-                    .col(string(NewPartForms::PartTypeName))
+                    .col(integer(NewPartForms::PartTypesId))
                     .col(string_null(NewPartForms::ModelCode))
                     .col(string(NewPartForms::SerialNumber))
                     .col(string_null(NewPartForms::Description))
@@ -126,8 +130,8 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_new_part_form_part_type")
-                            .from(NewPartForms::Table, NewPartForms::PartTypeName)
-                            .to(PartTypes::Table, PartTypes::PartTypeName)
+                            .from(NewPartForms::Table, NewPartForms::PartTypesId)
+                            .to(PartTypes::Table, PartTypes::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
                     )
@@ -147,12 +151,12 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager.drop_table(Table::drop().table(NewPartForms::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(Warranties::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(Products::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(PartTypes::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(PartMfgStatuses::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(ProductModels::Table).to_owned()).await?;
+        manager.drop_table(Table::drop().table(NewPartForms::Table).if_exists().to_owned()).await?;
+        manager.drop_table(Table::drop().table(Warranties::Table).if_exists().to_owned()).await?;
+        manager.drop_table(Table::drop().table(Products::Table).if_exists().to_owned()).await?;
+        manager.drop_table(Table::drop().table(PartTypes::Table).if_exists().to_owned()).await?;
+        manager.drop_table(Table::drop().table(PartMfgStatuses::Table).if_exists().to_owned()).await?;
+        manager.drop_table(Table::drop().table(ProductModels::Table).if_exists().to_owned()).await?;
 
         Ok(())
     }
@@ -198,6 +202,7 @@ enum PartMfgStatuses
 #[derive(DeriveIden)]
 enum PartTypes {
     Table,
+    Id,
     PartTypeName,
     Description,
 }
@@ -219,7 +224,7 @@ enum NewPartForms
     Table,
     Id,
     PartNumber,
-    PartTypeName,
+    PartTypesId,
     ModelCode,
     SerialNumber,
     Description,

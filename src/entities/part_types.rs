@@ -5,33 +5,30 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "part_types")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment = false)]
-    pub part_number: String,
-    pub commodity_type: String,
-    pub description: String,
-    pub part_status_id: i32,
-    pub created_at: DateTimeUtc,
-    pub updated_at: DateTimeUtc,
-    pub deleted_at: Option<DateTimeUtc>,
+    #[sea_orm(primary_key)]
+    pub id: i32,
+    #[sea_orm(unique)]
+    pub part_type_name: String,
+    pub description: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::images::Entity")]
-    Images,
-    #[sea_orm(has_many = "super::parts_by_model::Entity")]
-    PartsByModel,
+    #[sea_orm(has_many = "super::new_part_forms::Entity")]
+    NewPartForms,
+    #[sea_orm(has_many = "super::part_catalog::Entity")]
+    PartCatalog,
 }
 
-impl Related<super::images::Entity> for Entity {
+impl Related<super::new_part_forms::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Images.def()
+        Relation::NewPartForms.def()
     }
 }
 
-impl Related<super::parts_by_model::Entity> for Entity {
+impl Related<super::part_catalog::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::PartsByModel.def()
+        Relation::PartCatalog.def()
     }
 }
 

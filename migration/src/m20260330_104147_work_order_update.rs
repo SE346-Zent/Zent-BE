@@ -24,6 +24,9 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(pk_auto(WorkOrderSymptoms::Id))
                     .col(string(WorkOrderSymptoms::Name))
+                    .col(timestamp(CreatedAt))
+                    .col(timestamp(UpdatedAt))
+                    .col(timestamp_null(DeletedAt))
                     .to_owned(),
             )
             .await?;

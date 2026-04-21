@@ -93,6 +93,8 @@ pub async fn seed_users(
         .map(|i| {
             let full_name: String = Name().fake_with_rng(&mut rng);
             let base_email: String = FreeEmail().fake_with_rng(&mut rng);
+            let (status_name, status_id) = status_entries.choose(&mut rng).unwrap();
+
             // Suffix with index to satisfy the unique constraint.
             let email = {
                 let (local, domain) = base_email
@@ -103,8 +105,16 @@ pub async fn seed_users(
             let phone_number: String = PhoneNumber().fake_with_rng(&mut rng);
             let password: String = "hungdepzai123".to_string();
 
-            let (role_name, role_id) = role_entries.choose(&mut rng).unwrap();
-            let (status_name, status_id) = status_entries.choose(&mut rng).unwrap();
+            // Extract SuperAdmin manually to enforce exact counts
+            let is_super = i == 0;
+            let (role_name, role_id) = if is_super {
+                role_entries.iter().find(|(name, _)| name == "SuperAdmin").unwrap_or(&role_entries[0])
+            } else {
+                let non_super: Vec<_> = role_entries.iter().filter(|(n, _)| n != "SuperAdmin").collect();
+                // Even distribution by index
+                let choice = (i - 1) % non_super.len();
+                non_super[choice]
+            };
 
             UserInput {
                 id: Uuid::new_v4(),

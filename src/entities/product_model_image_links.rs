@@ -3,38 +3,37 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "parts_by_model")]
+#[sea_orm(table_name = "product_model_image_links")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub part_catalog_id: Uuid,
+    pub image_id: Uuid,
     #[sea_orm(primary_key, auto_increment = false)]
     pub product_model_code: String,
-    pub quantity: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::part_catalog::Entity",
-        from = "Column::PartCatalogId",
-        to = "super::part_catalog::Column::Id",
+        belongs_to = "super::images::Entity",
+        from = "Column::ImageId",
+        to = "super::images::Column::Id",
         on_update = "Cascade",
-        on_delete = "Restrict"
+        on_delete = "Cascade"
     )]
-    PartCatalog,
+    Images,
     #[sea_orm(
         belongs_to = "super::product_models::Entity",
         from = "Column::ProductModelCode",
         to = "super::product_models::Column::ModelCode",
         on_update = "Cascade",
-        on_delete = "Restrict"
+        on_delete = "Cascade"
     )]
     ProductModels,
 }
 
-impl Related<super::part_catalog::Entity> for Entity {
+impl Related<super::images::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::PartCatalog.def()
+        Relation::Images.def()
     }
 }
 

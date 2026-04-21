@@ -7,8 +7,9 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub model_id: i32,
+    pub product_model_code: String,
     pub customer_id: Uuid,
+    pub product_name: String,
     pub serial_number: String,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
@@ -17,33 +18,43 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::images::Entity")]
-    Images,
-    #[sea_orm(has_many = "super::parts_by_model::Entity")]
-    PartsByModel,
+    #[sea_orm(has_many = "super::parts::Entity")]
+    Parts,
+    #[sea_orm(has_many = "super::product_image_links::Entity")]
+    ProductImageLinks,
     #[sea_orm(
         belongs_to = "super::product_models::Entity",
-        from = "Column::ModelId",
-        to = "super::product_models::Column::Id",
+        from = "Column::ProductModelCode",
+        to = "super::product_models::Column::ModelCode",
         on_update = "Cascade",
         on_delete = "Restrict"
     )]
     ProductModels,
+    #[sea_orm(
+        belongs_to = "super::users::Entity",
+        from = "Column::CustomerId",
+        to = "super::users::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Restrict"
+    )]
+    Users,
     #[sea_orm(has_many = "super::warranties::Entity")]
     Warranties,
+    #[sea_orm(has_many = "super::work_order_closing_forms::Entity")]
+    WorkOrderClosingForms,
     #[sea_orm(has_many = "super::work_orders::Entity")]
     WorkOrders,
 }
 
-impl Related<super::images::Entity> for Entity {
+impl Related<super::parts::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Images.def()
+        Relation::Parts.def()
     }
 }
 
-impl Related<super::parts_by_model::Entity> for Entity {
+impl Related<super::product_image_links::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::PartsByModel.def()
+        Relation::ProductImageLinks.def()
     }
 }
 
@@ -53,15 +64,36 @@ impl Related<super::product_models::Entity> for Entity {
     }
 }
 
+impl Related<super::users::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Users.def()
+    }
+}
+
 impl Related<super::warranties::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Warranties.def()
     }
 }
 
+impl Related<super::work_order_closing_forms::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderClosingForms.def()
+    }
+}
+
 impl Related<super::work_orders::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::WorkOrders.def()
+    }
+}
+
+impl Related<super::images::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::product_image_links::Relation::Images.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::product_image_links::Relation::Products.def().rev())
     }
 }
 
