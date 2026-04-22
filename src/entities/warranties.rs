@@ -11,6 +11,7 @@ pub struct Model {
     pub product_id: Uuid,
     pub start_date: DateTimeUtc,
     pub end_date: DateTimeUtc,
+    pub warranty_status: String,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,

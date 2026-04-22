@@ -5,7 +5,7 @@ edition = "2021"
 
 [workspace]
 members = [".", "migration", "seeder"]
-default-members = [".", "migration"]
+default-members = [".", "migration", "seeder"]
 
 [dependencies]
 anyhow = "1.0.102"

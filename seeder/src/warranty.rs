@@ -47,13 +47,12 @@ pub async fn seed_random_warranties(
                 let warranty_years: i64 = ((fake::rand::random::<u32>() % 3) + 1) as i64;
                 Some(start_date + Duration::days(warranty_years * 365))
             };
-
             warranties::ActiveModel {
                 id: Set(Uuid::new_v4()),
                 customer_id: Set(customer_id),
                 product_id: Set(product_id),
                 start_date: Set(start_date),
-                end_date: Set(end_date),
+                end_date: Set(end_date.unwrap_or(start_date + Duration::days(365))),
                 warranty_status: Set(status.to_string()),
                 created_at: Set(now),
                 updated_at: Set(now),

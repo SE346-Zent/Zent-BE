@@ -6,7 +6,7 @@ use seeder::{
     UserSeedConfig, seed_account_statuses, seed_product_models, 
     seed_random_products, seed_random_warranties, seed_random_work_orders, seed_roles,
     seed_users, seed_work_order_closing_forms, seed_work_order_statuses,
-    seed_part_types, seed_part_by_model, seed_part_statuses, seed_work_order_symptoms
+    seed_parts_and_catalogs, seed_part_statuses, seed_work_order_symptoms, seed_part_conditions
 };
 use serde_json::to_string_pretty;
 use std::path::PathBuf;
@@ -102,6 +102,9 @@ async fn main() -> Result<()> {
     println!("\n--- Seeding Part Statuses ---");
     let part_statuses = seed_part_statuses(&db).await?;
 
+    println!("\n--- Seeding Part Conditions ---");
+    let part_conditions = seed_part_conditions(&db).await?;
+
     // -----------------------------------------------------------------------
     // Step 2: seed users FIRST (products & warranties need customer_id)
     // -----------------------------------------------------------------------
@@ -121,19 +124,7 @@ async fn main() -> Result<()> {
     let user_ids: Vec<uuid::Uuid> = records.iter().map(|r| r.id).collect();
 
     // -----------------------------------------------------------------------
-    // Step 3: seed work order closing forms
-    // -----------------------------------------------------------------------
-    let mut _closing_form_ids = Vec::new();
-    if num_closing_forms > 0 {
-        println!(
-            "\n--- Seeding Work Order Closing Forms ({}) ---",
-            num_closing_forms
-        );
-        _closing_form_ids = seed_work_order_closing_forms(&db, num_closing_forms, rng_seed).await?;
-    }
-
-    // -----------------------------------------------------------------------
-    // Step 4: seed products (needs users, product_status, product_models)
+    // Step 3: seed products (needs users, product_status, product_models)
     // -----------------------------------------------------------------------
     let mut product_ids = Vec::new();
     if num_products > 0 {
@@ -147,27 +138,37 @@ async fn main() -> Result<()> {
         )
         .await?;
         
-        println!("\n--- Seeding Part Types ---");
-        seed_part_types(&db, &part_statuses).await?;
-        
-        println!("\n--- Seeding Parts By Model ---");
-        seed_part_by_model(&db, &part_statuses).await?;
+        println!("\n--- Seeding Parts and Catalogs ---");
+        seed_parts_and_catalogs(&db, &part_statuses).await?;
     }
 
     // -----------------------------------------------------------------------
-    // Step 5: seed work orders
+    // Step 4: seed work orders
     // -----------------------------------------------------------------------
+    let mut work_order_ids = Vec::new();
     if num_work_orders > 0 {
         println!("\n--- Seeding Work Orders ({}) ---", num_work_orders);
-        seed_random_work_orders(
+        work_order_ids = seed_random_work_orders(
             &db, 
             num_work_orders, 
             rng_seed, 
             &user_ids, 
             &product_ids, 
-            &_closing_form_ids, 
+            &[], // closing forms are generated after, so pass empty
             &wo_symptoms
         ).await?;
+    }
+
+    // -----------------------------------------------------------------------
+    // Step 5: seed work order closing forms
+    // -----------------------------------------------------------------------
+    let mut _closing_form_ids = Vec::new();
+    if num_closing_forms > 0 {
+        println!(
+            "\n--- Seeding Work Order Closing Forms ({}) ---",
+            num_closing_forms
+        );
+        _closing_form_ids = seed_work_order_closing_forms(&db, num_closing_forms, rng_seed, &work_order_ids, &product_ids).await?;
     }
 
     // -----------------------------------------------------------------------

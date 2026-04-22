@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::collections::HashMap;
-use zent_be::entities::part_condition;
+use zent_be::entities::part_conditions;
 
 /// All part statuses that must exist in the database.
 pub const PART_CONDITIONS: &[&str] = &["OPERATIONAL", "DEGRADED", "DAMAGED", "SCRAPPED", "LOST_STOLEN"];
@@ -14,8 +14,8 @@ pub async fn seed_part_conditions(db: &DatabaseConnection) -> Result<HashMap<Str
     let now = Utc::now();
 
     for &name in PART_CONDITIONS {
-        let existing = part_condition::Entity::find()
-            .filter(part_condition::Column::Name.eq(name))
+        let existing = part_conditions::Entity::find()
+            .filter(part_conditions::Column::Name.eq(name))
             .one(db)
             .await?;
 
@@ -25,11 +25,9 @@ pub async fn seed_part_conditions(db: &DatabaseConnection) -> Result<HashMap<Str
                 s.id
             }
             None => {
-                let inserted = part_condition::ActiveModel {
+                let inserted = part_conditions::ActiveModel {
                     name: Set(name.to_string()),
-                    created_at: Set(now),
-                    updated_at: Set(now),
-                    deleted_at: Set(None),
+
                     ..Default::default()
                 }
                 .insert(db)

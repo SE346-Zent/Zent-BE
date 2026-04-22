@@ -23,5 +23,5 @@ pub use product_model::seed_product_models;
 pub use product::seed_random_products;
 pub use warranty::seed_random_warranties;
 pub use part_status::seed_part_statuses;
-pub use parts::{seed_part_types, seed_part_by_model};
+pub use parts::{seed_parts_and_catalogs};
 pub use part_condition::seed_part_conditions;

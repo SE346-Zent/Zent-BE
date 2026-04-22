@@ -10,6 +10,8 @@ pub struct Model {
     pub product_id: Uuid,
     #[sea_orm(unique)]
     pub work_order_id: Uuid,
+    pub mtm: String,
+    pub serial_number: String,
     pub diagnosis: String,
     pub signature_url: String,
     pub created_at: DateTimeUtc,

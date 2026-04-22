@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::collections::HashMap;
-use zent_be::entities::part_status;
+use zent_be::entities::part_mfg_statuses;
 
 /// All part statuses that must exist in the database.
 pub const PART_STATUSES: &[&str] = &["Pending", "Production", "Discontinued"];
@@ -14,8 +14,8 @@ pub async fn seed_part_statuses(db: &DatabaseConnection) -> Result<HashMap<Strin
     let now = Utc::now();
 
     for &name in PART_STATUSES {
-        let existing = part_status::Entity::find()
-            .filter(part_status::Column::Name.eq(name))
+        let existing = part_mfg_statuses::Entity::find()
+            .filter(part_mfg_statuses::Column::Name.eq(name))
             .one(db)
             .await?;
 
@@ -25,7 +25,7 @@ pub async fn seed_part_statuses(db: &DatabaseConnection) -> Result<HashMap<Strin
                 s.id
             }
             None => {
-                let inserted = part_status::ActiveModel {
+                let inserted = part_mfg_statuses::ActiveModel {
                     name: Set(name.to_string()),
                     created_at: Set(now),
                     updated_at: Set(now),

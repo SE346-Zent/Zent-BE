@@ -11,7 +11,7 @@ pub struct WarrantyDetailResponseData {
     pub customer_id: Uuid,
     pub product_id: Uuid,
     pub start_date: String,
-    pub end_date: Option<String>,
+    pub end_date: String,
     pub warranty_status: String,
     pub created_at: String,
     pub updated_at: String,

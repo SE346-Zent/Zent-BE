@@ -34,6 +34,26 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
+                    .table(WorkOrderRejectForms::Table)
+                    .if_not_exists()
+                    .col(uuid(WorkOrderRejectForms::Id).primary_key())
+                    .col(uuid(WorkOrderRejectForms::ApproverId))
+                    .col(boolean(WorkOrderRejectForms::Approved))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_wo_reject_forms_approver")
+                            .from(WorkOrderRejectForms::Table, WorkOrderRejectForms::ApproverId)
+                            .to(Users::Table, Users::Id)
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_table(
+                Table::create()
                     .table(WorkOrders::Table)
                     .if_not_exists()
                     .col(uuid(WorkOrders::Id).primary_key())
@@ -53,8 +73,11 @@ impl MigrationTrait for Migration {
                     .col(string(WorkOrders::Address))
                     .col(string_null(WorkOrders::Building))
                     .col(timestamp(WorkOrders::Appointment))
-                    .col(uuid(WorkOrders::AssignerId))
-                    .col(uuid_null(WorkOrders::AssigneeId))
+                    .col(uuid(WorkOrders::AdminId))
+                    .col(uuid_null(WorkOrders::TechnicianId))
+                    .col(uuid_null(WorkOrders::CompleteFormId))
+                    .col(string(WorkOrders::WorkOrderNumber))
+                    .col(uuid_null(WorkOrders::RejectFormId))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -100,17 +123,25 @@ impl MigrationTrait for Migration {
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_work_order_assigner")
-                            .from(WorkOrders::Table, WorkOrders::AssignerId)
+                            .name("fk_work_order_admin")
+                            .from(WorkOrders::Table, WorkOrders::AdminId)
                             .to(Users::Table, Users::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_work_order_assignee")
-                            .from(WorkOrders::Table, WorkOrders::AssigneeId)
+                            .name("fk_work_order_technician")
+                            .from(WorkOrders::Table, WorkOrders::TechnicianId)
                             .to(Users::Table, Users::Id)
+                            .on_update(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Restrict)
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_work_order_reject_form")
+                            .from(WorkOrders::Table, WorkOrders::RejectFormId)
+                            .to(WorkOrderRejectForms::Table, WorkOrderRejectForms::Id)
                             .on_update(ForeignKeyAction::Cascade)
                             .on_delete(ForeignKeyAction::Restrict)
                     )
@@ -126,6 +157,8 @@ impl MigrationTrait for Migration {
                     .col(uuid(WorkOrderClosingForms::Id).primary_key())
                     .col(uuid(WorkOrderClosingForms::ProductId))
                     .col(uuid(WorkOrderClosingForms::WorkOrderId).unique_key())
+                    .col(string(WorkOrderClosingForms::Mtm))
+                    .col(string(WorkOrderClosingForms::SerialNumber))
                     .col(string(WorkOrderClosingForms::Diagnosis))
                     .col(string(WorkOrderClosingForms::SignatureURL))
                     .col(timestamp(CreatedAt))
@@ -150,35 +183,7 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        manager
-            .create_table(
-                Table::create()
-                    .table(WorkOrderRejectForms::Table)
-                    .if_not_exists()
-                    .col(uuid(WorkOrderRejectForms::Id).primary_key())
-                    .col(string(WorkOrderRejectForms::RejectReason))
-                    .col(uuid(WorkOrderRejectForms::ApproverId))
-                    .col(boolean(WorkOrderRejectForms::Approved))
-                    .col(uuid(WorkOrderRejectForms::WorkOrderId).unique_key())
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_wo_reject_forms_approver")
-                            .from(WorkOrderRejectForms::Table, WorkOrderRejectForms::ApproverId)
-                            .to(Users::Table, Users::Id)
-                            .on_update(ForeignKeyAction::Cascade)
-                            .on_delete(ForeignKeyAction::Restrict)
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_wo_reject_forms_work_order")
-                            .from(WorkOrderRejectForms::Table, WorkOrderRejectForms::WorkOrderId)
-                            .to(WorkOrders::Table, WorkOrders::Id)
-                            .on_update(ForeignKeyAction::Cascade)
-                            .on_delete(ForeignKeyAction::Restrict)
-                    )
-                    .to_owned(),
-            )
-            .await?;
+
 
         manager
             .create_table(
@@ -378,6 +383,7 @@ enum WorkOrders
 {
     Table,
     Id,
+    WorkOrderNumber,
     WorkOrderStatusId,
     CustomerId,
     ProductId,
@@ -394,8 +400,10 @@ enum WorkOrders
     Address,
     Building,
     Appointment,
-    AssignerId,
-    AssigneeId,
+    AdminId,
+    TechnicianId,
+    CompleteFormId,
+    RejectFormId,
 }
 
 #[derive(DeriveIden)]
@@ -404,6 +412,8 @@ enum WorkOrderClosingForms {
     Id,
     ProductId,
     WorkOrderId,
+    Mtm,
+    SerialNumber,
     Diagnosis,
     SignatureURL,
 }
@@ -414,10 +424,8 @@ enum WorkOrderRejectForms
 {
     Table,
     Id,
-    RejectReason,
     ApproverId,
     Approved,
-    WorkOrderId,
 }
 
 #[derive(DeriveIden)]

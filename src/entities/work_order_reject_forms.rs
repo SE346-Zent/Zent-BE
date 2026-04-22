@@ -7,11 +7,8 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub reject_reason: String,
     pub approver_id: Uuid,
     pub approved: bool,
-    #[sea_orm(unique)]
-    pub work_order_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -24,13 +21,7 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     Users,
-    #[sea_orm(
-        belongs_to = "super::work_orders::Entity",
-        from = "Column::WorkOrderId",
-        to = "super::work_orders::Column::Id",
-        on_update = "Cascade",
-        on_delete = "Restrict"
-    )]
+    #[sea_orm(has_many = "super::work_orders::Entity")]
     WorkOrders,
 }
 

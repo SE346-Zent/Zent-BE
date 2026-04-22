@@ -22,7 +22,7 @@ pub async fn get_product_detail_service(
 
     let data = ProductDetailResponseData {
         id: product_model.id,
-        model_id: product_model.model_id,
+        product_model_code: product_model.product_model_code,
         customer_id: product_model.customer_id,
         serial_number: product_model.serial_number,
         created_at: product_model.created_at.to_string(),

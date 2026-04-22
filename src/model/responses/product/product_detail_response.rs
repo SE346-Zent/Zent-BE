@@ -7,7 +7,7 @@ use crate::define_api_response;
 #[derive(Serialize, Deserialize, ToSchema, Debug)]
 pub struct ProductDetailResponseData {
     pub id: Uuid,
-    pub model_id: i32,
+    pub product_model_code: String,
     pub customer_id: Uuid,
     pub serial_number: String,
     pub created_at: String,

@@ -23,8 +23,11 @@ pub struct Model {
     pub address: String,
     pub building: Option<String>,
     pub appointment: DateTimeUtc,
-    pub assigner_id: Uuid,
-    pub assignee_id: Option<Uuid>,
+    pub admin_id: Uuid,
+    pub technician_id: Option<Uuid>,
+    pub complete_form_id: Option<Uuid>,
+    pub work_order_number: String,
+    pub reject_form_id: Option<Uuid>,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
@@ -42,7 +45,7 @@ pub enum Relation {
     Products,
     #[sea_orm(
         belongs_to = "super::users::Entity",
-        from = "Column::AssigneeId",
+        from = "Column::TechnicianId",
         to = "super::users::Column::Id",
         on_update = "Cascade",
         on_delete = "Restrict"
@@ -50,7 +53,7 @@ pub enum Relation {
     Users3,
     #[sea_orm(
         belongs_to = "super::users::Entity",
-        from = "Column::AssignerId",
+        from = "Column::AdminId",
         to = "super::users::Column::Id",
         on_update = "Cascade",
         on_delete = "Restrict"
@@ -68,7 +71,13 @@ pub enum Relation {
     WorkOrderClosingForms,
     #[sea_orm(has_many = "super::work_order_image_links::Entity")]
     WorkOrderImageLinks,
-    #[sea_orm(has_one = "super::work_order_reject_forms::Entity")]
+    #[sea_orm(
+        belongs_to = "super::work_order_reject_forms::Entity",
+        from = "Column::RejectFormId",
+        to = "super::work_order_reject_forms::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Restrict"
+    )]
     WorkOrderRejectForms,
     #[sea_orm(has_many = "super::work_order_state_history::Entity")]
     WorkOrderStateHistory,

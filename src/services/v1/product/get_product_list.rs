@@ -41,7 +41,7 @@ pub async fn get_product_list_service(
 fn map_product_list_item(model: products::Model) -> ProductListItemResponseData {
     ProductListItemResponseData {
         id: model.id,
-        model_id: model.model_id,
+        product_model_code: model.product_model_code,
         customer_id: model.customer_id,
         serial_number: model.serial_number,
         created_at: model.created_at.to_string(),

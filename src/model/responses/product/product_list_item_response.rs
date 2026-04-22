@@ -8,7 +8,7 @@ use crate::model::responses::common::pagination_meta::PaginationMeta;
 #[derive(Serialize, Deserialize, ToSchema, Debug)]
 pub struct ProductListItemResponseData {
     pub id: Uuid,
-    pub model_id: i32,
+    pub product_model_code: String,
     pub customer_id: Uuid,
     pub serial_number: String,
     pub created_at: String,

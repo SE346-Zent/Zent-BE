@@ -40,7 +40,8 @@ pub struct PartsFile {
 }
 
 fn load_parts_data() -> Result<PartsFile> {
-    let content = std::fs::read_to_string("resources/parts.json")?;
+    let path = format!("{}/resources/parts.json", env!("CARGO_MANIFEST_DIR"));
+    let content = std::fs::read_to_string(path)?;
     let data: PartsFile = serde_json::from_str(&content)?;
     Ok(data)
 }
@@ -176,7 +177,7 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
                     id: Set(p_id),
                     part_catalog_id: Set(mp.part_catalog_id),
                     product_id: Set(Some(product.id)),
-                    serial_number: Set(uuid::Uuid::new_v4().to_string().chars().take(12).collect()), // Short random SN
+                    serial_number: Set(format!("SN-{}", Uuid::new_v4().to_string()[..8].to_uppercase())), // Short random handmade SN
                     part_condition_id: Set(1), // Assume pristine condition initially
                     manufactured_date: Set(now),
                     installation_date: Set(Some(now)),

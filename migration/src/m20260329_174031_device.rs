@@ -90,6 +90,7 @@ impl MigrationTrait for Migration {
                     .col(uuid(Warranties::ProductId))
                     .col(timestamp(Warranties::StartDate))
                     .col(timestamp(Warranties::EndDate))
+                    .col(string(Warranties::WarrantyStatus))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
@@ -216,6 +217,7 @@ enum Warranties
     ProductId,
     StartDate,
     EndDate,
+    WarrantyStatus,
 }
 
 #[derive(DeriveIden)]

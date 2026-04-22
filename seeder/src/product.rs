@@ -5,7 +5,7 @@ use fake::{
     faker::company::en::BsNoun,
     rand::{SeedableRng, rngs::StdRng, seq::IndexedRandom},
 };
-use sea_orm::{DatabaseConnection, EntityTrait, Set};
+use sea_orm::{DatabaseConnection, EntityTrait, Set, ActiveModelTrait};
 use std::collections::HashMap;
 use uuid::Uuid;
 use zent_be::entities::products;
@@ -49,7 +49,7 @@ pub async fn seed_random_products(
         let noun: String = BsNoun().fake_with_rng(&mut rng);
         let serial_number = format!("SN-{}-{:05}", noun.to_uppercase().replace(' ', ""), i);
 
-        products::ActiveModel {
+        zent_be::entities::products::ActiveModel {
             id: Set(id),
             product_model_code: Set((*model_code).to_string()),
             customer_id: Set(customer_id),
@@ -69,14 +69,14 @@ pub async fn seed_random_products(
             "https://images.unsplash.com/photo-1544117519-31a4b719223d?auto=format&fit=crop&w=500&q=60"
         };
         let img_id = Uuid::new_v4();
-        images::ActiveModel {
+        zent_be::entities::images::ActiveModel {
             id: Set(img_id),
             image_url: Set(url.to_string()),
             created_at: Set(now),
             updated_at: Set(now),
             deleted_at: Set(None),
         }.insert(db).await?;
-        product_image_links::ActiveModel {
+        zent_be::entities::product_image_links::ActiveModel {
             image_id: Set(img_id),
             product_id: Set(id),
         }.insert(db).await?;

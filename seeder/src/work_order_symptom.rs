@@ -63,7 +63,7 @@ pub async fn seed_work_order_symptoms(db: &DatabaseConnection) -> Result<HashMap
     for &name in WORK_ORDER_SYMPTOMS
     {
         let existing = work_order_symptoms::Entity::find()
-            .filter(work_order_symptoms::Column::SymptomNames.eq(name))
+            .filter(work_order_symptoms::Column::Name.eq(name))
             .one(db)
             .await?;
 
