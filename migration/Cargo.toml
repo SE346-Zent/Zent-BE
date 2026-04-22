@@ -23,4 +23,5 @@ features = [
   "runtime-tokio-native-tls",
   "sqlx-sqlite",
   "sqlx-postgres",
+  "sqlx-mysql",
 ]
