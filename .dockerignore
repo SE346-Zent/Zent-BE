@@ -1,0 +1,14 @@
+target/
+.git/
+.github/
+.vscode/
+.env
+.env.*
+README.md
+Dockerfile
+docker-compose.yml
+seeder_errors.txt
+errors.txt
+tests/
+tasks/
+data/
