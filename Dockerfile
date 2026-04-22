@@ -2,14 +2,14 @@
 FROM --platform=$BUILDPLATFORM lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS planner
 WORKDIR /app
 COPY . .
-RUN cargo chef prepare --recipe-json recipe.json
+RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 2: Cacher
 FROM lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS cacher
 WORKDIR /app
 COPY --from=planner /app/recipe.json recipe.json
 # Build dependencies - cached based on platform
-RUN cargo chef cook --release --locked --recipe-json recipe.json
+RUN cargo chef cook --release --locked --recipe-path recipe.json
 
 # Stage 3: Builder
 FROM lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS builder
