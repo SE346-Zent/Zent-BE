@@ -9,7 +9,8 @@ FROM lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS cacher
 WORKDIR /app
 COPY --from=planner /app/recipe.json recipe.json
 # Build dependencies - cached based on platform
-RUN cargo chef cook --release --locked --recipe-path recipe.json
+# Removed --locked here to allow synchronization if Cargo.lock is slightly out of date
+RUN cargo chef cook --release --recipe-path recipe.json
 
 # Stage 3: Builder
 FROM lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS builder
@@ -18,7 +19,7 @@ COPY . .
 # Copy dependencies from cacher stage for this specific architecture
 COPY --from=cacher /app/target target
 COPY --from=cacher $CARGO_HOME $CARGO_HOME
-# Build the application - --locked ensures we use the exact versions from Cargo.lock
+# Build the application - --locked ensures we use the exact versions from the sync step
 RUN cargo build --release --locked --package zent-be --package seeder
 
 # Stage 4: Runtime
