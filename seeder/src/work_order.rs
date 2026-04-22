@@ -12,9 +12,9 @@ use fake::{
 };
 use sea_orm::{DatabaseConnection, EntityTrait, Set};
 use uuid::Uuid;
-use zent_be::entities::{work_order_status, work_orders};
+use zent_be::entities::{work_order_statuses, work_orders};
 
-const ROLES: &[&str] = &["Technician", "Admin", "Customer"];
+const ROLES: &[&str] = &["Technician", "Admin", "Customer", "SuperAdmin"];
 
 /// Generates and inserts random work orders into the database.
 ///
@@ -24,8 +24,19 @@ pub async fn seed_random_work_orders(
     db: &DatabaseConnection,
     count: usize,
     seed: u64,
-) -> Result<()> {
-    let valid_statuses = work_order_status::Entity::find().all(db).await?;
+    user_ids: &[Uuid],
+    product_ids: &[Uuid],
+    closing_form_ids: &[Uuid],
+    work_order_symptoms: &std::collections::HashMap<String, i32>,
+) -> Result<Vec<Uuid>> {
+    if user_ids.is_empty() || product_ids.is_empty() {
+        // Can't seed without users and products
+        return Ok(vec![]);
+    }
+
+    let symptom_ids = work_order_symptoms.values().cloned().collect::<Vec<i32>>();
+
+    let valid_statuses = work_order_statuses::Entity::find().all(db).await?;
     if valid_statuses.is_empty() {
         anyhow::bail!("Cannot seed work orders: no rows found in work_order_status.");
     }
@@ -35,19 +46,25 @@ pub async fn seed_random_work_orders(
 
     println!("  Generating {} fake work orders...", count);
 
+    let mut inserted_ids = Vec::with_capacity(count);
+
     let records: Vec<work_orders::ActiveModel> = (0..count)
-        .map(|i| {
+        .map(|_| {
             let status = valid_statuses
                 .choose(&mut rng)
                 .context("Failed to pick a random status")
                 .unwrap();
+            
+            let wo_id = Uuid::new_v4();
+            inserted_ids.push(wo_id);
 
             work_orders::ActiveModel {
-                id: Set(Uuid::new_v4()),
+                id: Set(wo_id),
+                work_order_number: Set(wo_id.to_string()[..4].to_uppercase()),
                 first_name: Set(FirstName().fake_with_rng(&mut rng)),
                 last_name: Set(LastName().fake_with_rng(&mut rng)),
-                email: Set(FreeEmail().fake_with_rng(&mut rng)),
-                phone_number: Set(PhoneNumber().fake_with_rng(&mut rng)),
+                email: Set(Some(FreeEmail().fake_with_rng(&mut rng))),
+                phone_number: Set(Some(PhoneNumber().fake_with_rng(&mut rng))),
                 work_order_status_id: Set(status.id),
                 country: Set(CountryName().fake_with_rng(&mut rng)),
                 state: Set(StateName().fake_with_rng(&mut rng)),
@@ -57,17 +74,20 @@ pub async fn seed_random_work_orders(
                     BuildingNumber().fake_with_rng::<String, _>(&mut rng),
                     StreetName().fake_with_rng::<String, _>(&mut rng),
                 )),
-                building: Set(BuildingNumber().fake_with_rng(&mut rng)),
+                building: Set(Some(BuildingNumber().fake_with_rng(&mut rng))),
                 appointment: Set(now),
-                reference_ticket: Set(format!("REF-{:05}", i + 1)),
+                reference_ticket_id: Set(None),
+                description: Set("".to_string()),
                 created_at: Set(now),
                 updated_at: Set(now),
-                closed_at: Set(now),
-                admin_id: Set(Uuid::new_v4()),
-                customer_id: Set(Uuid::new_v4()),
-                technician_id: Set(Uuid::new_v4()),
-                complete_form_id: Set(Uuid::new_v4()),
-                reject_form_id: Set(Uuid::new_v4()),
+                deleted_at: Set(None),
+                admin_id: Set(*user_ids.choose(&mut rng).unwrap()),
+                customer_id: Set(*user_ids.choose(&mut rng).unwrap()),
+                technician_id: Set(Some(*user_ids.choose(&mut rng).unwrap())),
+                complete_form_id: if closing_form_ids.is_empty() { Set(Some(Uuid::new_v4())) } else { Set(Some(*closing_form_ids.choose(&mut rng).unwrap())) },
+                reject_form_id: Set(None),
+                work_order_symptom_id: Set(*symptom_ids.choose(&mut rng).unwrap_or(&1)),
+                product_id: Set(*product_ids.choose(&mut rng).unwrap()),
             }
         })
         .collect();
@@ -76,5 +96,5 @@ pub async fn seed_random_work_orders(
     work_orders::Entity::insert_many(records).exec(db).await?;
 
     println!("  Successfully seeded {} work orders.", count);
-    Ok(())
+    Ok(inserted_ids)
 }

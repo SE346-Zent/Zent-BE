@@ -2,7 +2,7 @@ use axum::Router;
 use sea_orm::{Database, ConnectOptions};
 use std::time::Duration;
 use tracing::info;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
 
 #[macro_use]
 pub mod macros;
@@ -17,16 +17,12 @@ pub mod state;
 
 use crate::state::AppState;
 use crate::config::AppConfig;
+use migration::{MigratorTrait, Migrator};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "debug".into())
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    // Structured JSON logs + OpenTelemetry pipeline
+    infrastructure::tracing::init_tracing();
 
     tracing::info!("Server starting...");
     
@@ -36,6 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Connect to database
     let mut opt = ConnectOptions::new(&cfg.database_url);
+
     opt.max_connections(100)
        .min_connections(5)
        .connect_timeout(Duration::from_secs(8))
@@ -45,6 +42,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
        .sqlx_logging(false);
     
     let db = Database::connect(opt).await?;
+    tracing::info!("Running db migrations");
+    Migrator::up(&db, None).await.expect("Failed to run db migrations");
+    tracing::info!("DB migrations applied successfully");
+
 
     // Connect to RabbitMQ using configured URI mapping efficiently
     let rabbitmq = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url)
@@ -75,6 +76,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
         .with_graceful_shutdown(shutdown_signal())
         .await?;
+
+    // Flush remaining OTel spans
+    infrastructure::tracing::shutdown_tracing();
 
     Ok(())
 }

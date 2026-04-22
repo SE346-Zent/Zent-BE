@@ -1,10 +1,13 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, ToSchema, Debug)]
 pub struct CreateClosingFormRequest {
-    pub work_order_counting: String,
+    pub product_id: Uuid,
+    pub work_order_id: Uuid,
     pub mtm: String,
     pub serial_number: String,
     pub diagnosis: String,
+    pub signature_url: String,
 }

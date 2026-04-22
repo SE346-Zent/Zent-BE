@@ -4,8 +4,8 @@ use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, ToSchema, Debug)]
 pub struct WarrantyListQuery {
-    #[serde(rename = "equipmentId")]
-    pub equipment_id: Option<Uuid>,
+    #[serde(rename = "productId")]
+    pub product_id: Option<Uuid>,
 
     #[serde(rename = "customerId")]
     pub customer_id: Option<Uuid>,

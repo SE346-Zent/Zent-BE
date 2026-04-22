@@ -7,13 +7,29 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
-    pub name: String,
-    pub created_at: DateTimeUtc,
-    pub updated_at: DateTimeUtc,
-    pub deleted_at: Option<DateTimeUtc>,
+    #[sea_orm(unique)]
+    pub part_type_name: String,
+    pub description: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(has_many = "super::new_part_forms::Entity")]
+    NewPartForms,
+    #[sea_orm(has_many = "super::part_catalog::Entity")]
+    PartCatalog,
+}
+
+impl Related<super::new_part_forms::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::NewPartForms.def()
+    }
+}
+
+impl Related<super::part_catalog::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PartCatalog.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}

@@ -7,6 +7,6 @@ pub struct ImageListQuery {
     #[serde(rename = "partId")]
     pub part_id: Option<Uuid>,
 
-    #[serde(rename = "equipmentId")]
-    pub equipment_id: Option<Uuid>,
+    #[serde(rename = "productId")]
+    pub product_id: Option<Uuid>,
 }

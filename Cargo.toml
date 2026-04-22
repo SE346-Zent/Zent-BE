@@ -5,7 +5,7 @@ edition = "2021"
 
 [workspace]
 members = [".", "migration", "seeder"]
-default-members = [".", "migration"]
+default-members = [".", "migration", "seeder"]
 
 [dependencies]
 anyhow = "1.0.102"
@@ -51,7 +51,11 @@ tower-http = { version = "0.6.8", features = [
     "compression-gzip",
 ] }
 tracing = "0.1.44"
-tracing-subscriber = "0.3.22"
+tracing-subscriber = { version = "0.3.22", features = ["json", "env-filter"] }
+tracing-opentelemetry = "0.28"
+opentelemetry = "0.27"
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", features = ["grpc-tonic"] }
 utoipa = { version = "5.4.0", features = [
     "axum_extras",
     "config",
@@ -61,7 +65,7 @@ utoipa = { version = "5.4.0", features = [
 utoipa-scalar = { version = "0.3.0", features = ["axum"] }
 uuid = { version = "1.21.0", features = ["serde", "v4"] }
 validator = { version = "0.20.0", features = ["derive"] }
+migration = { path = "migration" }
 
 [dev-dependencies]
 rstest = "0.26.1"
-migration = { path = "migration" }

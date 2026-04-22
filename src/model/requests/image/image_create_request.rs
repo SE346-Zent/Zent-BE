@@ -7,6 +7,6 @@ use uuid::Uuid;
 pub struct ImageCreateRequest {
     pub image_url: String,
     pub part_id: Option<Uuid>,
-    pub equipment_id: Option<Uuid>,
+    pub product_id: Option<Uuid>,
     pub captured_at: String,
 }

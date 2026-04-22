@@ -7,13 +7,13 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub full_name: String,
-    #[sea_orm(unique)]
-    pub email: String,
-    pub password_hash: String,
-    pub phone_number: String,
     pub account_status: i32,
     pub role_id: i32,
+    #[sea_orm(unique)]
+    pub email: String,
+    pub full_name: String,
+    pub password_hash: String,
+    pub phone_number: String,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
@@ -29,6 +29,8 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     AccountStatus,
+    #[sea_orm(has_many = "super::products::Entity")]
+    Products,
     #[sea_orm(
         belongs_to = "super::roles::Entity",
         from = "Column::RoleId",
@@ -39,11 +41,23 @@ pub enum Relation {
     Roles,
     #[sea_orm(has_many = "super::sessions::Entity")]
     Sessions,
+    #[sea_orm(has_many = "super::warranties::Entity")]
+    Warranties,
+    #[sea_orm(has_many = "super::work_order_reject_forms::Entity")]
+    WorkOrderRejectForms,
+    #[sea_orm(has_many = "super::work_order_state_history::Entity")]
+    WorkOrderStateHistory,
 }
 
 impl Related<super::account_status::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::AccountStatus.def()
+    }
+}
+
+impl Related<super::products::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Products.def()
     }
 }
 
@@ -56,6 +70,24 @@ impl Related<super::roles::Entity> for Entity {
 impl Related<super::sessions::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Sessions.def()
+    }
+}
+
+impl Related<super::warranties::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Warranties.def()
+    }
+}
+
+impl Related<super::work_order_reject_forms::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderRejectForms.def()
+    }
+}
+
+impl Related<super::work_order_state_history::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderStateHistory.def()
     }
 }
 

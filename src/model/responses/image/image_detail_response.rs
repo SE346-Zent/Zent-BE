@@ -10,7 +10,7 @@ pub struct ImageDetailResponseData {
     pub id: Uuid,
     pub image_url: String,
     pub part_id: Option<Uuid>,
-    pub equipment_id: Option<Uuid>,
+    pub product_id: Option<Uuid>,
     pub captured_at: String,
     pub created_at: String,
     pub updated_at: String,

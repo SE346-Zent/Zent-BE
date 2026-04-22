@@ -12,7 +12,6 @@ use tracing::error;
 
 use crate::model::auth::jwt_claims::Claims;
 
-// TODO: Add logging for requests and errors
 pub enum AuthError {
     InvalidTokenError,
     ExpiredTokenError,

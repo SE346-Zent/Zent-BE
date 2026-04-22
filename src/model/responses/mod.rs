@@ -3,7 +3,6 @@ pub mod error;
 pub mod account;
 pub mod work_order;
 pub mod common;
-pub mod equipment;
-pub mod part;
+pub mod product;
 pub mod warranty;
 pub mod image;

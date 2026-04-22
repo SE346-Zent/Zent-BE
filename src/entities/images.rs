@@ -8,9 +8,6 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub image_url: String,
-    pub part_id: Option<Uuid>,
-    pub equipment_id: Option<Uuid>,
-    pub captured_at: DateTimeUtc,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
@@ -18,33 +15,140 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(
-        belongs_to = "super::equipments::Entity",
-        from = "Column::EquipmentId",
-        to = "super::equipments::Column::Id",
-        on_update = "Cascade",
-        on_delete = "Cascade"
-    )]
-    Equipments,
-    #[sea_orm(
-        belongs_to = "super::parts::Entity",
-        from = "Column::PartId",
-        to = "super::parts::Column::Id",
-        on_update = "Cascade",
-        on_delete = "Cascade"
-    )]
-    Parts,
+    #[sea_orm(has_many = "super::closing_form_image_links::Entity")]
+    ClosingFormImageLinks,
+    #[sea_orm(has_many = "super::new_part_form_image_links::Entity")]
+    NewPartFormImageLinks,
+    #[sea_orm(has_many = "super::part_catalog_image_links::Entity")]
+    PartCatalogImageLinks,
+    #[sea_orm(has_many = "super::part_image_links::Entity")]
+    PartImageLinks,
+    #[sea_orm(has_many = "super::product_image_links::Entity")]
+    ProductImageLinks,
+    #[sea_orm(has_many = "super::product_model_image_links::Entity")]
+    ProductModelImageLinks,
+    #[sea_orm(has_many = "super::work_order_image_links::Entity")]
+    WorkOrderImageLinks,
 }
 
-impl Related<super::equipments::Entity> for Entity {
+impl Related<super::closing_form_image_links::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Equipments.def()
+        Relation::ClosingFormImageLinks.def()
+    }
+}
+
+impl Related<super::new_part_form_image_links::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::NewPartFormImageLinks.def()
+    }
+}
+
+impl Related<super::part_catalog_image_links::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PartCatalogImageLinks.def()
+    }
+}
+
+impl Related<super::part_image_links::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PartImageLinks.def()
+    }
+}
+
+impl Related<super::product_image_links::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ProductImageLinks.def()
+    }
+}
+
+impl Related<super::product_model_image_links::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ProductModelImageLinks.def()
+    }
+}
+
+impl Related<super::work_order_image_links::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderImageLinks.def()
+    }
+}
+
+impl Related<super::new_part_forms::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::new_part_form_image_links::Relation::NewPartForms.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::new_part_form_image_links::Relation::Images
+                .def()
+                .rev(),
+        )
+    }
+}
+
+impl Related<super::part_catalog::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::part_catalog_image_links::Relation::PartCatalog.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::part_catalog_image_links::Relation::Images
+                .def()
+                .rev(),
+        )
     }
 }
 
 impl Related<super::parts::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Parts.def()
+        super::part_image_links::Relation::Parts.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::part_image_links::Relation::Images.def().rev())
+    }
+}
+
+impl Related<super::product_models::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::product_model_image_links::Relation::ProductModels.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::product_model_image_links::Relation::Images
+                .def()
+                .rev(),
+        )
+    }
+}
+
+impl Related<super::products::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::product_image_links::Relation::Products.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::product_image_links::Relation::Images.def().rev())
+    }
+}
+
+impl Related<super::work_order_closing_forms::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::closing_form_image_links::Relation::WorkOrderClosingForms.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::closing_form_image_links::Relation::Images
+                .def()
+                .rev(),
+        )
+    }
+}
+
+impl Related<super::work_orders::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::work_order_image_links::Relation::WorkOrders.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::work_order_image_links::Relation::Images.def().rev())
     }
 }
 

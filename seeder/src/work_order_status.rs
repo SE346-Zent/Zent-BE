@@ -1,16 +1,18 @@
 use anyhow::Result;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::collections::HashMap;
-use zent_be::entities::work_order_status;
+use zent_be::entities::work_order_statuses;
+use chrono::Utc;
 
-pub const WO_STATUSES: &[&str] = &["Pending", "InProg", "Closed", "Reject_InReview", "Rejected"];
+pub const WO_STATUSES: &[&str] = &["Pending", "Assigned", "InProg", "Closed", "Reject_InReview", "Rejected"];
 
 pub async fn seed_work_order_statuses(db: &DatabaseConnection) -> Result<HashMap<String, i32>> {
     let mut map: HashMap<String, i32> = HashMap::new();
+    let now = Utc::now();
 
     for &name in WO_STATUSES {
-        let existing = work_order_status::Entity::find()
-            .filter(work_order_status::Column::Name.eq(name))
+        let existing = work_order_statuses::Entity::find()
+            .filter(work_order_statuses::Column::Name.eq(name))
             .one(db)
             .await?;
 
@@ -20,8 +22,9 @@ pub async fn seed_work_order_statuses(db: &DatabaseConnection) -> Result<HashMap
                 s.id
             }
             None => {
-                let inserted = work_order_status::ActiveModel {
+                let inserted = work_order_statuses::ActiveModel {
                     name: Set(name.to_string()),
+
                     ..Default::default()
                 }
                 .insert(db)
