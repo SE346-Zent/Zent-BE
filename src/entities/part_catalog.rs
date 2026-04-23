@@ -10,6 +10,7 @@ pub struct Model {
     pub part_number: String,
     pub part_types_id: i32,
     pub mfg_number: String,
+    pub description: Option<String>,
     pub part_mfg_status: i32,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,

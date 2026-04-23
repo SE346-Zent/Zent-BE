@@ -94,6 +94,14 @@ impl MigrationTrait for Migration {
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
                     .col(timestamp_null(DeletedAt))
+                    .index(
+                        Index::create()
+                            .name("idx_warranty_unique_customer_product_start")
+                            .col(Warranties::CustomerId)
+                            .col(Warranties::ProductId)
+                            .col(Warranties::StartDate)
+                            .unique(),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_warranty_product")
@@ -110,7 +118,7 @@ impl MigrationTrait for Migration {
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
-                    .to_owned(),
+                    .to_owned()
             )
             .await?;
 

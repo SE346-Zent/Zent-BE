@@ -24,13 +24,15 @@ pub async fn seed_random_work_orders(
     db: &DatabaseConnection,
     count: usize,
     seed: u64,
-    user_ids: &[Uuid],
+    customer_ids: &[Uuid],
+    technician_ids: &[Uuid],
+    admin_ids: &[Uuid],
     product_ids: &[Uuid],
     closing_form_ids: &[Uuid],
     work_order_symptoms: &std::collections::HashMap<String, i32>,
 ) -> Result<Vec<Uuid>> {
-    if user_ids.is_empty() || product_ids.is_empty() {
-        // Can't seed without users and products
+    if customer_ids.is_empty() || product_ids.is_empty() {
+        // Can't seed without customers and products
         return Ok(vec![]);
     }
 
@@ -58,6 +60,11 @@ pub async fn seed_random_work_orders(
             let wo_id = Uuid::new_v4();
             inserted_ids.push(wo_id);
 
+            // Default to any user if specific role list is empty
+            let admin_id = admin_ids.choose(&mut rng).unwrap_or_else(|| customer_ids.choose(&mut rng).unwrap());
+            let technician_id = technician_ids.choose(&mut rng);
+            let &customer_id = customer_ids.choose(&mut rng).unwrap();
+
             work_orders::ActiveModel {
                 id: Set(wo_id),
                 work_order_number: Set(wo_id.to_string()[..4].to_uppercase()),
@@ -81,9 +88,9 @@ pub async fn seed_random_work_orders(
                 created_at: Set(now),
                 updated_at: Set(now),
                 deleted_at: Set(None),
-                admin_id: Set(*user_ids.choose(&mut rng).unwrap()),
-                customer_id: Set(*user_ids.choose(&mut rng).unwrap()),
-                technician_id: Set(Some(*user_ids.choose(&mut rng).unwrap())),
+                admin_id: Set(*admin_id),
+                customer_id: Set(customer_id),
+                technician_id: Set(technician_id.copied()),
                 complete_form_id: if closing_form_ids.is_empty() { Set(Some(Uuid::new_v4())) } else { Set(Some(*closing_form_ids.choose(&mut rng).unwrap())) },
                 reject_form_id: Set(None),
                 work_order_symptom_id: Set(*symptom_ids.choose(&mut rng).unwrap_or(&1)),

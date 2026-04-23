@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use uuid::Uuid;
 use chrono::Utc;
-use fake::{Fake, Faker};
 
 use zent_be::entities::{
     part_types, part_catalog, parts_by_model, parts,
@@ -23,6 +22,7 @@ pub struct PartCatalogData {
     pub part_number: String,
     pub commodity_type: String,
     pub mfg_number: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,7 +46,7 @@ fn load_parts_data() -> Result<PartsFile> {
     Ok(data)
 }
 
-pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &HashMap<String, i32>) -> Result<()> {
+pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &HashMap<String, i32>, _seed: u64) -> Result<()> {
     let data = load_parts_data()?;
     let now = Utc::now();
     let default_status = *part_statuses.get("Production").unwrap_or(&1);
@@ -55,6 +55,7 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
 
     // 1. Seed PartTypes
     let mut type_id_map: HashMap<String, i32> = HashMap::new();
+
     for pt in data.part_types {
         let existing = part_types::Entity::find()
             .filter(part_types::Column::PartTypeName.eq(&pt.commodity_type))
@@ -66,21 +67,19 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
         } else {
             let inserted = part_types::ActiveModel {
                 part_type_name: Set(pt.commodity_type.clone()),
-                description: Set(Some(pt.description)),
+                description: Set(Some("".to_string())),
                 ..Default::default()
             }
             .insert(db)
             .await?;
             inserted.id
         };
-        type_id_map.insert(pt.commodity_type, id);
+        type_id_map.insert(pt.commodity_type.clone(), id);
     }
     println!("  Successfully seeded {} part types.", type_id_map.len());
 
     // 2. Seed PartCatalog
     println!("  Seeding part catalogs...");
-    let mut catalog_map: HashMap<(i32, String), Uuid> = HashMap::new(); // (PartTypesId, MFGNumber) -> PartCatalog.Id
-
     for pc in data.part_catalogs {
         if let Some(&type_id) = type_id_map.get(&pc.commodity_type) {
             let existing = part_catalog::Entity::find()
@@ -89,15 +88,15 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
                 .one(db)
                 .await?;
 
-            let id = if let Some(e) = existing {
-                e.id
-            } else {
+            if existing.is_none() {
                 let new_id = Uuid::new_v4();
+
                 part_catalog::ActiveModel {
                     id: Set(new_id),
                     part_number: Set(pc.part_number),
                     part_types_id: Set(type_id),
                     mfg_number: Set(pc.mfg_number.clone()),
+                    description: Set(pc.description),
                     part_mfg_status: Set(default_status),
                     created_at: Set(now),
                     updated_at: Set(now),
@@ -112,13 +111,10 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
                     image_id: Set(img_id),
                     part_catalog_id: Set(new_id),
                 }.insert(db).await?;
-
-                new_id
-            };
-            catalog_map.insert((type_id, pc.mfg_number.clone()), id);
+            }
         }
     }
-    println!("  Successfully seeded {} part catalogs.", catalog_map.len());
+    println!("  Successfully seeded part catalogs.");
 
     // 3. Seed PartsByModel
     println!("  Seeding parts by model (installations)...");
@@ -130,9 +126,6 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
         
         if existing_model.is_some() {
             for inst in installs {
-                // Find PartCatalogId by resolving commodity recursively or searching DB.
-                // Wait, installations only have part_number and mfg_number. 
-                // We need to query the part_catalog table to find the UUID.
                 let cat_item = part_catalog::Entity::find()
                     .filter(part_catalog::Column::PartNumber.eq(&inst.part_number))
                     .filter(part_catalog::Column::MfgNumber.eq(&inst.mfg_number))
@@ -164,7 +157,6 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
     let products = products::Entity::find().all(db).await?;
     let mut parts_created = 0;
     for product in products {
-        // Query the parts designed for this product's model
         let model_parts = parts_by_model::Entity::find()
             .filter(parts_by_model::Column::ProductModelCode.eq(&product.product_model_code))
             .all(db)
@@ -206,7 +198,6 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
 
 async fn seed_image(db: &DatabaseConnection) -> Result<Uuid> {
     let id = Uuid::new_v4();
-    // Some random laptop/hardware images
     let r: u8 = rand::random();
     let url = match r % 4 {
         0 => "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=500&q=60".to_string(), // Circuit board

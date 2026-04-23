@@ -97,7 +97,7 @@ async fn main() -> Result<()> {
     let wo_symptoms = seed_work_order_symptoms(&db).await?;
 
     println!("\n--- Seeding Product Models ---");
-    let prod_models = seed_product_models(&db).await?;
+    let prod_models = seed_product_models(&db, rng_seed).await?;
     
     println!("\n--- Seeding Part Statuses ---");
     let part_statuses = seed_part_statuses(&db).await?;
@@ -121,7 +121,21 @@ async fn main() -> Result<()> {
     .await?;
 
     // Collect user IDs for downstream seeders
-    let user_ids: Vec<uuid::Uuid> = records.iter().map(|r| r.id).collect();
+    let customer_ids: Vec<uuid::Uuid> = records
+        .iter()
+        .filter(|r| r.role == "Customer")
+        .map(|r| r.id)
+        .collect();
+    let technician_ids: Vec<uuid::Uuid> = records
+        .iter()
+        .filter(|r| r.role == "Technician")
+        .map(|r| r.id)
+        .collect();
+    let admin_ids: Vec<uuid::Uuid> = records
+        .iter()
+        .filter(|r| r.role == "Admin" || r.role == "SuperAdmin")
+        .map(|r| r.id)
+        .collect();
 
     // -----------------------------------------------------------------------
     // Step 3: seed products (needs users, product_status, product_models)
@@ -133,13 +147,13 @@ async fn main() -> Result<()> {
             &db,
             num_products,
             rng_seed,
-            &user_ids,
+            &customer_ids,
             &prod_models,
         )
         .await?;
         
         println!("\n--- Seeding Parts and Catalogs ---");
-        seed_parts_and_catalogs(&db, &part_statuses).await?;
+        seed_parts_and_catalogs(&db, &part_statuses, rng_seed).await?;
     }
 
     // -----------------------------------------------------------------------
@@ -152,7 +166,9 @@ async fn main() -> Result<()> {
             &db, 
             num_work_orders, 
             rng_seed, 
-            &user_ids, 
+            &customer_ids,
+            &technician_ids,
+            &admin_ids,
             &product_ids, 
             &[], // closing forms are generated after, so pass empty
             &wo_symptoms
@@ -176,7 +192,7 @@ async fn main() -> Result<()> {
     // -----------------------------------------------------------------------
     if num_warranties > 0 {
         println!("\n--- Seeding Warranties ({}) ---", num_warranties);
-        seed_random_warranties(&db, num_warranties, rng_seed, &user_ids, &product_ids).await?;
+        seed_random_warranties(&db, num_warranties, rng_seed, &customer_ids, &product_ids).await?;
     }
 
     // -----------------------------------------------------------------------
