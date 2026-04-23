@@ -54,3 +54,6 @@ tasks/
 nginx/
 db_seed.rs
 *.py 
+.env.example
+errors.txt
+seeder_errors.txt

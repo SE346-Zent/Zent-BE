@@ -16,7 +16,7 @@ use std::path::PathBuf;
 #[command(version, about = "Seed the zent_be database with fake data", long_about = None)]
 struct Args {
     /// Database connection URL
-    #[arg(short, long, env="database_url")]
+    #[arg(short, long, env="DATABASE_URL")]
     db_url: Option<String>,
 
     /// Number of users to generate
@@ -48,12 +48,12 @@ struct Args {
     interactive: bool,
 
     /// Write plaintext user credentials to a JSON file instead of STDOUT
-    /// Database connection URL
-    #[arg(short, long, env="DATABASE_URL")]
-    db_url: Option<String>,
-    ...
-    #[tokio::main]
-    async fn main() -> Result<()> {
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
     let args = Args::parse();
 
     let (db_url, num_users, num_work_orders, num_products, num_warranties, num_closing_forms, rng_seed) =
@@ -258,30 +258,6 @@ fn prompt_all(args: &Args) -> Result<(String, usize, usize, usize, usize, usize,
         num_warranties,
         num_closing_forms,
         rng_seed,
-    ))
-}
-
-fn prompt_missing(args: &Args) -> Result<(String, usize, usize, usize, usize, usize, u64)> {
-    let db_url = match &args.db_url {
-        Some(url) => url.clone(),
-        None => Input::new().with_prompt("Database URL").interact_text()?,
-    };
-
-    let num_users = match args.num_users {
-        Some(n) => n,
-        None => Input::new()
-            .with_prompt("Number of users")
-            .interact_text()?,
-    };
-
-    Ok((
-        db_url,
-        num_users,
-        args.work_orders.unwrap_or(0),
-        args.products.unwrap_or(0),
-        args.warranties.unwrap_or(0),
-        args.closing_forms.unwrap_or(0),
-        args.rng_seed,
     ))
 }
 

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use uuid::Uuid;
 use chrono::Utc;
+use rand::Rng;
 
 use zent_be::entities::{
     part_types, part_catalog, parts_by_model, parts,

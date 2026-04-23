@@ -8,7 +8,7 @@ use fake::{
         name::en::{FirstName, LastName},
         phone_number::en::PhoneNumber,
     },
-    rand::{SeedableRng, rngs::StdRng, seq::IndexedRandom},
+    rand::{SeedableRng, rngs::StdRng, seq::SliceRandom},
 };
 use sea_orm::{DatabaseConnection, EntityTrait, Set};
 use uuid::Uuid;

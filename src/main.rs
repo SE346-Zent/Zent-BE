@@ -33,12 +33,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to database
     let mut opt = ConnectOptions::new(&cfg.database_url);
 
-    opt.max_connections(100)
-       .min_connections(5)
-       .connect_timeout(Duration::from_secs(8))
-       .acquire_timeout(Duration::from_secs(8))
-       .idle_timeout(Duration::from_secs(8))
-       .max_lifetime(Duration::from_secs(8))
+    opt.max_connections(cfg.db_max_connections)
+       .min_connections(cfg.db_min_connections)
+       .connect_timeout(Duration::from_secs(cfg.db_connect_timeout_seconds))
+       .acquire_timeout(Duration::from_secs(cfg.db_acquire_timeout_seconds))
+       .idle_timeout(Duration::from_secs(cfg.db_idle_timeout_seconds))
+       .max_lifetime(Duration::from_secs(cfg.db_max_lifetime_seconds))
        .sqlx_logging(false);
     
     let db = Database::connect(opt).await?;
