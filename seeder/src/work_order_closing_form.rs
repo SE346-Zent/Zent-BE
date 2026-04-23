@@ -1,9 +1,9 @@
 use anyhow::Result;
 use chrono::Utc;
+use rand::{rngs::StdRng, SeedableRng, seq::IndexedRandom};
 use fake::{
     Fake,
     faker::lorem::en::Sentence,
-    rand::{SeedableRng, rngs::StdRng, seq::SliceRandom},
 };
 use sea_orm::{DatabaseConnection, EntityTrait, Set};
 use uuid::Uuid;

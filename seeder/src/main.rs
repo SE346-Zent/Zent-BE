@@ -109,7 +109,7 @@ async fn main() -> Result<()> {
     let part_statuses = seed_part_statuses(&db).await?;
 
     println!("\n--- Seeding Part Conditions ---");
-    let part_conditions = seed_part_conditions(&db).await?;
+    let _part_conditions = seed_part_conditions(&db).await?;
 
     // -----------------------------------------------------------------------
     // Step 2: seed users FIRST (products & warranties need customer_id)

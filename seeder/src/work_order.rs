@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
+use rand::{rngs::StdRng, SeedableRng, seq::IndexedRandom};
 use fake::{
     Fake,
     faker::{
@@ -8,13 +9,10 @@ use fake::{
         name::en::{FirstName, LastName},
         phone_number::en::PhoneNumber,
     },
-    rand::{SeedableRng, rngs::StdRng, seq::SliceRandom},
 };
 use sea_orm::{DatabaseConnection, EntityTrait, Set};
 use uuid::Uuid;
 use zent_be::entities::{work_order_statuses, work_orders};
-
-const ROLES: &[&str] = &["Technician", "Admin", "Customer", "SuperAdmin"];
 
 /// Generates and inserts random work orders into the database.
 ///

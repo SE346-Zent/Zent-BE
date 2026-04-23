@@ -28,8 +28,8 @@ pub async fn seed_random_warranties(
 
     println!("  Generating {} fake warranties...", count);
 
-    use rand::seq::SliceRandom;
-    let mut rng = rand::thread_rng();
+    use rand::seq::IndexedRandom;
+    let mut rng = rand::rng();
 
     let mut records = Vec::with_capacity(count);
     for _ in 0..count {
