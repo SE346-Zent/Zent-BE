@@ -48,28 +48,34 @@ struct Args {
     interactive: bool,
 
     /// Write plaintext user credentials to a JSON file instead of STDOUT
-    #[arg(short, long)]
-    output: Option<PathBuf>,
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
+    /// Database connection URL
+    #[arg(short, long, env="DATABASE_URL")]
+    db_url: Option<String>,
+    ...
+    #[tokio::main]
+    async fn main() -> Result<()> {
     let args = Args::parse();
 
     let (db_url, num_users, num_work_orders, num_products, num_warranties, num_closing_forms, rng_seed) =
         if args.interactive {
             prompt_all(&args)?
-        } else if args.db_url.is_none() || args.num_users.is_none() {
-            prompt_missing(&args)?
         } else {
+            // Non-interactive mode: validate that required args are present
+            let db_url = args.db_url.clone().ok_or_else(|| {
+                anyhow::anyhow!("Missing database URL. Provide --db-url or set DATABASE_URL environment variable.")
+            })?;
+            let num_users = args.num_users.ok_or_else(|| {
+                anyhow::anyhow!("Missing number of users. Provide --num-users.")
+            })?;
+
             let mut forms = args.closing_forms.unwrap_or(0);
             let wos = args.work_orders.unwrap_or(0);
             if wos > 0 && forms == 0 {
-                forms = wos; // Auto-generate forms for the work orders to satisfy `complete_form_id` FK
+                forms = wos;
             }
             (
-                args.db_url.clone().unwrap(),
-                args.num_users.unwrap(),
+                db_url,
+                num_users,
                 wos,
                 args.products.unwrap_or(0),
                 args.warranties.unwrap_or(0),
