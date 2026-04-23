@@ -16,10 +16,34 @@ pub struct AppConfig {
     #[serde(default = "default_session_ttl")]
     pub session_ttl_seconds: i64,
 
+    #[serde(default = "default_db_max_connections")]
+    pub db_max_connections: u32,
+
+    #[serde(default = "default_db_min_connections")]
+    pub db_min_connections: u32,
+
+    #[serde(default = "default_db_connect_timeout")]
+    pub db_connect_timeout_seconds: u64,
+
+    #[serde(default = "default_db_acquire_timeout")]
+    pub db_acquire_timeout_seconds: u64,
+
+    #[serde(default = "default_db_idle_timeout")]
+    pub db_idle_timeout_seconds: u64,
+
+    #[serde(default = "default_db_max_lifetime")]
+    pub db_max_lifetime_seconds: u64,
 }
 
 fn default_access_token_ttl() -> i64 { 3600 }
 fn default_session_ttl() -> i64 { 86400 }
+
+fn default_db_max_connections() -> u32 { 100 }
+fn default_db_min_connections() -> u32 { 5 }
+fn default_db_connect_timeout() -> u64 { 30 }
+fn default_db_acquire_timeout() -> u64 { 30 }
+fn default_db_idle_timeout() -> u64 { 600 }
+fn default_db_max_lifetime() -> u64 { 1800 }
 
 static CONFIG: OnceLock<AppConfig> = OnceLock::new();
 

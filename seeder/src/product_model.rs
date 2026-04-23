@@ -3,6 +3,7 @@ use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::collections::HashMap;
 use uuid::Uuid;
+use rand;
 
 use zent_be::entities::product_models;
 

@@ -34,6 +34,7 @@ pub async fn seed_random_products(
     let mut inserted_ids = Vec::with_capacity(count);
 
     use rand::seq::SliceRandom;
+    use rand;
     let mut rng = rand::thread_rng();
 
     for i in 0..count {

@@ -3,7 +3,7 @@ use chrono::Utc;
 use fake::{
     Fake,
     faker::lorem::en::Sentence,
-    rand::{SeedableRng, rngs::StdRng, seq::IndexedRandom},
+    rand::{SeedableRng, rngs::StdRng, seq::SliceRandom},
 };
 use sea_orm::{DatabaseConnection, EntityTrait, Set};
 use uuid::Uuid;
