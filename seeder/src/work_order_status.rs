@@ -8,7 +8,7 @@ pub const WO_STATUSES: &[&str] = &["Pending", "Assigned", "InProg", "Closed", "R
 
 pub async fn seed_work_order_statuses(db: &DatabaseConnection) -> Result<HashMap<String, i32>> {
     let mut map: HashMap<String, i32> = HashMap::new();
-    let now = Utc::now();
+    let _now = Utc::now();
 
     for &name in WO_STATUSES {
         let existing = work_order_statuses::Entity::find()

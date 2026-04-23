@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::Utc;
-use sea_orm::{DatabaseConnection, EntityTrait, Set, ActiveModelTrait};
+use sea_orm::{DatabaseConnection, Set, ActiveModelTrait};
 use std::collections::HashMap;
 use uuid::Uuid;
 use zent_be::entities::products;
@@ -27,15 +27,14 @@ pub async fn seed_random_products(
 
     // Sort for deterministic picking (even if using thread_rng for other things)
     let mut model_entries: Vec<(&String, &String)> = product_models.iter().collect();
-    model_entries.sort_by_key(|(name, _)| name.clone());
+    model_entries.sort_by_key(|(name, _)| (*name).clone());
 
     println!("  Generating {} fake products...", count);
 
     let mut inserted_ids = Vec::with_capacity(count);
 
-    use rand::seq::SliceRandom;
-    use rand;
-    let mut rng = rand::thread_rng();
+    use rand::seq::IndexedRandom;
+    let mut rng = rand::rng();
 
     for i in 0..count {
         let (_, model_code) = model_entries.choose(&mut rng).unwrap();

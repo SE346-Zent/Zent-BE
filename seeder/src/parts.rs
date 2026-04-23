@@ -4,12 +4,11 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use uuid::Uuid;
 use chrono::Utc;
-use rand::Rng;
 
 use zent_be::entities::{
     part_types, part_catalog, parts_by_model, parts,
     product_models, products, images, 
-    product_image_links, product_model_image_links, part_image_links, part_catalog_image_links
+    part_image_links, part_catalog_image_links
 };
 
 #[derive(Debug, Deserialize)]

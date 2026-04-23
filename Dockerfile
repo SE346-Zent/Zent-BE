@@ -1,18 +1,18 @@
 # Stage 1: Planner
-FROM --platform=linux/amd64 lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS planner
+FROM lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS planner
 WORKDIR /app
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Stage 2: Cacher
-FROM --platform=linux/amd64 lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS cacher
+FROM lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS cacher
 WORKDIR /app
 COPY --from=planner /app/recipe.json recipe.json
 # Build dependencies - cached based on platform
 RUN cargo chef cook --release --recipe-path recipe.json
 
 # Stage 3: Builder
-FROM --platform=linux/amd64 lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS builder
+FROM lukemathwalker/cargo-chef:latest-rust-1.88-bookworm AS builder
 WORKDIR /app
 COPY . .
 # Copy dependencies from cacher stage for this specific architecture
@@ -23,7 +23,7 @@ COPY --from=cacher $CARGO_HOME $CARGO_HOME
 RUN cargo build --release --package zent-be --package seeder
 
 # Stage 4: Runtime
-FROM --platform=linux/amd64 debian:bookworm-slim AS runtime
+FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 # Install runtime dependencies for the target architecture
 RUN apt-get update && apt-get install -y \

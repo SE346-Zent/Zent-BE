@@ -4,14 +4,14 @@ use argon2::{
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
 };
 use chrono::Utc;
+use rand::{rngs::StdRng, SeedableRng, seq::IndexedRandom};
 use fake::{
     Fake,
     faker::{
-        internet::en::{FreeEmail, Password},
+        internet::en::FreeEmail,
         name::en::Name,
         phone_number::en::PhoneNumber,
     },
-    rand::{SeedableRng, rngs::StdRng, seq::SliceRandom},
 };
 use rayon::prelude::*;
 use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, Set};
@@ -124,8 +124,8 @@ pub async fn seed_users(
                 password,
                 role_id: *role_id,
                 role_name: role_name.clone(),
-                account_status_id: 1,
-                account_status_name: "Active".to_string(),
+                account_status_id: *status_id,
+                account_status_name: status_name.clone(),
             }
         })
         .collect();

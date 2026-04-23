@@ -11,7 +11,7 @@ pub const PART_CONDITIONS: &[&str] = &["OPERATIONAL", "DEGRADED", "DAMAGED", "SC
 /// Statuses that already exist are skipped (idempotent).
 pub async fn seed_part_conditions(db: &DatabaseConnection) -> Result<HashMap<String, i32>> {
     let mut map = HashMap::new();
-    let now = Utc::now();
+    let _now = Utc::now();
 
     for &name in PART_CONDITIONS {
         let existing = part_conditions::Entity::find()
