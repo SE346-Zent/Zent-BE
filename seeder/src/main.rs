@@ -97,7 +97,7 @@ async fn main() -> Result<()> {
     let wo_symptoms = seed_work_order_symptoms(&db).await?;
 
     println!("\n--- Seeding Product Models ---");
-    let prod_models = seed_product_models(&db).await?;
+    let prod_models = seed_product_models(&db, rng_seed).await?;
     
     println!("\n--- Seeding Part Statuses ---");
     let part_statuses = seed_part_statuses(&db).await?;
@@ -153,7 +153,7 @@ async fn main() -> Result<()> {
         .await?;
         
         println!("\n--- Seeding Parts and Catalogs ---");
-        seed_parts_and_catalogs(&db, &part_statuses).await?;
+        seed_parts_and_catalogs(&db, &part_statuses, rng_seed).await?;
     }
 
     // -----------------------------------------------------------------------

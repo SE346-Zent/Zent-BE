@@ -1,10 +1,5 @@
 use anyhow::Result;
 use chrono::Utc;
-use fake::{
-    Fake,
-    faker::company::en::BsNoun,
-    rand::{SeedableRng, rngs::StdRng, seq::IndexedRandom},
-};
 use sea_orm::{DatabaseConnection, EntityTrait, Set, ActiveModelTrait};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -17,7 +12,7 @@ use zent_be::entities::products;
 pub async fn seed_random_products(
     db: &DatabaseConnection,
     count: usize,
-    seed: u64,
+    _seed: u64,
     customer_ids: &[Uuid],
     product_models: &HashMap<String, String>,
 ) -> Result<Vec<Uuid>> {
@@ -28,16 +23,18 @@ pub async fn seed_random_products(
         anyhow::bail!("Cannot seed products: no product models found.");
     }
 
-    let mut rng = StdRng::seed_from_u64(seed);
     let now = Utc::now();
 
-    // Sort for deterministic picking
+    // Sort for deterministic picking (even if using thread_rng for other things)
     let mut model_entries: Vec<(&String, &String)> = product_models.iter().collect();
     model_entries.sort_by_key(|(name, _)| name.clone());
 
     println!("  Generating {} fake products...", count);
 
     let mut inserted_ids = Vec::with_capacity(count);
+
+    use rand::seq::SliceRandom;
+    let mut rng = rand::thread_rng();
 
     for i in 0..count {
         let (_, model_code) = model_entries.choose(&mut rng).unwrap();
@@ -46,10 +43,12 @@ pub async fn seed_random_products(
         let id = Uuid::new_v4();
         inserted_ids.push(id);
 
-        let noun: String = BsNoun().fake_with_rng(&mut rng);
+        use fake::Fake;
+        use fake::faker::company::en::BsNoun;
+        let noun: String = BsNoun().fake();
         let serial_number = format!("SN-{}-{:05}", noun.to_uppercase().replace(' ', ""), i);
 
-        zent_be::entities::products::ActiveModel {
+        products::ActiveModel {
             id: Set(id),
             product_model_code: Set((*model_code).to_string()),
             customer_id: Set(customer_id),
@@ -69,14 +68,14 @@ pub async fn seed_random_products(
             "https://images.unsplash.com/photo-1544117519-31a4b719223d?auto=format&fit=crop&w=500&q=60"
         };
         let img_id = Uuid::new_v4();
-        zent_be::entities::images::ActiveModel {
+        images::ActiveModel {
             id: Set(img_id),
             image_url: Set(url.to_string()),
             created_at: Set(now),
             updated_at: Set(now),
             deleted_at: Set(None),
         }.insert(db).await?;
-        zent_be::entities::product_image_links::ActiveModel {
+        product_image_links::ActiveModel {
             image_id: Set(img_id),
             product_id: Set(id),
         }.insert(db).await?;

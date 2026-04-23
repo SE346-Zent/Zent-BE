@@ -3,6 +3,7 @@ use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::collections::HashMap;
 use uuid::Uuid;
+
 use zent_be::entities::product_models;
 
 /// Realistic Lenovo product models to seed.
@@ -11,7 +12,7 @@ pub const PRODUCT_MODELS: &[(&str, &str)] = &[
     ("Legion 5 15IRX10 - Type 83LY", "83LY00HQVN"),
 ];
 
-pub async fn seed_product_models(db: &DatabaseConnection) -> Result<HashMap<String, String>> {
+pub async fn seed_product_models(db: &DatabaseConnection, _seed: u64) -> Result<HashMap<String, String>> {
     let mut map = HashMap::new();
     let now = Utc::now();
 
