@@ -17,6 +17,7 @@ impl MigrationTrait for Migration {
                     .col(string(PartCatalog::PartNumber))
                     .col(integer(PartCatalog::PartTypesId))
                     .col(string(PartCatalog::MFGNumber))
+                    .col(string_null(PartCatalog::Description))
                     .col(integer(PartCatalog::PartMfgStatus))
                     .col(timestamp(CreatedAt))
                     .col(timestamp(UpdatedAt))
@@ -148,6 +149,7 @@ enum PartCatalog {
     PartMfgStatus,
     PartTypesId,
     MFGNumber,
+    Description,
 }
 
 #[derive(DeriveIden)]

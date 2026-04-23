@@ -23,6 +23,7 @@ pub struct PartCatalogData {
     pub part_number: String,
     pub commodity_type: String,
     pub mfg_number: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +56,7 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
 
     // 1. Seed PartTypes
     let mut type_id_map: HashMap<String, i32> = HashMap::new();
+
     for pt in data.part_types {
         let existing = part_types::Entity::find()
             .filter(part_types::Column::PartTypeName.eq(&pt.commodity_type))
@@ -66,14 +68,14 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
         } else {
             let inserted = part_types::ActiveModel {
                 part_type_name: Set(pt.commodity_type.clone()),
-                description: Set(Some(pt.description)),
+                description: Set(Some("".to_string())),
                 ..Default::default()
             }
             .insert(db)
             .await?;
             inserted.id
         };
-        type_id_map.insert(pt.commodity_type, id);
+        type_id_map.insert(pt.commodity_type.clone(), id);
     }
     println!("  Successfully seeded {} part types.", type_id_map.len());
 
@@ -93,11 +95,13 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
                 e.id
             } else {
                 let new_id = Uuid::new_v4();
+
                 part_catalog::ActiveModel {
                     id: Set(new_id),
                     part_number: Set(pc.part_number),
                     part_types_id: Set(type_id),
                     mfg_number: Set(pc.mfg_number.clone()),
+                    description: Set(pc.description),
                     part_mfg_status: Set(default_status),
                     created_at: Set(now),
                     updated_at: Set(now),

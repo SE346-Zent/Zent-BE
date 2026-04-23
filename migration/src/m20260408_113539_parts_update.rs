@@ -1,4 +1,4 @@
-use sea_orm_migration::{prelude::*, schema::*};
+use sea_orm_migration::{prelude::*, schema::*, sea_orm::DbBackend};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -7,7 +7,9 @@ pub struct Migration;
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         let db = manager.get_connection();
-        db.execute(sea_orm_migration::sea_orm::Statement::from_string(manager.get_database_backend(), "PRAGMA foreign_keys = ON;".to_owned())).await?;
+        if manager.get_database_backend() == DbBackend::Sqlite {
+            db.execute(sea_orm_migration::sea_orm::Statement::from_string(manager.get_database_backend(), "PRAGMA foreign_keys = ON;".to_owned())).await?;
+        }
 
         // Parts table
         // PartCatalog and PartCondition are now created in the part migration
