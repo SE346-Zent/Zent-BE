@@ -9,6 +9,28 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
+                    .table(Roles::Table)
+                    .if_not_exists()
+                    .col(pk_auto(Roles::Id))
+                    .col(string(Roles::Name))
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_table(
+                Table::create()
+                    .table(AccountStatus::Table)
+                    .if_not_exists()
+                    .col(pk_auto(AccountStatus::Id))
+                    .col(string(AccountStatus::Name))
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_table(
+                Table::create()
                     .table(Users::Table)
                     .if_not_exists()
                     .col(uuid(Users::Id).primary_key())
@@ -37,28 +59,6 @@ impl MigrationTrait for Migration {
                             .on_delete(ForeignKeyAction::Restrict)
                             .on_update(ForeignKeyAction::Cascade),
                     )
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(Roles::Table)
-                    .if_not_exists()
-                    .col(pk_auto(Roles::Id))
-                    .col(string(Roles::Name))
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(AccountStatus::Table)
-                    .if_not_exists()
-                    .col(pk_auto(AccountStatus::Id))
-                    .col(string(AccountStatus::Name))
                     .to_owned(),
             )
             .await?;

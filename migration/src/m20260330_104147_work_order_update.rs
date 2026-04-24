@@ -345,10 +345,10 @@ impl MigrationTrait for Migration {
         manager.drop_table(Table::drop().table(Images::Table).to_owned()).await?;
         
         manager.drop_table(Table::drop().table(WorkOrderStateHistory::Table).to_owned()).await?;
-        manager.drop_table(Table::drop().table(WorkOrderRejectForms::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(WorkOrderClosingForms::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(WorkOrders::Table).to_owned()).await?;
         
+        manager.drop_table(Table::drop().table(WorkOrderRejectForms::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(WorkOrderSymptoms::Table).to_owned()).await?;
         manager.drop_table(Table::drop().table(WorkOrderStatuses::Table).to_owned()).await?;
         Ok(())
