@@ -40,9 +40,8 @@ pub struct PartsFile {
 }
 
 fn load_parts_data() -> Result<PartsFile> {
-    let path = format!("{}/resources/parts.json", env!("CARGO_MANIFEST_DIR"));
-    let content = std::fs::read_to_string(path)?;
-    let data: PartsFile = serde_json::from_str(&content)?;
+    let content = include_str!("../resources/parts.json");
+    let data: PartsFile = serde_json::from_str(content)?;
     Ok(data)
 }
 
@@ -51,7 +50,7 @@ pub async fn seed_parts_and_catalogs(db: &DatabaseConnection, part_statuses: &Ha
     let now = Utc::now();
     let default_status = *part_statuses.get("Production").unwrap_or(&1);
 
-    println!("  Loaded {} part types from parts.json.", data.part_types.len());
+    println!("  Loaded {} part types from embedded parts.json.", data.part_types.len());
 
     // 1. Seed PartTypes
     let mut type_id_map: HashMap<String, i32> = HashMap::new();
