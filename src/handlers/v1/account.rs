@@ -12,7 +12,7 @@ use crate::{
         responses::account::profile_list_item_response::ProfileListResponse,
         responses::error::{AppError, ErrorResponse},
     },
-    services::v1::account::profile_service::{get_profile_service, get_profiles_service},
+    // services::v1::account::profile_service::{get_profile_service, get_profiles_service},
 };
 
 #[utoipa::path(
@@ -28,12 +28,13 @@ use crate::{
     )
 )]
 pub async fn get_profile(
-    State(db): State<DatabaseConnection>,
-    auth: AuthUser,
+    State(_db): State<DatabaseConnection>,
+    _auth: AuthUser,
 ) -> Result<Json<ProfileDetailResponse>, AppError> {
     // Utilize the hydrated context!
-    let result = get_profile_service(db, auth.user.id).await?;
-    Ok(Json(result))
+    // let result = get_profile_service(db, auth.user.id).await?;
+    // Ok(Json(result))
+    Err(AppError::Internal(anyhow::anyhow!("Service not implemented")))
 }
 
 #[utoipa::path(
@@ -51,12 +52,13 @@ pub async fn get_profile(
     )
 )]
 pub async fn get_profiles(
-    State(db): State<DatabaseConnection>,
-    Query(query): Query<ProfileListQuery>,
+    State(_db): State<DatabaseConnection>,
+    Query(_query): Query<ProfileListQuery>,
     _auth: AuthUser,
 ) -> Result<Json<ProfileListResponse>, AppError> {
-    let result = get_profiles_service(db, query).await?;
-    Ok(Json(result))
+    // let result = get_profiles_service(db, query).await?;
+    // Ok(Json(result))
+    Err(AppError::Internal(anyhow::anyhow!("Service not implemented")))
 }
 
 pub fn router() -> Router<crate::state::AppState> {

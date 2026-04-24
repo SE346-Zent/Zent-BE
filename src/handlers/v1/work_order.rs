@@ -21,11 +21,13 @@ use crate::{
             warranty::warranty_detail_response::WarrantyDetailResponse,
         },
     },
+    /*
     services::v1::work_order::{
         my_work_order_service::{get_my_work_order_service, get_my_work_orders_service},
         create_work_order_service::{create_work_order_service, create_closing_form_service},
         warranty_service::get_warranty_service,
     },
+    */
 };
 
 use crate::model::requests::warranty::warranty_detail_query::WarrantyDetailQuery;
@@ -46,12 +48,13 @@ use crate::model::requests::warranty::warranty_detail_query::WarrantyDetailQuery
     )
 )]
 pub async fn get_my_work_order(
-    State(db): State<DatabaseConnection>,
-    Query(query): Query<WorkOrderQuery>,
+    State(_db): State<DatabaseConnection>,
+    Query(_query): Query<WorkOrderQuery>,
     _auth: AuthUser,
 ) -> Result<Json<WorkOrderDetailResponse>, AppError> {
-    let result = get_my_work_order_service(db, query.id).await?;
-    Ok(Json(result))
+    // let result = get_my_work_order_service(db, query.id).await?;
+    // Ok(Json(result))
+    Err(AppError::Internal(anyhow::anyhow!("Service not implemented")))
 }
 
 #[utoipa::path(
@@ -69,12 +72,13 @@ pub async fn get_my_work_order(
     )
 )]
 pub async fn get_my_work_orders(
-    State(db): State<DatabaseConnection>,
-    Query(query): Query<WorkOrderListQuery>,
+    State(_db): State<DatabaseConnection>,
+    Query(_query): Query<WorkOrderListQuery>,
     _auth: AuthUser,
 ) -> Result<Json<WorkOrderListResponse>, AppError> {
-    let result = get_my_work_orders_service(db, query).await?;
-    Ok(Json(result))
+    // let result = get_my_work_orders_service(db, query).await?;
+    // Ok(Json(result))
+    Err(AppError::Internal(anyhow::anyhow!("Service not implemented")))
 }
 
 #[utoipa::path(
@@ -92,12 +96,13 @@ pub async fn get_my_work_orders(
     )
 )]
 pub async fn create_work_order(
-    State(db): State<DatabaseConnection>,
+    State(_db): State<DatabaseConnection>,
     _auth: AuthUser,
-    Json(body): Json<CreateWorkOrderRequest>,
+    Json(_body): Json<CreateWorkOrderRequest>,
 ) -> Result<Json<WorkOrderDetailResponse>, AppError> {
-    let result = create_work_order_service(db, body).await?;
-    Ok(Json(result))
+    // let result = create_work_order_service(db, body).await?;
+    // Ok(Json(result))
+    Err(AppError::Internal(anyhow::anyhow!("Service not implemented")))
 }
 
 #[utoipa::path(
@@ -115,12 +120,13 @@ pub async fn create_work_order(
     )
 )]
 pub async fn create_closing_form(
-    State(db): State<DatabaseConnection>,
+    State(_db): State<DatabaseConnection>,
     _auth: AuthUser,
-    Json(body): Json<CreateClosingFormRequest>,
+    Json(_body): Json<CreateClosingFormRequest>,
 ) -> Result<Json<ClosingFormResponse>, AppError> {
-    let result = create_closing_form_service(db, body).await?;
-    Ok(Json(result))
+    // let result = create_closing_form_service(db, body).await?;
+    // Ok(Json(result))
+    Err(AppError::Internal(anyhow::anyhow!("Service not implemented")))
 }
 
 #[utoipa::path(
@@ -139,12 +145,13 @@ pub async fn create_closing_form(
     )
 )]
 pub async fn get_warranty(
-    State(db): State<DatabaseConnection>,
-    Query(query): Query<WarrantyDetailQuery>,
+    State(_db): State<DatabaseConnection>,
+    Query(_query): Query<WarrantyDetailQuery>,
     _auth: AuthUser,
 ) -> Result<Json<WarrantyDetailResponse>, AppError> {
-    let result = get_warranty_service(db, query.warranty_id).await?;
-    Ok(Json(result))
+    // let result = get_warranty_service(db, query.warranty_id).await?;
+    // Ok(Json(result))
+    Err(AppError::Internal(anyhow::anyhow!("Service not implemented")))
 }
 
 pub fn router() -> Router<crate::state::AppState> {
