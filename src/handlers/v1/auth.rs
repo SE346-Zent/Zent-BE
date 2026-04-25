@@ -8,7 +8,7 @@ use validator::Validate;
 use crate::{
     core::{
         errors::{AppError, ErrorResponse},
-        state::{AppState, AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds},
+        state::AppState,
     },
     model::{
         requests::auth::{
@@ -22,10 +22,41 @@ use crate::{
             base::{ApiResponse, MessageOnlyResponse},
         },
     },
-    services::v1::auth::{login_service, register_service, verify_otp_service, resend_otp_service},
+    services::v1::auth::{login_service, register_service, verify_otp_service, resend_otp_service, refresh_token_service},
 };
-use sea_orm::DatabaseConnection;
-use jsonwebtoken::EncodingKey;
+use crate::model::requests::auth::refresh_token_request::RefreshTokenRequest;
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/refresh-token",
+    request_body = RefreshTokenRequest,
+    responses(
+        (status = 200, description = "Token refreshed successfully", body = ApiResponse<LoginResponseData>),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    )
+)]
+pub async fn refresh_token_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<RefreshTokenRequest>,
+) -> Result<Json<ApiResponse<LoginResponseData>>, AppError> {
+    if let Err(errors) = payload.validate() {
+        let err_msg = errors.to_string();
+        return Err(AppError::BadRequest(err_msg));
+    }
+
+    let result = refresh_token_service::perform_refresh(
+        state.db.clone(),
+        state.valkey.clone(),
+        state.access_token_ttl,
+        state.session_ttl,
+        state.encoding_key.clone(),
+        payload
+    ).await?;
+    
+    Ok(Json(result))
+}
 
 #[utoipa::path(
     post,
@@ -38,10 +69,7 @@ use jsonwebtoken::EncodingKey;
     )
 )]
 pub async fn login_handler(
-    State(db): State<DatabaseConnection>,
-    State(access_token_ttl): State<AccessTokenDefaultTTLSeconds>,
-    State(session_ttl): State<SessionDefaultTTLSeconds>,
-    State(encoding_key): State<EncodingKey>,
+    State(state): State<AppState>,
     headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<UserLoginRequest>,
@@ -52,7 +80,15 @@ pub async fn login_handler(
         .map(|s| s.to_string())
         .unwrap_or_else(|| addr.ip().to_string());
 
-    let result = login_service::perform_login(db, access_token_ttl, session_ttl, encoding_key, payload, ip_address).await?;
+    let result = login_service::perform_login(
+        state.db.clone(),
+        state.valkey.clone(),
+        state.access_token_ttl,
+        state.session_ttl,
+        state.encoding_key.clone(),
+        payload,
+        ip_address
+    ).await?;
     Ok(Json(result))
 }
 
@@ -159,4 +195,5 @@ pub fn router() -> Router<AppState> {
         .route("/register", post(register_handler))
         .route("/verify-otp", post(verify_otp_handler))
         .route("/resend-otp", post(resend_otp_handler))
+        .route("/refresh-token", post(refresh_token_handler))
 }

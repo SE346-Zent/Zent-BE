@@ -11,6 +11,12 @@ pub struct AppConfig {
     pub rabbitmq_url: String,
     pub valkey_url: String,
 
+    #[serde(rename = "docs_username")]
+    pub docs_username: String,
+
+    #[serde(rename = "docs_password")]
+    pub docs_password: String,
+
     #[serde(default = "default_app_stage")]
     pub app_stage: String,
 

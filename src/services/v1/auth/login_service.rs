@@ -1,28 +1,25 @@
 use crate::entities::sessions;
 use crate::core::errors::AppError;
-use crate::model::jwt_claims::Claims;
 use crate::model::requests::auth::user_login_request::UserLoginRequest;
 use crate::model::responses::auth::login_response::{
     AccountStatusEnum, LoginResponseData, UserInfo,
 };
 use crate::model::responses::base::ApiResponse;
 use crate::repository::{role_repository, session_repository, user_repository};
+use crate::services::v1::core::token_service;
 use argon2::{
     password_hash::{PasswordHash, PasswordVerifier},
     Argon2,
 };
 use crate::core::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
-use base64::{engine::general_purpose::URL_SAFE, Engine};
 use chrono::Utc;
 use jsonwebtoken::EncodingKey;
-use rand::RngCore;
 use sea_orm::*;
-use sha2::{Digest, Sha256};
-use std::net::SocketAddr;
 use uuid::Uuid;
 
 pub async fn perform_login(
     db: DatabaseConnection,
+    valkey: Option<redis::Client>,
     access_token_ttl: AccessTokenDefaultTTLSeconds,
     session_ttl: SessionDefaultTTLSeconds,
     encoding_key: EncodingKey,
@@ -78,30 +75,15 @@ pub async fn perform_login(
         return Err(AppError::Unauthorized("Invalid credentials".to_string()));
     }
 
-    // 4. Create Access and Refresh Tokens
+    // 4. Create Access and Refresh Tokens via core service
+    let token_bundle = token_service::generate_token_bundle(
+        &user_model.id.to_string(),
+        access_token_ttl.0,
+        &encoding_key,
+    )?;
+
     let now = Utc::now().timestamp();
-    let access_token_ttl_seconds = access_token_ttl.0;
     let session_ttl_seconds = session_ttl.0;
-
-    let claims = Claims {
-        sub: user_model.id.to_string(),
-        iat: now as usize,
-        exp: (now + access_token_ttl_seconds) as usize,
-    };
-
-    let access_token =
-        jsonwebtoken::encode(&jsonwebtoken::Header::default(), &claims, &encoding_key)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to encode token: {}", e)))?;
-
-    // Generate refresh token
-    let mut refresh_token_bytes = [0u8; 48];
-    rand::rng().fill_bytes(&mut refresh_token_bytes);
-    let refresh_token = URL_SAFE.encode(refresh_token_bytes);
-
-    // Hash refresh token for storage
-    let mut hasher = Sha256::new();
-    hasher.update(refresh_token.as_bytes());
-    let refresh_token_hash = format!("{:x}", hasher.finalize());
 
     // 5. Create session via repository
     let session_id = Uuid::new_v4();
@@ -111,7 +93,7 @@ pub async fn perform_login(
     let session_model = sessions::ActiveModel {
         id: Set(session_id),
         user_id: Set(user_model.id),
-        refresh_token_hash: Set(refresh_token_hash),
+        refresh_token_hash: Set(token_bundle.refresh_token_hash.clone()),
         device_fingerprint: Set(user_model.id.to_string()), // TODO: properly extract when device_fingerprint features are added
         ip_address: Set(ip_address.chars().take(45).collect()),
         created_at: Set(Utc::now()),
@@ -122,6 +104,17 @@ pub async fn perform_login(
     session_repository::create(&db, session_model)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create session: {:?}", e)))?;
+
+    // 6. Whitelist the refresh token in Valkey if provided
+    if let Some(vk) = valkey {
+        let mut conn = vk.get_multiplexed_async_connection().await
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to connect to Valkey: {}", e)))?;
+        
+        let whitelist_key = format!("whitelist:session:{}", session_id);
+        let _: () = redis::AsyncCommands::set_ex(&mut conn, &whitelist_key, &token_bundle.refresh_token_hash, session_ttl_seconds as u64)
+            .await
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to whitelist token: {}", e)))?;
+    }
 
     Ok(ApiResponse::success(
         200,
@@ -134,8 +127,8 @@ pub async fn perform_login(
                 phone_number: user_model.phone_number.clone(),
                 role_id: user_model.role_id,
             },
-            access_token,
-            refresh_token,
+            access_token: token_bundle.access_token,
+            refresh_token: token_bundle.refresh_token,
         },
     ))
 }
