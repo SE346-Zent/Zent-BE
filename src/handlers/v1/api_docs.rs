@@ -7,13 +7,16 @@ use utoipa_scalar::{Scalar, Servable};
 use crate::model::{
     requests::{
         auth::{user_login_request::UserLoginRequest, user_registration_request::UserRegistrationRequest},
+        pagination::PaginationRequest,
     },
     responses::{
-        auth::{login_response::LoginResponse, login_response::LoginResponseData, register_response::RegisterResponse},
-        common::pagination_meta::PaginationMeta,
-        error::ErrorResponse,
+        auth::login_response::LoginResponseData,
+        base::MessageOnlyResponse,
+        pagination::PaginationResponse,
     },
 };
+
+use crate::errors::ErrorResponse;
 
 use crate::handlers::v1::auth;
 
@@ -27,10 +30,10 @@ use crate::handlers::v1::auth;
         schemas(
             UserLoginRequest,
             UserRegistrationRequest,
-            LoginResponse,
             LoginResponseData,
-            RegisterResponse,
-            PaginationMeta,
+            MessageOnlyResponse,
+            PaginationRequest,
+            PaginationResponse,
             ErrorResponse,
         )
     ),

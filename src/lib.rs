@@ -1,9 +1,11 @@
 pub mod entities;
+pub mod errors;
 pub mod extractor;
 pub mod handlers;
 pub mod infrastructure;
 pub mod macros;
 pub mod model;
+pub mod repository;
 pub mod services;
 pub mod state;
 pub mod config;

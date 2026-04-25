@@ -1,9 +1,6 @@
 use num_enum::{FromPrimitive, IntoPrimitive};
 use serde::{Deserialize, Serialize};
 
-// Assuming the macro is exported via `crate::macros::define_api_response` or similar
-use crate::define_api_response;
-
 /// Account status enum
 #[derive(
     Debug,
@@ -60,17 +57,4 @@ pub struct LoginResponseData {
     pub access_token: String,
     /// Refresh token used to refresh access token
     pub refresh_token: String,
-}
-
-define_api_response!(LoginResponse, LoginResponseData, Option<()>);
-
-impl LoginResponse {
-    pub fn success(data: LoginResponseData) -> Self {
-        Self {
-            status_code: 200,
-            message: "Login successful".to_string(),
-            data,
-            meta: None,
-        }
-    }
 }

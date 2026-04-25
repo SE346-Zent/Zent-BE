@@ -1,10 +1,9 @@
 use crate::{
-    entities::{account_status, roles, users},
+    entities::users,
+    errors::AppError,
     infrastructure::mq::publish_email_message,
-    model::{
-        requests::auth::user_registration_request::UserRegistrationRequest,
-        responses::{auth::register_response::RegisterResponse, error::AppError},
-    }
+    model::responses::base::ApiResponse,
+    repository::{account_status_repository, role_repository, user_repository},
 };
 
 use argon2::{
@@ -12,6 +11,7 @@ use argon2::{
     Argon2,
 };
 use chrono::Utc;
+use crate::model::requests::auth::user_registration_request::UserRegistrationRequest;
 use sea_orm::*;
 use uuid::Uuid;
 
@@ -19,11 +19,9 @@ pub async fn perform_register(
     db: DatabaseConnection,
     rabbitmq: std::sync::Arc<lapin::Connection>,
     req: UserRegistrationRequest,
-) -> Result<RegisterResponse, AppError> {
-    // 3. Check if user already exist with email
-    let existing_user = users::Entity::find()
-        .filter(users::Column::Email.eq(&req.email))
-        .one(&db)
+) -> Result<ApiResponse<()>, AppError> {
+    // 1. Check if user already exists with email via repository
+    let existing_user = user_repository::find_by_email(&db, &req.email)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
@@ -33,21 +31,19 @@ pub async fn perform_register(
         ));
     }
 
-    // 4. Construct User entity object
-    let customer_role = roles::Entity::find()
-        .filter(roles::Column::Name.eq("Customer"))
-        .one(&db)
+    // 2. Load Customer role via repository
+    let customer_role = role_repository::find_by_name(&db, "Customer")
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error loading role: {}", e)))?
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Customer role not found")))?;
 
-    let pending_status = account_status::Entity::find()
-        .filter(account_status::Column::Name.eq("Pending"))
-        .one(&db)
+    // 3. Load Pending account status via repository
+    let pending_status = account_status_repository::find_by_name(&db, "Pending")
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error loading account status: {}", e)))?
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status not found")))?;
 
+    // 4. Hash the password
     let password_bytes = req.password.into_bytes();
     let hashed_password = tokio::task::spawn_blocking(move || {
         let salt = SaltString::generate(&mut OsRng);
@@ -61,26 +57,25 @@ pub async fn perform_register(
 
     let now = Utc::now();
 
+    // 5. Persist user via repository
     let new_user = users::ActiveModel {
         id: Set(Uuid::new_v4()),
         full_name: Set(req.full_name.clone()),
         email: Set(req.email.clone()),
         password_hash: Set(hashed_password),
         phone_number: Set(req.phone_number),
-        account_status: Set(pending_status.id), // Using id from pending_status
-        role_id: Set(customer_role.id),         // Using id from customer_role
+        account_status: Set(pending_status.id),
+        role_id: Set(customer_role.id),
         created_at: Set(now),
         updated_at: Set(now),
         deleted_at: Set(None),
     };
 
-    // 5. Persist record
-    new_user
-        .insert(&db)
+    user_repository::create(&db, new_user)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create user: {:?}", e)))?;
 
-    // 6. Deliver async email task to DLQ RabbitMQ environment securely bypassing direct blocking HTTP flows.
+    // 6. Deliver async email task to RabbitMQ
     let email_payload = serde_json::json!({
         "to": req.email,
         "subject": "Welcome to Zent!",
@@ -91,5 +86,5 @@ pub async fn perform_register(
     }
 
     // 7. Finalise
-    Ok(RegisterResponse::success("Registration successful"))
+    Ok(ApiResponse::message_only(201, "Registration successful"))
 }

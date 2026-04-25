@@ -9,6 +9,10 @@ pub struct AppConfig {
     pub smtp_password: String,
     pub smtp_username: String,
     pub rabbitmq_url: String,
+    pub valkey_url: String,
+
+    #[serde(default = "default_app_stage")]
+    pub app_stage: String,
 
     #[serde(default = "default_access_token_ttl")]
     pub access_token_ttl_seconds: i64,
@@ -37,6 +41,7 @@ pub struct AppConfig {
 
 fn default_access_token_ttl() -> i64 { 3600 }
 fn default_session_ttl() -> i64 { 86400 }
+fn default_app_stage() -> String { "local".to_string() }
 
 fn default_db_max_connections() -> u32 { 100 }
 fn default_db_min_connections() -> u32 { 5 }

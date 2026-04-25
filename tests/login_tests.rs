@@ -12,7 +12,7 @@ use rstest::rstest;
 
 use zent_be::entities::{account_status, roles, sessions, users};
 use zent_be::handlers::v1::auth::login_handler;
-use zent_be::model::responses::auth::login_response::{AccountStatusEnum, LoginResponse};
+use zent_be::model::responses::auth::login_response::{AccountStatusEnum, LoginResponseData};
 use zent_be::state::AppState;
 
 use argon2::{
@@ -427,7 +427,7 @@ async fn test_cat3_session_properties() {
     let body_bytes = axum::body::to_bytes(r.into_body(), usize::MAX)
         .await
         .unwrap();
-    let resp: LoginResponse = serde_json::from_slice(&body_bytes).unwrap();
+    let resp: LoginResponseData = serde_json::from_slice(&body_bytes).unwrap();
     let data = resp.data;
 
     // 1-4. Access Token bounds Check

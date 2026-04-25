@@ -1,6 +1,4 @@
 use axum::Router;
-use sea_orm::{Database, ConnectOptions};
-use std::time::Duration;
 use tracing::info;
 
 
@@ -8,16 +6,17 @@ use tracing::info;
 pub mod macros;
 pub mod config;
 pub mod entities;
+pub mod errors;
 pub mod extractor;
 pub mod handlers;
 pub mod infrastructure;
 pub mod model;
+pub mod repository;
 pub mod services;
 pub mod state;
 
 use crate::state::AppState;
 use crate::config::AppConfig;
-use migration::{MigratorTrait, Migrator};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -30,22 +29,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     AppConfig::init();
     let cfg = AppConfig::get();
 
-    // Connect to database
-    let mut opt = ConnectOptions::new(&cfg.database_url);
+    // Initialize database (MySQL) via infrastructure layer
+    let db = infrastructure::database::init_database(cfg).await?;
 
-    opt.max_connections(cfg.db_max_connections)
-       .min_connections(cfg.db_min_connections)
-       .connect_timeout(Duration::from_secs(cfg.db_connect_timeout_seconds))
-       .acquire_timeout(Duration::from_secs(cfg.db_acquire_timeout_seconds))
-       .idle_timeout(Duration::from_secs(cfg.db_idle_timeout_seconds))
-       .max_lifetime(Duration::from_secs(cfg.db_max_lifetime_seconds))
-       .sqlx_logging(false);
-    
-    let db = Database::connect(opt).await?;
-    tracing::info!("Running db migrations");
-    Migrator::up(&db, None).await.expect("Failed to run db migrations");
-    tracing::info!("DB migrations applied successfully");
-
+    // Initialize Valkey cache via infrastructure layer
+    let _cache = infrastructure::cache::init_cache(cfg)
+        .expect("Failed to initialize Valkey cache client");
 
     // Connect to RabbitMQ using configured URI mapping efficiently
     let rabbitmq = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url)

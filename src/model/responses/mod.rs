@@ -1,3 +1,3 @@
 pub mod auth;
-pub mod error;
-pub mod common;
+pub mod base;
+pub mod pagination;
