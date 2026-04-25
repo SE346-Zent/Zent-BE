@@ -39,10 +39,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start background asynchronous AMQP email consumer pool globally
     infrastructure::mq::start_email_consumer(rabbitmq.clone()).await;
 
-    // Start background cron scheduler for maintenance tasks
-    infrastructure::scheduler::start_scheduler(db.clone()).await
-        .expect("Failed to start maintenance scheduler");
-
     // Load lookup tables (roles, account_statuses, etc.) into memory
     let lookup_tables = core::lookup_tables::LookupTables::load(&db)
         .await
@@ -50,13 +46,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
-        db,
+        db.clone(),
         Some(valkey),
-        Some(rabbitmq),
+        Some(rabbitmq.clone()),
         cfg.access_token_ttl_seconds,
         cfg.session_ttl_seconds,
-        lookup_tables,
+        lookup_tables.clone(),
     );
+
+    // Start background cron scheduler for maintenance tasks using pre-loaded LUT
+    infrastructure::scheduler::start_scheduler(db, state.lookup_tables.clone()).await
+        .expect("Failed to start maintenance scheduler");
 
     // Apply strict nested modular Router mapping with dynamic dispatch boundaries safely inside axum
     let app = Router::new()

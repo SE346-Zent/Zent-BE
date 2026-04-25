@@ -44,7 +44,7 @@ pub async fn perform_resend_otp(
     let mut valkey_conn = valkey.get_multiplexed_async_connection().await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to connect to Valkey: {}", e)))?;
         
-    valkey_conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 300).await
+    valkey_conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to store verification code in Valkey: {}", e)))?;
 
     email_service::send_verification_email(
