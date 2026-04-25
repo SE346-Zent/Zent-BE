@@ -3,6 +3,7 @@ pub mod errors;
 pub mod extractor;
 pub mod handlers;
 pub mod infrastructure;
+pub mod lookup_tables;
 pub mod macros;
 pub mod model;
 pub mod repository;

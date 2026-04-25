@@ -10,7 +10,7 @@ use super::pagination::PaginationResponse;
 ///   "statusCode": 200,
 ///   "message": "Success",
 ///   "data": { ... },
-///   "meta": { "currentPage": 1, "limit": 20, ... }   // optional
+///   "meta": { "limit": 20, "totalRecords": 100, "nextCursor": "abc123", "hasNext": true }
 /// }
 /// ```
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]

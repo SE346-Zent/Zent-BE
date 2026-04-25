@@ -3,6 +3,8 @@ use std::sync::Arc;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use sea_orm::DatabaseConnection;
 
+use crate::lookup_tables::LookupTables;
+
 #[derive(Clone, Copy)]
 pub struct AccessTokenDefaultTTLSeconds(pub i64);
 
@@ -17,6 +19,7 @@ pub struct AppState {
     pub rabbitmq: Option<Arc<lapin::Connection>>,
     pub access_token_ttl: AccessTokenDefaultTTLSeconds,
     pub session_ttl: SessionDefaultTTLSeconds,
+    pub lookup_tables: Arc<LookupTables>,
 }
 
 impl AppState {
@@ -26,6 +29,7 @@ impl AppState {
         rabbitmq: Option<Arc<lapin::Connection>>,
         access_token_ttl: i64,
         session_ttl: i64,
+        lookup_tables: LookupTables,
     ) -> Self {
         Self {
             decoding_key: DecodingKey::from_secret(secret),
@@ -34,6 +38,7 @@ impl AppState {
             rabbitmq,
             access_token_ttl: AccessTokenDefaultTTLSeconds(access_token_ttl),
             session_ttl: SessionDefaultTTLSeconds(session_ttl),
+            lookup_tables: Arc::new(lookup_tables),
         }
     }
 }
@@ -71,5 +76,11 @@ impl FromRef<AppState> for SessionDefaultTTLSeconds {
 impl FromRef<AppState> for Arc<lapin::Connection> {
     fn from_ref(state: &AppState) -> Self {
         state.rabbitmq.clone().expect("RabbitMQ is not initialized")
+    }
+}
+
+impl FromRef<AppState> for Arc<LookupTables> {
+    fn from_ref(state: &AppState) -> Self {
+        state.lookup_tables.clone()
     }
 }

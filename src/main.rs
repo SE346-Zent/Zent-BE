@@ -10,6 +10,7 @@ pub mod errors;
 pub mod extractor;
 pub mod handlers;
 pub mod infrastructure;
+pub mod lookup_tables;
 pub mod model;
 pub mod repository;
 pub mod services;
@@ -44,12 +45,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start background asynchronous AMQP email consumer pool globally
     infrastructure::mq::start_email_consumer(rabbitmq.clone()).await;
 
+    // Load lookup tables (roles, account_statuses, etc.) into memory
+    let lookup_tables = lookup_tables::LookupTables::load(&db)
+        .await
+        .expect("Failed to load lookup tables from database");
+
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
         db,
         Some(rabbitmq),
         cfg.access_token_ttl_seconds,
         cfg.session_ttl_seconds,
+        lookup_tables,
     );
 
     // Apply strict nested modular Router mapping with dynamic dispatch boundaries safely inside axum

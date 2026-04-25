@@ -1,6 +1,6 @@
 use crate::entities::sessions;
 use crate::errors::AppError;
-use crate::model::auth::jwt_claims::Claims;
+use crate::model::jwt_claims::Claims;
 use crate::model::requests::auth::user_login_request::UserLoginRequest;
 use crate::model::responses::auth::login_response::{
     AccountStatusEnum, LoginResponseData, UserInfo,

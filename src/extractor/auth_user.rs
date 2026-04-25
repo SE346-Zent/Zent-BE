@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     entities::{roles, users},
-    model::auth::jwt_claims::Claims,
+    model::jwt_claims::Claims,
     extractor::jwt_claims::AuthError,
 };
 
