@@ -17,7 +17,7 @@ pub async fn perform_refresh(
     db: DatabaseConnection,
     valkey: Option<redis::Client>,
     access_token_ttl: AccessTokenDefaultTTLSeconds,
-    session_ttl: SessionDefaultTTLSeconds,
+    _session_ttl: SessionDefaultTTLSeconds,
     encoding_key: EncodingKey,
     req: RefreshTokenRequest,
 ) -> Result<ApiResponse<LoginResponseData>, AppError> {
@@ -42,10 +42,15 @@ pub async fn perform_refresh(
     }
 
     // 5. Check whitelist in Valkey if provided
-    if let Some(vk) = valkey.clone() {
-        let mut conn = vk.get_multiplexed_async_connection().await
+    let mut valkey_conn = if let Some(vk) = valkey {
+        let conn = vk.get_multiplexed_async_connection().await
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to connect to Valkey: {}", e)))?;
-        
+        Some(conn)
+    } else {
+        None
+    };
+
+    if let Some(ref mut conn) = valkey_conn {
         let whitelist_key = format!("whitelist:session:{}", session.id);
         let whitelisted_hash: Option<String> = conn.get(&whitelist_key)
             .await
@@ -57,8 +62,11 @@ pub async fn perform_refresh(
             }
             _ => {
                 // Token not in whitelist or mismatch (possible reuse attack)
-                // Revoke session for safety
-                let _ = session_repository::revoke(&db, session.id).await;
+                // Revoke session for safety and log the result
+                match session_repository::revoke(&db, session.id).await {
+                    Ok(_) => tracing::warn!("Suspected refresh token reuse attack. Session {} revoked successfully.", session.id),
+                    Err(e) => tracing::error!("Suspected reuse attack but failed to revoke session {}: {:?}", session.id, e),
+                }
                 return Err(AppError::Unauthorized("Invalid session state. Please login again.".to_string()));
             }
         }
@@ -76,20 +84,24 @@ pub async fn perform_refresh(
         &encoding_key,
     )?;
 
-    // 7. Update session in DB (ONLY rotate the hash, do NOT extend expiry)
-    let mut session_active: sessions::ActiveModel = session.clone().into_active_model();
-    session_active.refresh_token_hash = Set(token_bundle.refresh_token_hash.clone());
-    // session_active.expires_at remains unchanged from original login
+    // 7. Update session in DB Atomically (ONLY rotate if old hash matches)
+    let rotation_success = session_repository::atomic_rotate(
+        &db, 
+        session.id, 
+        &refresh_token_hash, 
+        &token_bundle.refresh_token_hash
+    ).await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to rotate session: {:?}", e)))?;
 
-    session_repository::update(&db, session_active)
-        .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to update session: {:?}", e)))?;
+    if !rotation_success {
+        // This means the hash was already rotated by a concurrent request.
+        // For safety, we treat this as a suspected reuse attack.
+        tracing::warn!("Atomic rotation failed for session {}. Possible concurrent refresh or reuse attack.", session.id);
+        return Err(AppError::Unauthorized("Invalid session state. Please login again.".to_string()));
+    }
 
     // 8. Update whitelist in Valkey with remaining time only
-    if let Some(vk) = valkey {
-        let mut conn = vk.get_multiplexed_async_connection().await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to connect to Valkey: {}", e)))?;
-        
+    if let Some(ref mut conn) = valkey_conn {
         let now_ts = Utc::now().timestamp();
         let expires_at_ts = session.expires_at.timestamp();
         let remaining_seconds = if expires_at_ts > now_ts {

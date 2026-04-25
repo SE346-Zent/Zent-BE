@@ -32,6 +32,7 @@ use crate::model::requests::auth::refresh_token_request::RefreshTokenRequest;
     request_body = RefreshTokenRequest,
     responses(
         (status = 200, description = "Token refreshed successfully", body = ApiResponse<LoginResponseData>),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     )

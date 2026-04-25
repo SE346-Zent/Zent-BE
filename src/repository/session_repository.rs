@@ -31,6 +31,24 @@ pub async fn update(
     model.update(db).await
 }
 
+/// Rotate the refresh token hash atomically. 
+/// Returns Ok(true) if the rotation was successful (hash matched), Ok(false) otherwise.
+pub async fn atomic_rotate(
+    db: &DatabaseConnection,
+    session_id: Uuid,
+    old_hash: &str,
+    new_hash: &str,
+) -> Result<bool, DbErr> {
+    let result = sessions::Entity::update_many()
+        .col_expr(sessions::Column::RefreshTokenHash, Expr::value(new_hash))
+        .filter(sessions::Column::Id.eq(session_id))
+        .filter(sessions::Column::RefreshTokenHash.eq(old_hash))
+        .exec(db)
+        .await?;
+    
+    Ok(result.rows_affected > 0)
+}
+
 /// Delete (revoke) a session by its ID.
 pub async fn revoke(
     db: &DatabaseConnection,

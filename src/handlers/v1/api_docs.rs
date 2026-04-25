@@ -9,6 +9,7 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use base64::Engine;
+use subtle::ConstantTimeEq;
 use crate::core::config::AppConfig;
 
 use crate::model::{
@@ -96,8 +97,12 @@ async fn check_docs_auth(
             if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(encoded) {
                 if let Ok(credentials) = String::from_utf8(decoded) {
                     let parts: Vec<&str> = credentials.splitn(2, ':').collect();
-                    if parts.len() == 2 && parts[0] == config.docs_username && parts[1] == config.docs_password {
-                        return Ok(next.run(req).await);
+                    if parts.len() == 2 {
+                        let user_ok = parts[0].as_bytes().ct_eq(config.docs_username.as_bytes());
+                        let pass_ok = parts[1].as_bytes().ct_eq(config.docs_password.as_bytes());
+                        if user_ok.unwrap_u8() == 1 && pass_ok.unwrap_u8() == 1 {
+                            return Ok(next.run(req).await);
+                        }
                     }
                 }
             }
