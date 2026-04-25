@@ -2,6 +2,7 @@ use axum::extract::FromRef;
 use std::sync::Arc;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use sea_orm::DatabaseConnection;
+use redis::Client;
 
 use crate::core::lookup_tables::LookupTables;
 
@@ -16,6 +17,7 @@ pub struct AppState {
     pub decoding_key: DecodingKey,
     pub encoding_key: EncodingKey,
     pub db: DatabaseConnection,
+    pub valkey: Option<Client>,
     pub rabbitmq: Option<Arc<lapin::Connection>>,
     pub access_token_ttl: AccessTokenDefaultTTLSeconds,
     pub session_ttl: SessionDefaultTTLSeconds,
@@ -26,6 +28,7 @@ impl AppState {
     pub fn new(
         secret: &[u8],
         db: DatabaseConnection,
+        valkey: Option<Client>,
         rabbitmq: Option<Arc<lapin::Connection>>,
         access_token_ttl: i64,
         session_ttl: i64,
@@ -35,6 +38,7 @@ impl AppState {
             decoding_key: DecodingKey::from_secret(secret),
             encoding_key: EncodingKey::from_secret(secret),
             db,
+            valkey: valkey,
             rabbitmq,
             access_token_ttl: AccessTokenDefaultTTLSeconds(access_token_ttl),
             session_ttl: SessionDefaultTTLSeconds(session_ttl),
@@ -58,6 +62,12 @@ impl FromRef<AppState> for EncodingKey {
 impl FromRef<AppState> for DatabaseConnection {
     fn from_ref(state: &AppState) -> Self {
         state.db.clone()
+    }
+}
+
+impl FromRef<AppState> for Client {
+    fn from_ref(state: &AppState) -> Self {
+        state.valkey.clone().unwrap()
     }
 }
 

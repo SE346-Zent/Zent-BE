@@ -21,6 +21,8 @@ pub fn init_cache(cfg: &AppConfig) -> Result<Client, redis::RedisError> {
     let base_url = cfg.valkey_url.trim_end_matches('/');
     let connection_url = format!("{}/{}", base_url, db_index);
 
+    println!("Cache URL: {}", connection_url);
+
     tracing::info!(
         stage = %cfg.app_stage,
         db_index = db_index,

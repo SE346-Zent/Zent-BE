@@ -210,7 +210,7 @@ async fn send_email_with_lettre(payload: &str) -> bool {
             }
         })
         .subject(subject)
-        .body(String::from(body))
+        .singlepart(lettre::message::SinglePart::html(String::from(body)))
     {
         Ok(msg) => msg,
         Err(e) => {

@@ -1,5 +1,6 @@
 use axum::{
     extract::{ConnectInfo, State},
+    http::HeaderMap,
     Json, Router, routing::post,
 };
 use std::net::SocketAddr;
@@ -7,19 +8,21 @@ use validator::Validate;
 use crate::{
     core::{
         errors::{AppError, ErrorResponse},
-        state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds},
+        state::{AppState, AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds},
     },
     model::{
         requests::auth::{
             user_login_request::UserLoginRequest,
             user_registration_request::UserRegistrationRequest,
+            verify_otp_request::VerifyOtpRequest,
+            resend_otp_request::ResendOtpRequest,
         },
         responses::{
             auth::login_response::LoginResponseData,
             base::{ApiResponse, MessageOnlyResponse},
         },
     },
-    services::v1::auth::{login_service, register_service},
+    services::v1::auth::{login_service, register_service, verify_otp_service, resend_otp_service},
 };
 use sea_orm::DatabaseConnection;
 use jsonwebtoken::EncodingKey;
@@ -39,10 +42,17 @@ pub async fn login_handler(
     State(access_token_ttl): State<AccessTokenDefaultTTLSeconds>,
     State(session_ttl): State<SessionDefaultTTLSeconds>,
     State(encoding_key): State<EncodingKey>,
+    headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<UserLoginRequest>,
 ) -> Result<Json<ApiResponse<LoginResponseData>>, AppError> {
-    let result = login_service::perform_login(db, access_token_ttl, session_ttl, encoding_key, payload, addr).await?;
+    let ip_address = headers
+        .get("X-Real-IP")
+        .and_then(|val| val.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| addr.ip().to_string());
+
+    let result = login_service::perform_login(db, access_token_ttl, session_ttl, encoding_key, payload, ip_address).await?;
     Ok(Json(result))
 }
 
@@ -58,22 +68,95 @@ pub async fn login_handler(
     )
 )]
 pub async fn register_handler(
-    State(db): State<DatabaseConnection>,
-    State(rabbitmq): State<std::sync::Arc<lapin::Connection>>,
+    State(state): State<AppState>,
     Json(payload): Json<UserRegistrationRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     if let Err(errors) = payload.validate() {
-        // Collect errors into a message
         let err_msg = errors.to_string();
         return Err(AppError::BadRequest(err_msg));
     }
 
-    let result = register_service::perform_register(db, rabbitmq, payload).await?;
+    let result = register_service::perform_register(
+        state.db.clone(), 
+        state.valkey.clone(), 
+        state.rabbitmq.clone(), 
+        payload
+    ).await?;
+    
     Ok(Json(result))
 }
 
-pub fn router() -> Router<crate::core::state::AppState> {
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/verify-otp",
+    request_body = VerifyOtpRequest,
+    responses(
+        (status = 200, description = "Account verified successfully", body = MessageOnlyResponse),
+        (status = 400, description = "Invalid OTP", body = ErrorResponse),
+        (status = 403, description = "Too many failed attempts", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    )
+)]
+pub async fn verify_otp_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<VerifyOtpRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    if let Err(errors) = payload.validate() {
+        let err_msg = errors.to_string();
+        return Err(AppError::BadRequest(err_msg));
+    }
+
+    let rabbitmq = state.rabbitmq.clone().ok_or_else(|| {
+        AppError::Internal(anyhow::anyhow!("RabbitMQ is not initialized"))
+    })?;
+
+    let result = verify_otp_service::perform_verify_otp(
+        state.db.clone(), 
+        state.valkey.clone().unwrap(), 
+        rabbitmq, 
+        payload
+    ).await?;
+    
+    Ok(Json(result))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/resend-otp",
+    request_body = ResendOtpRequest,
+    responses(
+        (status = 200, description = "OTP resent successfully", body = MessageOnlyResponse),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    )
+)]
+pub async fn resend_otp_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ResendOtpRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    if let Err(errors) = payload.validate() {
+        let err_msg = errors.to_string();
+        return Err(AppError::BadRequest(err_msg));
+    }
+
+    let rabbitmq = state.rabbitmq.clone().ok_or_else(|| {
+        AppError::Internal(anyhow::anyhow!("RabbitMQ is not initialized"))
+    })?;
+
+    let result = resend_otp_service::perform_resend_otp(
+        state.db.clone(), 
+        state.valkey.clone().unwrap(), 
+        rabbitmq, 
+        payload
+    ).await?;
+    
+    Ok(Json(result))
+}
+
+pub fn router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login_handler))
         .route("/register", post(register_handler))
+        .route("/verify-otp", post(verify_otp_handler))
+        .route("/resend-otp", post(resend_otp_handler))
 }

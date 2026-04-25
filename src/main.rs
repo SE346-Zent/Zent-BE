@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = infrastructure::database::init_database(cfg).await?;
 
     // Initialize Valkey cache via infrastructure layer
-    let _cache = infrastructure::cache::init_cache(cfg)
+    let valkey = infrastructure::cache::init_cache(cfg)
         .expect("Failed to initialize Valkey cache client");
 
     // Connect to RabbitMQ using configured URI mapping efficiently
@@ -39,6 +39,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start background asynchronous AMQP email consumer pool globally
     infrastructure::mq::start_email_consumer(rabbitmq.clone()).await;
 
+    // Start background cron scheduler for maintenance tasks
+    infrastructure::scheduler::start_scheduler(db.clone()).await
+        .expect("Failed to start maintenance scheduler");
+
     // Load lookup tables (roles, account_statuses, etc.) into memory
     let lookup_tables = core::lookup_tables::LookupTables::load(&db)
         .await
@@ -47,6 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
         db,
+        Some(valkey),
         Some(rabbitmq),
         cfg.access_token_ttl_seconds,
         cfg.session_ttl_seconds,

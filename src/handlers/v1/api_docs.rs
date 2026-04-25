@@ -6,7 +6,12 @@ use utoipa_scalar::{Scalar, Servable};
 
 use crate::model::{
     requests::{
-        auth::{user_login_request::UserLoginRequest, user_registration_request::UserRegistrationRequest},
+        auth::{
+            user_login_request::UserLoginRequest, 
+            user_registration_request::UserRegistrationRequest,
+            verify_otp_request::VerifyOtpRequest,
+            resend_otp_request::ResendOtpRequest,
+        },
         pagination::PaginationRequest,
     },
     responses::{
@@ -25,11 +30,15 @@ use crate::handlers::v1::auth;
     paths(
         auth::login_handler,
         auth::register_handler,
+        auth::verify_otp_handler,
+        auth::resend_otp_handler,
     ),
     components(
         schemas(
             UserLoginRequest,
             UserRegistrationRequest,
+            VerifyOtpRequest,
+            ResendOtpRequest,
             LoginResponseData,
             MessageOnlyResponse,
             PaginationRequest,

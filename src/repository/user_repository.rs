@@ -29,3 +29,11 @@ pub async fn create(
 ) -> Result<users::Model, DbErr> {
     model.insert(db).await
 }
+
+/// Update an existing user record.
+pub async fn update(
+    db: &DatabaseConnection,
+    model: users::ActiveModel,
+) -> Result<users::Model, DbErr> {
+    model.update(db).await
+}
