@@ -10,7 +10,7 @@ use axum_extra::{
 use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
 use tracing::error;
 
-use crate::model::auth::jwt_claims::Claims;
+use crate::model::jwt_claims::Claims;
 
 pub enum AuthError {
     InvalidTokenError,

@@ -1,16 +1,17 @@
-use crate::entities::{sessions, users};
-use crate::model::auth::jwt_claims::Claims;
+use crate::entities::sessions;
+use crate::core::errors::AppError;
+use crate::model::jwt_claims::Claims;
 use crate::model::requests::auth::user_login_request::UserLoginRequest;
 use crate::model::responses::auth::login_response::{
-    AccountStatusEnum, LoginResponse, LoginResponseData, UserInfo,
+    AccountStatusEnum, LoginResponseData, UserInfo,
 };
-use crate::model::responses::error::AppError;
+use crate::model::responses::base::ApiResponse;
+use crate::repository::{role_repository, session_repository, user_repository};
 use argon2::{
     password_hash::{PasswordHash, PasswordVerifier},
     Argon2,
 };
-// use axum::extract::ConnectInfo;
-use crate::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
+use crate::core::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
 use base64::{engine::general_purpose::URL_SAFE, Engine};
 use chrono::Utc;
 use jsonwebtoken::EncodingKey;
@@ -27,18 +28,12 @@ pub async fn perform_login(
     encoding_key: EncodingKey,
     req: UserLoginRequest,
     ip_addr: SocketAddr,
-) -> Result<LoginResponse, AppError> {
-    // 1. Lookup user
-    let user_opt = users::Entity::find()
-        .filter(users::Column::Email.eq(&req.email))
-        .one(&db)
+) -> Result<ApiResponse<LoginResponseData>, AppError> {
+    // 1. Lookup user via repository
+    let user_model = user_repository::find_by_email(&db, &req.email)
         .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
-
-    let user_model = match user_opt {
-        Some(u) => u,
-        None => return Err(AppError::Unauthorized("Invalid credentials".to_string())),
-    };
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+        .ok_or_else(|| AppError::Unauthorized("Invalid credentials".to_string()))?;
 
     // 2. Check account status
     let status = AccountStatusEnum::from(user_model.account_status);
@@ -55,9 +50,8 @@ pub async fn perform_login(
         _ => return Err(AppError::Forbidden("Account state unknown".to_string())),
     };
 
-    // 2.5. Check Role exists
-    let role_exists = crate::entities::roles::Entity::find_by_id(user_model.role_id)
-        .one(&db)
+    // 2.5. Check Role exists via repository
+    let role_exists = role_repository::find_by_id(&db, user_model.role_id)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
@@ -109,11 +103,12 @@ pub async fn perform_login(
     hasher.update(refresh_token.as_bytes());
     let refresh_token_hash = format!("{:x}", hasher.finalize());
 
-    // 5. Create session
+    // 5. Create session via repository
     let session_id = Uuid::new_v4();
     let expires_at_chrono =
         chrono::DateTime::from_timestamp(now + session_ttl_seconds, 0).unwrap_or(Utc::now());
-    let _ = sessions::ActiveModel {
+
+    let session_model = sessions::ActiveModel {
         id: Set(session_id),
         user_id: Set(user_model.id),
         refresh_token_hash: Set(refresh_token_hash),
@@ -122,20 +117,25 @@ pub async fn perform_login(
         created_at: Set(Utc::now()),
         expires_at: Set(expires_at_chrono),
         revoked_at: Set(None),
-    }
-    .insert(&db)
-    .await
-    .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create session: {:?}", e)))?;
+    };
 
-    Ok(LoginResponse::success(LoginResponseData {
-        user: UserInfo {
-            full_name: user_model.full_name.clone(),
-            account_status: status,
-            email: user_model.email.clone(),
-            phone_number: user_model.phone_number.clone(),
-            role_id: user_model.role_id,
+    session_repository::create(&db, session_model)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create session: {:?}", e)))?;
+
+    Ok(ApiResponse::success(
+        200,
+        "Login successful",
+        LoginResponseData {
+            user: UserInfo {
+                full_name: user_model.full_name.clone(),
+                account_status: status,
+                email: user_model.email.clone(),
+                phone_number: user_model.phone_number.clone(),
+                role_id: user_model.role_id,
+            },
+            access_token,
+            refresh_token,
         },
-        access_token,
-        refresh_token,
-    }))
+    ))
 }

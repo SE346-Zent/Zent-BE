@@ -1,54 +1,21 @@
-
 version: '3.8'
 
-
-
 services:
-  redis-server:
-    container_name: zent-redis-server
-    image: redis:alpine
+  mysql:
+    image: mysql
+    container_name: core-database
     restart: unless-stopped
-    networks:
-      - zent-backend-net
     ports:
-      - "6379:6379"
-    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly no
+      - "3308:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: HUNGDEPZAI
+      MYSQL_DATABASE: ZentDB
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: HUNGDEPZAI
     volumes:
-      - zent-redis-data:/data
+      - mysql-data:/var/lib/mysql
 
-  nginx-server:
-    container_name: zent-nginx-server
-    image: nginx:alpine
-    restart: unless-stopped
-    networks:
-      - zent-gateway-net
-    ports:
-      - "8080:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
-
-  rabbitmq-server:
-    container_name: zent-rabbitmq-server
-    image: rabbitmq
-    restart: unless-stopped
-    networks:
-      - zent-backend-net
-    ports:
-      - "5672:5672"
-      - "15691:15691"
-    volumes:
-      - zent-rabbitmq-data:/var/lib/rabbitmq
-
-networks:
-  zent-gateway-net:
-    name: zent-gateway-net
-  zent-backend-net:
-    name: zent-backend-net
 
 volumes:
-  zent-redis-data:
-    name: zent-redis-data
-  zent-rabbitmq-data:
-    name: zent-rabbitmq-data
+  mysql-data:
+    name: zent_mysql_data

@@ -1,3 +1,3 @@
-pub mod auth;
 pub mod requests;
 pub mod responses;
+pub mod jwt_claims;

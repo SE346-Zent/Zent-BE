@@ -6,14 +6,15 @@ use axum::{
 };
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tower::ServiceExt;
-use serde::Deserialize;
 
 use rstest::rstest;
 
 use zent_be::entities::{account_status, roles, sessions, users};
 use zent_be::handlers::v1::auth::login_handler;
-use zent_be::model::responses::auth::login_response::{AccountStatusEnum, LoginResponse};
-use zent_be::state::AppState;
+use zent_be::core::lookup_tables::LookupTables;
+use zent_be::model::responses::auth::login_response::{AccountStatusEnum, LoginResponseData};
+use zent_be::model::responses::base::ApiResponse;
+use zent_be::core::state::AppState;
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
@@ -112,7 +113,7 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>
         active_user.insert(&db).await.unwrap();
     }
 
-    let state = AppState::new(b"integration_test_secret_for_tokens", db, None, 900, 3600);
+    let state = AppState::new(b"integration_test_secret_for_tokens", db, None, 900, 3600, LookupTables::empty());
 
     // Provide the application endpoints explicitly for tests
     Router::new()
@@ -353,7 +354,7 @@ async fn test_cat2_unknown_status_legacy_data() {
     // Re-enable FK for normal application flow execution
     db.execute_unprepared("PRAGMA foreign_keys = ON;").await.unwrap();
 
-    let state = AppState::new(b"integration_test_secret_for_tokens", db, None, 900, 3600);
+    let state = AppState::new(b"integration_test_secret_for_tokens", db, None, 900, 3600, LookupTables::empty());
     let app = Router::new()
         .route("/login", post(login_handler))
         .with_state(state);
@@ -427,8 +428,8 @@ async fn test_cat3_session_properties() {
     let body_bytes = axum::body::to_bytes(r.into_body(), usize::MAX)
         .await
         .unwrap();
-    let resp: LoginResponse = serde_json::from_slice(&body_bytes).unwrap();
-    let data = resp.data;
+    let resp: ApiResponse<LoginResponseData> = serde_json::from_slice(&body_bytes).unwrap();
+    let data = resp.data.expect("Expected login response data");
 
     // 1-4. Access Token bounds Check
     assert_eq!(data.access_token.split('.').count(), 3); // formatting check
@@ -473,7 +474,7 @@ async fn test_cat3_12_13_zero_ttl() {
     active_user.insert(&db).await.unwrap();
 
 
-    let state = AppState::new(b"secret", db.clone(), None, 0, 0); // 0 TTLs
+    let state = AppState::new(b"secret", db.clone(), None, 0, 0, LookupTables::empty()); // 0 TTLs
     let app = Router::new()
         .route("/login", post(login_handler))
         .with_state(state);

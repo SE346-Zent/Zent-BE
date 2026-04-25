@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     entities::{roles, users},
-    model::auth::jwt_claims::Claims,
+    model::jwt_claims::Claims,
     extractor::jwt_claims::AuthError,
 };
 
@@ -37,10 +37,10 @@ where
         })?;
         
         let user_with_role = users::Entity::find_by_id(user_id)
-        .find_with_related(roles::Entity)
-        .all(&db)
-        .await
-        .map_err(|_| AuthError::InternalServerError)?;
+            .find_with_related(roles::Entity)
+            .all(&db)
+            .await
+            .map_err(|_| AuthError::InternalServerError)?;
     
         if user_with_role.is_empty() {
             return Err(AuthError::InvalidTokenError);
