@@ -2,7 +2,7 @@ pub mod auth;
 pub mod api_docs;
 
 use axum::Router;
-use crate::state::AppState;
+use crate::core::state::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()

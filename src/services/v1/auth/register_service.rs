@@ -1,6 +1,6 @@
 use crate::{
     entities::users,
-    errors::AppError,
+    core::errors::AppError,
     infrastructure::mq::publish_email_message,
     model::responses::base::ApiResponse,
     repository::{account_status_repository, role_repository, user_repository},

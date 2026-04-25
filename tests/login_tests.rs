@@ -11,10 +11,10 @@ use rstest::rstest;
 
 use zent_be::entities::{account_status, roles, sessions, users};
 use zent_be::handlers::v1::auth::login_handler;
-use zent_be::lookup_tables::LookupTables;
+use zent_be::core::lookup_tables::LookupTables;
 use zent_be::model::responses::auth::login_response::{AccountStatusEnum, LoginResponseData};
 use zent_be::model::responses::base::ApiResponse;
-use zent_be::state::AppState;
+use zent_be::core::state::AppState;
 
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHasher, SaltString},

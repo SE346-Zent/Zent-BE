@@ -5,7 +5,10 @@ use axum::{
 use std::net::SocketAddr;
 use validator::Validate;
 use crate::{
-    errors::{AppError, ErrorResponse},
+    core::{
+        errors::{AppError, ErrorResponse},
+        state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds},
+    },
     model::{
         requests::auth::{
             user_login_request::UserLoginRequest,
@@ -17,7 +20,6 @@ use crate::{
         },
     },
     services::v1::auth::{login_service, register_service},
-    state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds},
 };
 use sea_orm::DatabaseConnection;
 use jsonwebtoken::EncodingKey;
@@ -70,7 +72,7 @@ pub async fn register_handler(
     Ok(Json(result))
 }
 
-pub fn router() -> Router<crate::state::AppState> {
+pub fn router() -> Router<crate::core::state::AppState> {
     Router::new()
         .route("/login", post(login_handler))
         .route("/register", post(register_handler))

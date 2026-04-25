@@ -1,6 +1,6 @@
 use redis::Client;
 
-use crate::config::AppConfig;
+use crate::core::config::AppConfig;
 
 /// Initialize the Valkey (Redis-compatible) connection client.
 ///

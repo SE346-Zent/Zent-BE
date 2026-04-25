@@ -3,7 +3,7 @@ use std::sync::Arc;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use sea_orm::DatabaseConnection;
 
-use crate::lookup_tables::LookupTables;
+use crate::core::lookup_tables::LookupTables;
 
 #[derive(Clone, Copy)]
 pub struct AccessTokenDefaultTTLSeconds(pub i64);

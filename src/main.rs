@@ -1,23 +1,17 @@
 use axum::Router;
 use tracing::info;
 
-
-#[macro_use]
-pub mod macros;
-pub mod config;
+pub mod core;
 pub mod entities;
-pub mod errors;
 pub mod extractor;
 pub mod handlers;
 pub mod infrastructure;
-pub mod lookup_tables;
 pub mod model;
 pub mod repository;
 pub mod services;
-pub mod state;
 
-use crate::state::AppState;
-use crate::config::AppConfig;
+use crate::core::state::AppState;
+use crate::core::config::AppConfig;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     infrastructure::mq::start_email_consumer(rabbitmq.clone()).await;
 
     // Load lookup tables (roles, account_statuses, etc.) into memory
-    let lookup_tables = lookup_tables::LookupTables::load(&db)
+    let lookup_tables = core::lookup_tables::LookupTables::load(&db)
         .await
         .expect("Failed to load lookup tables from database");
 

@@ -9,7 +9,7 @@ use tracing::{info, error};
 use lettre::{Message, SmtpTransport, Transport};
 use lettre::transport::smtp::authentication::Credentials;
 
-use crate::config::AppConfig;
+use crate::core::config::AppConfig;
 
 pub async fn init_rabbitmq(url: &str) -> Result<Arc<Connection>, lapin::Error> {
     let connection = Connection::connect(url, ConnectionProperties::default()).await?;

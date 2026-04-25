@@ -16,7 +16,7 @@ use crate::model::{
     },
 };
 
-use crate::errors::ErrorResponse;
+use crate::core::errors::ErrorResponse;
 
 use crate::handlers::v1::auth;
 
@@ -61,6 +61,6 @@ impl Modify for SecurityAddon {
     }
 }
 
-pub fn router() -> axum::Router<crate::state::AppState> {
+pub fn router() -> axum::Router<crate::core::state::AppState> {
     axum::Router::new().merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
 }

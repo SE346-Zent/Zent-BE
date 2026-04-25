@@ -1,5 +1,5 @@
 use crate::entities::sessions;
-use crate::errors::AppError;
+use crate::core::errors::AppError;
 use crate::model::jwt_claims::Claims;
 use crate::model::requests::auth::user_login_request::UserLoginRequest;
 use crate::model::responses::auth::login_response::{
@@ -11,7 +11,7 @@ use argon2::{
     password_hash::{PasswordHash, PasswordVerifier},
     Argon2,
 };
-use crate::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
+use crate::core::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
 use base64::{engine::general_purpose::URL_SAFE, Engine};
 use chrono::Utc;
 use jsonwebtoken::EncodingKey;

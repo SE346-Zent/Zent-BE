@@ -2,7 +2,7 @@ use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use std::time::Duration;
 use migration::{MigratorTrait, Migrator};
 
-use crate::config::AppConfig;
+use crate::core::config::AppConfig;
 
 /// Initialize the MySQL database connection pool and run pending migrations.
 ///
