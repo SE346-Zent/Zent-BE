@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = infrastructure::database::init_database(cfg).await?;
 
     // Initialize Valkey cache via infrastructure layer
-    let _cache = infrastructure::cache::init_cache(cfg)
+    let valkey = infrastructure::cache::init_cache(cfg)
         .expect("Failed to initialize Valkey cache client");
 
     // Connect to RabbitMQ using configured URI mapping efficiently
@@ -46,12 +46,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
-        db,
-        Some(rabbitmq),
+        db.clone(),
+        Some(valkey),
+        Some(rabbitmq.clone()),
         cfg.access_token_ttl_seconds,
         cfg.session_ttl_seconds,
-        lookup_tables,
+        lookup_tables.clone(),
     );
+
+    // Start background cron scheduler for maintenance tasks using pre-loaded LUT
+    infrastructure::scheduler::start_scheduler(db, state.lookup_tables.clone()).await
+        .expect("Failed to start maintenance scheduler");
 
     // Apply strict nested modular Router mapping with dynamic dispatch boundaries safely inside axum
     let app = Router::new()

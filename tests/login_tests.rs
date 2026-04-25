@@ -8,6 +8,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tower::ServiceExt;
 
 use rstest::rstest;
+use redis::Client;
 
 use zent_be::entities::{account_status, roles, sessions, users};
 use zent_be::handlers::v1::auth::login_handler;
@@ -113,7 +114,7 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>
         active_user.insert(&db).await.unwrap();
     }
 
-    let state = AppState::new(b"integration_test_secret_for_tokens", db, None, 900, 3600, LookupTables::empty());
+    let state = AppState::new(b"integration_test_secret_for_tokens", db, None, None, 900, 3600, LookupTables::empty());
 
     // Provide the application endpoints explicitly for tests
     Router::new()
@@ -354,7 +355,7 @@ async fn test_cat2_unknown_status_legacy_data() {
     // Re-enable FK for normal application flow execution
     db.execute_unprepared("PRAGMA foreign_keys = ON;").await.unwrap();
 
-    let state = AppState::new(b"integration_test_secret_for_tokens", db, None, 900, 3600, LookupTables::empty());
+    let state = AppState::new(b"integration_test_secret_for_tokens", db, None, None, 900, 3600, LookupTables::empty());
     let app = Router::new()
         .route("/login", post(login_handler))
         .with_state(state);
@@ -474,7 +475,7 @@ async fn test_cat3_12_13_zero_ttl() {
     active_user.insert(&db).await.unwrap();
 
 
-    let state = AppState::new(b"secret", db.clone(), None, 0, 0, LookupTables::empty()); // 0 TTLs
+    let state = AppState::new(b"secret", db.clone(), None, None, 0, 0, LookupTables::empty()); // 0 TTLs
     let app = Router::new()
         .route("/login", post(login_handler))
         .with_state(state);

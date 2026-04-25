@@ -24,6 +24,7 @@ pub fn init_cache(cfg: &AppConfig) -> Result<Client, redis::RedisError> {
     tracing::info!(
         stage = %cfg.app_stage,
         db_index = db_index,
+        cache_url = connection_url,
         "Initializing Valkey cache connection"
     );
 

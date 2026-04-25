@@ -27,7 +27,7 @@ pub async fn perform_login(
     session_ttl: SessionDefaultTTLSeconds,
     encoding_key: EncodingKey,
     req: UserLoginRequest,
-    ip_addr: SocketAddr,
+    ip_address: String,
 ) -> Result<ApiResponse<LoginResponseData>, AppError> {
     // 1. Lookup user via repository
     let user_model = user_repository::find_by_email(&db, &req.email)
@@ -113,7 +113,7 @@ pub async fn perform_login(
         user_id: Set(user_model.id),
         refresh_token_hash: Set(refresh_token_hash),
         device_fingerprint: Set(user_model.id.to_string()), // TODO: properly extract when device_fingerprint features are added
-        ip_address: Set(ip_addr.ip().to_string().chars().take(45).collect()),
+        ip_address: Set(ip_address.chars().take(45).collect()),
         created_at: Set(Utc::now()),
         expires_at: Set(expires_at_chrono),
         revoked_at: Set(None),
