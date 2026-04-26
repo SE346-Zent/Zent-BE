@@ -93,7 +93,6 @@ pub async fn seed_users(
         .map(|i| {
             let full_name: String = Name().fake_with_rng(&mut rng);
             let base_email: String = FreeEmail().fake_with_rng(&mut rng);
-            let (status_name, status_id) = status_entries.choose(&mut rng).unwrap();
 
             // Suffix with index to satisfy the unique constraint.
             let email = {
@@ -114,6 +113,12 @@ pub async fn seed_users(
                 // Even distribution by index
                 let choice = (i - 1) % non_super.len();
                 non_super[choice]
+            };
+
+            let (status_name, status_id) = if role_name == "Admin" || role_name == "SuperAdmin" || role_name == "Technician" {
+                status_entries.iter().find(|(name, _)| name == "Active").unwrap_or(&status_entries[0])
+            } else {
+                status_entries.choose(&mut rng).unwrap()
             };
 
             UserInput {

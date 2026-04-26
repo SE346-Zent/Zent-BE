@@ -31,3 +31,4 @@ pub mod work_order_state_history;
 pub mod work_order_statuses;
 pub mod work_order_symptoms;
 pub mod work_orders;
+pub mod policy;

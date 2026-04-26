@@ -5,6 +5,8 @@ mod m20260329_174031_device;
 mod m20260330_104147_work_order_update;
 mod m20260331_063024_part;
 mod m20260408_113539_parts_update;
+mod m20260426_050036_policy;
+
 
 
 pub struct Migrator;
@@ -18,6 +20,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260330_104147_work_order_update::Migration),
             Box::new(m20260331_063024_part::Migration),
             Box::new(m20260408_113539_parts_update::Migration),
+            Box::new(m20260426_050036_policy::Migration),
         ]
     }
 }

@@ -11,6 +11,7 @@ pub mod warranty;
 pub mod part_status;
 pub mod parts;
 pub mod part_condition;
+pub mod policy;
 
 pub use user::{seed_users, UserSeedConfig};
 pub use role::seed_roles;
@@ -25,3 +26,4 @@ pub use warranty::seed_random_warranties;
 pub use part_status::seed_part_statuses;
 pub use parts::{seed_parts_and_catalogs};
 pub use part_condition::seed_part_conditions;
+pub use policy::seed_policies;
