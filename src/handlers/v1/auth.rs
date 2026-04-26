@@ -16,14 +16,121 @@ use crate::{
             user_registration_request::UserRegistrationRequest,
             verify_otp_request::VerifyOtpRequest,
             resend_otp_request::ResendOtpRequest,
+            forgot_password_request::ForgotPasswordRequest,
+            verify_forgot_password_otp_request::VerifyForgotPasswordOtpRequest,
+            reset_password_request::ResetPasswordRequest,
         },
         responses::{
             auth::login_response::LoginResponseData,
+            auth::verify_forgot_password_otp_response::VerifyForgotPasswordOtpResponseData,
             base::{ApiResponse, MessageOnlyResponse},
         },
     },
-    services::v1::auth::{login_service, register_service, verify_otp_service, resend_otp_service, refresh_token_service},
+    services::v1::auth::{login_service, register_service, verify_otp_service, resend_otp_service, refresh_token_service, forgot_password_service, verify_forgot_password_otp_service, reset_password_service},
 };
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/forgot-password",
+    request_body = ForgotPasswordRequest,
+    responses(
+        (status = 200, description = "OTP sent successfully", body = MessageOnlyResponse),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 404, description = "User not found", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    )
+)]
+pub async fn forgot_password_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ForgotPasswordRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    if let Err(errors) = payload.validate() {
+        let err_msg = errors.to_string();
+        return Err(AppError::BadRequest(err_msg));
+    }
+
+    let valkey = state.valkey.clone().ok_or_else(|| {
+        AppError::Internal(anyhow::anyhow!("Valkey is not initialized"))
+    })?;
+
+    let rabbitmq = state.rabbitmq.clone().ok_or_else(|| {
+        AppError::Internal(anyhow::anyhow!("RabbitMQ is not initialized"))
+    })?;
+
+    let result = forgot_password_service::perform_forgot_password(
+        state.db.clone(),
+        valkey,
+        rabbitmq,
+        payload
+    ).await?;
+    
+    Ok(Json(result))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/verify-forgot-password-otp",
+    request_body = VerifyForgotPasswordOtpRequest,
+    responses(
+        (status = 200, description = "OTP verified successfully", body = ApiResponse<VerifyForgotPasswordOtpResponseData>),
+        (status = 400, description = "Invalid OTP", body = ErrorResponse),
+        (status = 403, description = "Too many failed attempts", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    )
+)]
+pub async fn verify_forgot_password_otp_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<VerifyForgotPasswordOtpRequest>,
+) -> Result<Json<ApiResponse<VerifyForgotPasswordOtpResponseData>>, AppError> {
+    if let Err(errors) = payload.validate() {
+        let err_msg = errors.to_string();
+        return Err(AppError::BadRequest(err_msg));
+    }
+
+    let valkey = state.valkey.clone().ok_or_else(|| {
+        AppError::Internal(anyhow::anyhow!("Valkey is not initialized"))
+    })?;
+
+    let result = verify_forgot_password_otp_service::perform_verify_forgot_password_otp(
+        valkey,
+        payload
+    ).await?;
+    
+    Ok(Json(result))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/reset-password",
+    request_body = ResetPasswordRequest,
+    responses(
+        (status = 200, description = "Password reset successfully", body = MessageOnlyResponse),
+        (status = 400, description = "Invalid token", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    )
+)]
+pub async fn reset_password_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ResetPasswordRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    if let Err(errors) = payload.validate() {
+        let err_msg = errors.to_string();
+        return Err(AppError::BadRequest(err_msg));
+    }
+
+    let valkey = state.valkey.clone().ok_or_else(|| {
+        AppError::Internal(anyhow::anyhow!("Valkey is not initialized"))
+    })?;
+
+    let result = reset_password_service::perform_reset_password(
+        state.db.clone(),
+        valkey,
+        payload
+    ).await?;
+    
+    Ok(Json(result))
+}
+
 use crate::model::requests::auth::refresh_token_request::RefreshTokenRequest;
 
 #[utoipa::path(
@@ -196,4 +303,7 @@ pub fn router() -> Router<AppState> {
         .route("/verify-otp", post(verify_otp_handler))
         .route("/resend-otp", post(resend_otp_handler))
         .route("/refresh-token", post(refresh_token_handler))
+        .route("/forgot-password", post(forgot_password_handler))
+        .route("/verify-forgot-password-otp", post(verify_forgot_password_otp_handler))
+        .route("/reset-password", post(reset_password_handler))
 }
