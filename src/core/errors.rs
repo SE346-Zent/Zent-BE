@@ -84,3 +84,16 @@ pub struct ErrorResponse {
     #[schema(value_type = Option<Object>)]
     pub meta: Option<serde_json::Value>,
 }
+
+impl From<sea_orm::DbErr> for AppError {
+    fn from(err: sea_orm::DbErr) -> Self {
+        AppError::Internal(anyhow::anyhow!("Database error: {}", err))
+    }
+}
+
+impl From<redis::RedisError> for AppError {
+    fn from(err: redis::RedisError) -> Self {
+        AppError::Internal(anyhow::anyhow!("Cache error: {}", err))
+    }
+}
+

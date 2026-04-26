@@ -26,7 +26,6 @@ use crate::{
             base::{ApiResponse, MessageOnlyResponse},
         },
     },
-    services::v1::auth::{login_service, register_service, verify_otp_service, resend_otp_service, refresh_token_service, forgot_password_service, verify_forgot_password_otp_service, reset_password_service},
 };
 
 #[utoipa::path(
@@ -44,26 +43,8 @@ pub async fn forgot_password_handler(
     State(state): State<AppState>,
     Json(payload): Json<ForgotPasswordRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    if let Err(errors) = payload.validate() {
-        let err_msg = errors.to_string();
-        return Err(AppError::BadRequest(err_msg));
-    }
-
-    let valkey = state.valkey.clone().ok_or_else(|| {
-        AppError::Internal(anyhow::anyhow!("Valkey is not initialized"))
-    })?;
-
-    let rabbitmq = state.rabbitmq.clone().ok_or_else(|| {
-        AppError::Internal(anyhow::anyhow!("RabbitMQ is not initialized"))
-    })?;
-
-    let result = forgot_password_service::perform_forgot_password(
-        state.db.clone(),
-        valkey,
-        rabbitmq,
-        payload
-    ).await?;
-    
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.forgot_password(payload).await?;
     Ok(Json(result))
 }
 
@@ -82,20 +63,8 @@ pub async fn verify_forgot_password_otp_handler(
     State(state): State<AppState>,
     Json(payload): Json<VerifyForgotPasswordOtpRequest>,
 ) -> Result<Json<ApiResponse<VerifyForgotPasswordOtpResponseData>>, AppError> {
-    if let Err(errors) = payload.validate() {
-        let err_msg = errors.to_string();
-        return Err(AppError::BadRequest(err_msg));
-    }
-
-    let valkey = state.valkey.clone().ok_or_else(|| {
-        AppError::Internal(anyhow::anyhow!("Valkey is not initialized"))
-    })?;
-
-    let result = verify_forgot_password_otp_service::perform_verify_forgot_password_otp(
-        valkey,
-        payload
-    ).await?;
-    
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.verify_forgot_password_otp(payload).await?;
     Ok(Json(result))
 }
 
@@ -113,21 +82,8 @@ pub async fn reset_password_handler(
     State(state): State<AppState>,
     Json(payload): Json<ResetPasswordRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    if let Err(errors) = payload.validate() {
-        let err_msg = errors.to_string();
-        return Err(AppError::BadRequest(err_msg));
-    }
-
-    let valkey = state.valkey.clone().ok_or_else(|| {
-        AppError::Internal(anyhow::anyhow!("Valkey is not initialized"))
-    })?;
-
-    let result = reset_password_service::perform_reset_password(
-        state.db.clone(),
-        valkey,
-        payload
-    ).await?;
-    
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.reset_password(payload).await?;
     Ok(Json(result))
 }
 
@@ -148,20 +104,8 @@ pub async fn refresh_token_handler(
     State(state): State<AppState>,
     Json(payload): Json<RefreshTokenRequest>,
 ) -> Result<Json<ApiResponse<LoginResponseData>>, AppError> {
-    if let Err(errors) = payload.validate() {
-        let err_msg = errors.to_string();
-        return Err(AppError::BadRequest(err_msg));
-    }
-
-    let result = refresh_token_service::perform_refresh(
-        state.db.clone(),
-        state.valkey.clone(),
-        state.access_token_ttl,
-        state.session_ttl,
-        state.encoding_key.clone(),
-        payload
-    ).await?;
-    
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.refresh_token(payload).await?;
     Ok(Json(result))
 }
 
@@ -181,21 +125,15 @@ pub async fn login_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<UserLoginRequest>,
 ) -> Result<Json<ApiResponse<LoginResponseData>>, AppError> {
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+
     let ip_address = headers
         .get("X-Real-IP")
         .and_then(|val| val.to_str().ok())
         .map(|s| s.to_string())
         .unwrap_or_else(|| addr.ip().to_string());
 
-    let result = login_service::perform_login(
-        state.db.clone(),
-        state.valkey.clone(),
-        state.access_token_ttl,
-        state.session_ttl,
-        state.encoding_key.clone(),
-        payload,
-        ip_address
-    ).await?;
+    let result = state.auth_service.login(payload, ip_address).await?;
     Ok(Json(result))
 }
 
@@ -214,18 +152,8 @@ pub async fn register_handler(
     State(state): State<AppState>,
     Json(payload): Json<UserRegistrationRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    if let Err(errors) = payload.validate() {
-        let err_msg = errors.to_string();
-        return Err(AppError::BadRequest(err_msg));
-    }
-
-    let result = register_service::perform_register(
-        state.db.clone(), 
-        state.valkey.clone(), 
-        state.rabbitmq.clone(), 
-        payload
-    ).await?;
-    
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.register(payload).await?;
     Ok(Json(result))
 }
 
@@ -244,22 +172,8 @@ pub async fn verify_otp_handler(
     State(state): State<AppState>,
     Json(payload): Json<VerifyOtpRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    if let Err(errors) = payload.validate() {
-        let err_msg = errors.to_string();
-        return Err(AppError::BadRequest(err_msg));
-    }
-
-    let rabbitmq = state.rabbitmq.clone().ok_or_else(|| {
-        AppError::Internal(anyhow::anyhow!("RabbitMQ is not initialized"))
-    })?;
-
-    let result = verify_otp_service::perform_verify_otp(
-        state.db.clone(), 
-        state.valkey.clone().unwrap(), 
-        rabbitmq, 
-        payload
-    ).await?;
-    
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.verify_otp(payload).await?;
     Ok(Json(result))
 }
 
@@ -277,22 +191,8 @@ pub async fn resend_otp_handler(
     State(state): State<AppState>,
     Json(payload): Json<ResendOtpRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    if let Err(errors) = payload.validate() {
-        let err_msg = errors.to_string();
-        return Err(AppError::BadRequest(err_msg));
-    }
-
-    let rabbitmq = state.rabbitmq.clone().ok_or_else(|| {
-        AppError::Internal(anyhow::anyhow!("RabbitMQ is not initialized"))
-    })?;
-
-    let result = resend_otp_service::perform_resend_otp(
-        state.db.clone(), 
-        state.valkey.clone().unwrap(), 
-        rabbitmq, 
-        payload
-    ).await?;
-    
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.resend_otp(payload).await?;
     Ok(Json(result))
 }
 

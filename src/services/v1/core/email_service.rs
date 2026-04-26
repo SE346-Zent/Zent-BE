@@ -1,8 +1,10 @@
-use crate::infrastructure::mq::publish_email_message;
+use std::collections::HashMap;
+use crate::infrastructure::mq::RabbitMQManager;
 use crate::core::errors::AppError;
 
 pub async fn send_verification_email(
-    rabbitmq: &lapin::Connection,
+    rabbitmq: &RabbitMQManager,
+    templates: &HashMap<String, String>,
     to: &str,
     name: &str,
     code: &str,
@@ -11,11 +13,8 @@ pub async fn send_verification_email(
     let escaped_name = v_htmlescape::escape(name).to_string();
     let escaped_code = v_htmlescape::escape(code).to_string();
 
-    // 1. Prepare email template
-    let template_path = std::path::Path::new("templates/verification_email.html");
-    let email_body = if template_path.exists() {
-        let template_content = tokio::fs::read_to_string(template_path).await
-            .unwrap_or_else(|_| "Your verification code is: {{code}}".to_string());
+    // 1. Prepare email template from cache
+    let email_body = if let Some(template_content) = templates.get("verification_email.html") {
         template_content
             .replace("{{code}}", &escaped_code)
             .replace("{{name}}", &escaped_name)
@@ -30,7 +29,7 @@ pub async fn send_verification_email(
         "body": email_body
     });
     
-    publish_email_message(rabbitmq, email_payload.to_string().as_bytes()).await
+    rabbitmq.publish_email_message(email_payload.to_string().as_bytes()).await
         .map_err(|e| {
             tracing::error!("Failed to enqueue verification email task into RabbitMQ: {}", e);
             AppError::Internal(anyhow::anyhow!("Failed to send verification email"))
@@ -40,7 +39,8 @@ pub async fn send_verification_email(
 }
 
 pub async fn send_forgot_password_email(
-    rabbitmq: &lapin::Connection,
+    rabbitmq: &RabbitMQManager,
+    templates: &HashMap<String, String>,
     to: &str,
     name: &str,
     code: &str,
@@ -48,10 +48,7 @@ pub async fn send_forgot_password_email(
     let escaped_name = v_htmlescape::escape(name).to_string();
     let escaped_code = v_htmlescape::escape(code).to_string();
 
-    let template_path = std::path::Path::new("templates/forgot_password_email.html");
-    let email_body = if template_path.exists() {
-        let template_content = tokio::fs::read_to_string(template_path).await
-            .unwrap_or_else(|_| "Your password reset code is: {{code}}".to_string());
+    let email_body = if let Some(template_content) = templates.get("forgot_password_email.html") {
         template_content
             .replace("{{code}}", &escaped_code)
             .replace("{{name}}", &escaped_name)
@@ -65,7 +62,7 @@ pub async fn send_forgot_password_email(
         "body": email_body
     });
     
-    publish_email_message(rabbitmq, email_payload.to_string().as_bytes()).await
+    rabbitmq.publish_email_message(email_payload.to_string().as_bytes()).await
         .map_err(|e| {
             tracing::error!("Failed to enqueue forgot password email task into RabbitMQ: {}", e);
             AppError::Internal(anyhow::anyhow!("Failed to send reset email"))
@@ -75,7 +72,8 @@ pub async fn send_forgot_password_email(
 }
 
 pub async fn send_welcome_email(
-    rabbitmq: &lapin::Connection,
+    rabbitmq: &RabbitMQManager,
+    _templates: &HashMap<String, String>,
     to: &str,
     name: &str,
 ) -> Result<(), AppError> {
@@ -86,7 +84,7 @@ pub async fn send_welcome_email(
         "body": format!("Welcome to Zent, {}! Your account has been successfully created.", escaped_name)
     });
     
-    publish_email_message(rabbitmq, email_payload.to_string().as_bytes()).await
+    rabbitmq.publish_email_message(email_payload.to_string().as_bytes()).await
         .map_err(|e| {
             tracing::error!("Failed to enqueue welcome email task into RabbitMQ: {}", e);
             AppError::Internal(anyhow::anyhow!("Failed to send welcome email"))

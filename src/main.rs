@@ -1,17 +1,10 @@
 use axum::Router;
 use tracing::info;
+use std::sync::Arc;
 
-pub mod core;
-pub mod entities;
-pub mod extractor;
-pub mod handlers;
-pub mod infrastructure;
-pub mod model;
-pub mod repository;
-pub mod services;
-
-use crate::core::state::AppState;
-use crate::core::config::AppConfig;
+use zent_be::core::state::AppState;
+use zent_be::core::config::AppConfig;
+use zent_be::{core, handlers, infrastructure, services};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,34 +21,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = infrastructure::database::init_database(cfg).await?;
 
     // Initialize Valkey cache via infrastructure layer
-    let valkey = infrastructure::cache::init_cache(cfg)
+    let valkey = infrastructure::cache::init_cache(cfg).await
         .expect("Failed to initialize Valkey cache client");
 
     // Connect to RabbitMQ using configured URI mapping efficiently
-    let rabbitmq = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url)
-        .await
-        .expect("Failed to initialize RabbitMQ Message Queue Architecture");
+    let rabbitmq = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url).await;
 
     // Start background asynchronous AMQP email consumer pool globally
     infrastructure::mq::start_email_consumer(rabbitmq.clone()).await;
 
     // Load lookup tables (roles, account_statuses, etc.) into memory
-    let lookup_tables = core::lookup_tables::LookupTables::load(&db)
+    let db_conn = db.get_connection().await.expect("Failed to get DB connection for LUT");
+    let lookup_tables = core::lookup_tables::LookupTables::load(&db_conn)
         .await
         .expect("Failed to load lookup tables from database");
+
+    // Pre-load email templates into memory cache
+    let templates = infrastructure::templates::load_templates().await;
+
+    // Initialize AuthService with dependencies
+    let auth_service = services::v1::auth::AuthService::new(
+        db.clone(),
+        valkey.clone(),
+        rabbitmq.clone(),
+        Arc::new(templates.clone()),
+        core::state::AccessTokenDefaultTTLSeconds(cfg.access_token_ttl_seconds),
+        core::state::SessionDefaultTTLSeconds(cfg.session_ttl_seconds),
+        jsonwebtoken::EncodingKey::from_secret(cfg.jwt_sign_key.as_bytes()),
+    );
 
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
         db.clone(),
-        Some(valkey),
-        Some(rabbitmq.clone()),
+        valkey.clone(),
+        rabbitmq.clone(),
         cfg.access_token_ttl_seconds,
         cfg.session_ttl_seconds,
         lookup_tables.clone(),
+        templates,
+        auth_service,
     );
 
     // Start background cron scheduler for maintenance tasks using pre-loaded LUT
-    infrastructure::scheduler::start_scheduler(db, state.lookup_tables.clone()).await
+    infrastructure::scheduler::start_scheduler(db_conn, state.lookup_tables.clone()).await
         .expect("Failed to start maintenance scheduler");
 
     // Apply strict nested modular Router mapping with dynamic dispatch boundaries safely inside axum

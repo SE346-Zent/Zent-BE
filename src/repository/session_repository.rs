@@ -60,3 +60,16 @@ pub async fn revoke(
         .exec(db)
         .await
 }
+
+/// Revoke all active sessions for a specific user.
+pub async fn revoke_all_by_user_id(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+) -> Result<UpdateResult, DbErr> {
+    sessions::Entity::update_many()
+        .col_expr(sessions::Column::RevokedAt, Expr::value(chrono::Utc::now()))
+        .filter(sessions::Column::UserId.eq(user_id))
+        .filter(sessions::Column::RevokedAt.is_null())
+        .exec(db)
+        .await
+}

@@ -1,10 +1,13 @@
 use axum::extract::FromRef;
+use std::collections::HashMap;
 use std::sync::Arc;
 use jsonwebtoken::{DecodingKey, EncodingKey};
-use sea_orm::DatabaseConnection;
-use redis::Client;
 
 use crate::core::lookup_tables::LookupTables;
+use crate::infrastructure::database::DatabaseManager;
+use crate::infrastructure::cache::ValkeyManager;
+use crate::infrastructure::mq::RabbitMQManager;
+use crate::services::v1::auth::AuthService;
 
 #[derive(Clone, Copy)]
 pub struct AccessTokenDefaultTTLSeconds(pub i64);
@@ -16,33 +19,39 @@ pub struct SessionDefaultTTLSeconds(pub i64);
 pub struct AppState {
     pub decoding_key: DecodingKey,
     pub encoding_key: EncodingKey,
-    pub db: DatabaseConnection,
-    pub valkey: Option<Client>,
-    pub rabbitmq: Option<Arc<lapin::Connection>>,
+    pub db: Arc<DatabaseManager>,
+    pub valkey: Arc<ValkeyManager>,
+    pub rabbitmq: Arc<RabbitMQManager>,
     pub access_token_ttl: AccessTokenDefaultTTLSeconds,
     pub session_ttl: SessionDefaultTTLSeconds,
     pub lookup_tables: Arc<LookupTables>,
+    pub templates: Arc<HashMap<String, String>>,
+    pub auth_service: Arc<AuthService>,
 }
 
 impl AppState {
     pub fn new(
         secret: &[u8],
-        db: DatabaseConnection,
-        valkey: Option<Client>,
-        rabbitmq: Option<Arc<lapin::Connection>>,
+        db: Arc<DatabaseManager>,
+        valkey: Arc<ValkeyManager>,
+        rabbitmq: Arc<RabbitMQManager>,
         access_token_ttl: i64,
         session_ttl: i64,
         lookup_tables: LookupTables,
+        templates: HashMap<String, String>,
+        auth_service: AuthService,
     ) -> Self {
         Self {
             decoding_key: DecodingKey::from_secret(secret),
             encoding_key: EncodingKey::from_secret(secret),
             db,
-            valkey: valkey,
+            valkey,
             rabbitmq,
             access_token_ttl: AccessTokenDefaultTTLSeconds(access_token_ttl),
             session_ttl: SessionDefaultTTLSeconds(session_ttl),
             lookup_tables: Arc::new(lookup_tables),
+            templates: Arc::new(templates),
+            auth_service: Arc::new(auth_service),
         }
     }
 }
@@ -59,15 +68,15 @@ impl FromRef<AppState> for EncodingKey {
     }
 }
 
-impl FromRef<AppState> for DatabaseConnection {
+impl FromRef<AppState> for Arc<DatabaseManager> {
     fn from_ref(state: &AppState) -> Self {
         state.db.clone()
     }
 }
 
-impl FromRef<AppState> for Client {
+impl FromRef<AppState> for Arc<ValkeyManager> {
     fn from_ref(state: &AppState) -> Self {
-        state.valkey.clone().unwrap()
+        state.valkey.clone()
     }
 }
 
@@ -83,14 +92,27 @@ impl FromRef<AppState> for SessionDefaultTTLSeconds {
     }
 }
 
-impl FromRef<AppState> for Arc<lapin::Connection> {
+impl FromRef<AppState> for Arc<RabbitMQManager> {
     fn from_ref(state: &AppState) -> Self {
-        state.rabbitmq.clone().expect("RabbitMQ is not initialized")
+        state.rabbitmq.clone()
     }
 }
 
 impl FromRef<AppState> for Arc<LookupTables> {
     fn from_ref(state: &AppState) -> Self {
         state.lookup_tables.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<HashMap<String, String>> {
+    fn from_ref(state: &AppState) -> Self {
+        // Default to templates for this type if requested via FromRef
+        state.templates.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<AuthService> {
+    fn from_ref(state: &AppState) -> Self {
+        state.auth_service.clone()
     }
 }
