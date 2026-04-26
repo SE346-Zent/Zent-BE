@@ -1,7 +1,7 @@
 use sea_orm::{DatabaseConnection, EntityTrait};
 use std::collections::HashMap;
 
-use crate::entities::{account_status, part_conditions, part_types, roles, work_order_statuses};
+use crate::entities::{account_status, part_conditions, part_types, roles, work_order_statuses, policy};
 
 /// In-memory lookup tables (LUT) loaded once at server startup.
 ///
@@ -33,6 +33,9 @@ pub struct LookupTables {
     pub work_order_statuses: HashMap<i32, String>,
     /// `work_order_statuses.name` → `work_order_statuses.id`
     pub work_order_statuses_by_name: HashMap<String, i32>,
+
+    /// `policy.policy_name` → `policy.policy_value`
+    pub policies: HashMap<String, String>,
 }
 
 impl LookupTables {
@@ -43,6 +46,7 @@ impl LookupTables {
         let part_types_list = part_types::Entity::find().all(db).await?;
         let part_conditions_list = part_conditions::Entity::find().all(db).await?;
         let work_order_statuses_list = work_order_statuses::Entity::find().all(db).await?;
+        let policies_list = policy::Entity::find().all(db).await?;
 
         let roles: HashMap<i32, String> = roles_list.iter().map(|r| (r.id, r.name.clone())).collect();
         let roles_by_name: HashMap<String, i32> = roles_list.iter().map(|r| (r.name.clone(), r.id)).collect();
@@ -59,12 +63,15 @@ impl LookupTables {
         let work_order_statuses: HashMap<i32, String> = work_order_statuses_list.iter().map(|w| (w.id, w.name.clone())).collect();
         let work_order_statuses_by_name: HashMap<String, i32> = work_order_statuses_list.iter().map(|w| (w.name.clone(), w.id)).collect();
 
+        let policies: HashMap<String, String> = policies_list.iter().map(|p| (p.policy_name.clone(), p.policy_value.clone())).collect();
+
         tracing::info!(
             roles = roles.len(),
             account_statuses = account_statuses.len(),
             part_types = part_types.len(),
             part_conditions = part_conditions.len(),
             work_order_statuses = work_order_statuses.len(),
+            policies = policies.len(),
             "Lookup tables loaded into memory"
         );
 
@@ -79,6 +86,7 @@ impl LookupTables {
             part_conditions_by_name,
             work_order_statuses,
             work_order_statuses_by_name,
+            policies,
         })
     }
 
@@ -95,6 +103,7 @@ impl LookupTables {
             part_conditions_by_name: HashMap::new(),
             work_order_statuses: HashMap::new(),
             work_order_statuses_by_name: HashMap::new(),
+            policies: HashMap::new(),
         }
     }
 }

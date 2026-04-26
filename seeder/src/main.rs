@@ -6,7 +6,8 @@ use seeder::{
     UserSeedConfig, seed_account_statuses, seed_product_models, 
     seed_random_products, seed_random_warranties, seed_random_work_orders, seed_roles,
     seed_users, seed_work_order_closing_forms, seed_work_order_statuses,
-    seed_parts_and_catalogs, seed_part_statuses, seed_work_order_symptoms, seed_part_conditions
+    seed_parts_and_catalogs, seed_part_statuses, seed_work_order_symptoms, seed_part_conditions,
+    seed_policies
 };
 use serde_json::to_string_pretty;
 use std::path::PathBuf;
@@ -111,6 +112,9 @@ async fn main() -> Result<()> {
     println!("\n--- Seeding Part Conditions ---");
     let _part_conditions = seed_part_conditions(&db).await?;
 
+    println!("\n--- Seeding Policies ---");
+    let _policies = seed_policies(&db).await?;
+
     // -----------------------------------------------------------------------
     // Step 2: seed users FIRST (products & warranties need customer_id)
     // -----------------------------------------------------------------------
@@ -126,20 +130,20 @@ async fn main() -> Result<()> {
     )
     .await?;
 
-    // Collect user IDs for downstream seeders
+    // Collect user IDs for downstream seeders - only use non-pending users to avoid FK issues during cleanup
     let customer_ids: Vec<uuid::Uuid> = records
         .iter()
-        .filter(|r| r.role == "Customer")
+        .filter(|r| r.role == "Customer" && r.account_status != "Pending")
         .map(|r| r.id)
         .collect();
     let technician_ids: Vec<uuid::Uuid> = records
         .iter()
-        .filter(|r| r.role == "Technician")
+        .filter(|r| r.role == "Technician" && r.account_status != "Pending")
         .map(|r| r.id)
         .collect();
     let admin_ids: Vec<uuid::Uuid> = records
         .iter()
-        .filter(|r| r.role == "Admin" || r.role == "SuperAdmin")
+        .filter(|r| (r.role == "Admin" || r.role == "SuperAdmin") && r.account_status != "Pending")
         .map(|r| r.id)
         .collect();
 
