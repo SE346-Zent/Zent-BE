@@ -24,25 +24,25 @@ pub async fn handle_register(
     templates: &HashMap<String, String>,
     req: UserRegistrationRequest,
 ) -> Result<ApiResponse<()>, AppError> {
-    // 1. Check existing
+    // 1. Load required statuses/roles first
+    let pending_status = account_status_repository::find_by_name(&db, "Pending").await?
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing")))?;
+    let customer_role = role_repository::find_by_name(&db, "Customer").await?
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Customer role missing")))?;
+
+    // 2. Check existing user
     let existing = user_repository::find_by_email(&db, &req.email).await?;
 
     if let Some(user) = existing.as_ref() {
-        if user.account_status != 1 { // Assuming 1 is Pending
+        if user.account_status != pending_status.id { 
             return Err(AppError::Conflict("Email already registered and active".to_string()));
         }
     }
 
-    // 2. Hash password
+    // 3. Hash password
     let hashed_password = hasher::hash_password(req.password).await?;
 
-    // 3. Load roles/status
-    let customer_role = role_repository::find_by_name(&db, "Customer").await?
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Customer role missing")))?;
-    let pending_status = account_status_repository::find_by_name(&db, "Pending").await?
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing")))?;
-
-    // 4. Save user
+    // 4. Save user (Update if pending, otherwise Create)
     let user_id = if let Some(u) = existing {
         u.id
     } else {
@@ -63,7 +63,7 @@ pub async fn handle_register(
         ..Default::default()
     };
 
-    if user_id == Uuid::nil() || user_repository::find_by_id(&db, user_id).await?.is_none() {
+    if user_repository::find_by_id(&db, user_id).await?.is_none() {
         user_repository::create(&db, user_active).await?;
     } else {
         user_repository::update(&db, user_active).await?;

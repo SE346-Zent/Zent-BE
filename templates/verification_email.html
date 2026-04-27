@@ -1,46 +1,57 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>Zent Verification</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zent Verification</title>
 </head>
-<body>
-    <h2>Welcome to Zent, {{name}}!</h2>
-    <p>Thank you for registering. Please use the following 6-digit code to verify your email address:</p>
-    
-    <h3 id="otp-code" 
-        style="background-color: #f4f4f4; padding: 10px; display: inline-block; border-radius: 5px; cursor: pointer; user-select: all;" 
-        onclick="copyToClipboard()">
-        {{code}}
-    </h3>
-    
-    <p>This code will expire in 10 minutes.</p>
-    <p>Please don't share this code with anyone.</p>
-
-    <span id="copy-feedback" style="display: none; color: green; font-size: 14px; margin-left: 10px;">
-        Copied!
-    </span>
-
-
-    <script>
-        function copyToClipboard() {
-            // 1. Get the text content of the element
-            const codeElement = document.getElementById("otp-code");
-            const codeText = codeElement.innerText;
-
-            // 2. Use the modern Clipboard API to write the text
-            navigator.clipboard.writeText(codeText).then(() => {
-                // 3. Show visual feedback to the user
-                const feedback = document.getElementById("copy-feedback");
-                feedback.style.display = "inline-block";
-                
-                // Hide the feedback message after 2 seconds
-                setTimeout(() => {
-                    feedback.style.display = "none";
-                }, 2000);
-            }).catch(err => {
-                console.error('Failed to copy text: ', err);
-            });
-        }
-    </script>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; color: #333333;">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+        <tr>
+            <td align="center" style="padding: 40px 0;">
+                <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #e0e0e0;">
+                    <!-- Header -->
+                    <tr>
+                        <td align="center" style="padding: 30px 40px; background-color: #007bff;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">Zent</h1>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px 40px 30px 40px;">
+                            <h2 style="margin: 0 0 20px 0; font-size: 22px; font-weight: 600; color: #111111;">Welcome to Zent, {{name}}!</h2>
+                            <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 1.6; color: #555555;">
+                                Thank you for joining us. To complete your registration and secure your account, please use the 6-digit verification code below:
+                            </p>
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding: 20px 0 30px 0;">
+                                        <div style="background-color: #f4f7fa; padding: 20px 40px; border-radius: 6px; display: inline-block; border: 1px dashed #007bff;">
+                                            <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; color: #007bff; letter-spacing: 8px;">{{code}}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="margin: 0 0 10px 0; font-size: 14px; line-height: 1.6; color: #777777;">
+                                <strong>Note:</strong> This code is valid for <strong>10 minutes</strong>. 
+                            </p>
+                            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #777777;">
+                                For your security, never share this code with anyone. Zent employees will never ask for your verification code.
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 30px 40px; background-color: #fcfcfc; border-top: 1px solid #eeeeee; text-align: center;">
+                            <p style="margin: 0; font-size: 12px; color: #999999;">
+                                &copy; 2026 Zent Project. All rights reserved.<br>
+                                This is an automated security notification.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>
