@@ -68,7 +68,8 @@ pub async fn handle_login(
     // 6. Create session in DB
     let session_id = Uuid::new_v4();
     let session_ttl_seconds = session_ttl.0;
-    let expires_at = Utc::now() + chrono::Duration::seconds(session_ttl_seconds);
+    let now = Utc::now();
+    let expires_at = now + chrono::Duration::seconds(session_ttl_seconds);
 
     let active_session = sessions::ActiveModel {
         id: Set(session_id),
@@ -76,6 +77,7 @@ pub async fn handle_login(
         refresh_token_hash: Set(token_bundle.refresh_token_hash.clone()),
         ip_address: Set(ip_address),
         device_fingerprint: Set(user_model.id.to_string()),
+        created_at: Set(now),
         expires_at: Set(expires_at),
         ..Default::default()
     };

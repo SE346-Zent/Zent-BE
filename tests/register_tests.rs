@@ -40,6 +40,7 @@ async fn seed_test_db(db: &DatabaseConnection) {
 }
 
 async fn setup_app_with_db(db: DatabaseConnection) -> Router {
+    let _ = tracing_subscriber::fmt::try_init();
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
 
@@ -47,11 +48,15 @@ async fn setup_app_with_db(db: DatabaseConnection) -> Router {
     let valkey_mgr = zent_be::infrastructure::cache::ValkeyManager::stub();
     let rmq_mgr = zent_be::infrastructure::mq::RabbitMQManager::stub();
     
+    let mut templates = std::collections::HashMap::new();
+    templates.insert("verification_email.html".to_string(), "Template content".to_string());
+    let templates_arc = std::sync::Arc::new(templates);
+
     let auth_service = zent_be::services::v1::auth::AuthService::new(
         db_mgr.clone(),
         valkey_mgr.clone(),
         rmq_mgr.clone(),
-        std::sync::Arc::new(std::collections::HashMap::new()),
+        templates_arc.clone(),
         zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
         zent_be::core::state::SessionDefaultTTLSeconds(3600),
         jsonwebtoken::EncodingKey::from_secret(b"integration_test_secret_for_tokens"),
@@ -65,7 +70,7 @@ async fn setup_app_with_db(db: DatabaseConnection) -> Router {
         900, 
         3600, 
         LookupTables::empty(),
-        std::collections::HashMap::new(),
+        (*templates_arc).clone(),
         auth_service
     );
 

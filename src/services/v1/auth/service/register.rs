@@ -14,6 +14,7 @@ use crate::{
 };
 use crate::utils::{hasher, otp};
 use uuid::Uuid;
+use chrono::Utc;
 use redis::AsyncCommands;
 
 pub async fn handle_register(
@@ -26,7 +27,7 @@ pub async fn handle_register(
     // 1. Check existing
     let existing = user_repository::find_by_email(&db, &req.email).await?;
 
-    if let Some(user) = existing {
+    if let Some(user) = existing.as_ref() {
         if user.account_status != 1 { // Assuming 1 is Pending
             return Err(AppError::Conflict("Email already registered and active".to_string()));
         }
@@ -42,7 +43,13 @@ pub async fn handle_register(
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing")))?;
 
     // 4. Save user
-    let user_id = Uuid::new_v4();
+    let user_id = if let Some(u) = existing {
+        u.id
+    } else {
+        Uuid::new_v4()
+    };
+    
+    let now = Utc::now();
     let user_active = users::ActiveModel {
         id: Set(user_id),
         full_name: Set(req.full_name.clone()),
@@ -51,10 +58,16 @@ pub async fn handle_register(
         phone_number: Set(req.phone_number.clone()),
         role_id: Set(customer_role.id),
         account_status: Set(pending_status.id),
+        created_at: Set(now),
+        updated_at: Set(now),
         ..Default::default()
     };
 
-    user_repository::create(&db, user_active).await?;
+    if user_id == Uuid::nil() || user_repository::find_by_id(&db, user_id).await?.is_none() {
+        user_repository::create(&db, user_active).await?;
+    } else {
+        user_repository::update(&db, user_active).await?;
+    }
 
     // 5. OTP
     let verification_code = otp::generate_6digit_otp();
