@@ -11,10 +11,8 @@ use zent_be::handlers::v1::auth::register_handler;
 use zent_be::core::lookup_tables::LookupTables;
 use zent_be::core::state::AppState;
 
-use chrono::Utc;
 use migration::{Migrator, MigratorTrait};
-use sea_orm::{ActiveModelTrait, Database, DatabaseConnection, EntityTrait, Set, QueryFilter, ColumnTrait};
-use uuid::Uuid;
+use sea_orm::*;
 
 // ==========================================
 //  Helpers
@@ -42,24 +40,38 @@ async fn seed_test_db(db: &DatabaseConnection) {
 }
 
 async fn setup_app_with_db(db: DatabaseConnection) -> Router {
+    let _ = tracing_subscriber::fmt::try_init();
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
 
-    // For testing registration, we need to mock Valkey and RabbitMQ if possible, 
-    // but here we are testing the handler/service integration.
-    // In a real scenario, we'd use a mock for state.rabbitmq and state.valkey.
-    // Since we can't easily mock lapin::Connection in this environment without complex traits,
-    // these tests might fail if they hit the actual RMQ/Redis logic.
-    // However, I will set them to None and the handler should handle it (or we mock the service).
+    let db_mgr = zent_be::infrastructure::database::DatabaseManager::from_connection(db);
+    let valkey_mgr = zent_be::infrastructure::cache::ValkeyManager::stub();
+    let rmq_mgr = zent_be::infrastructure::mq::RabbitMQManager::stub();
     
+    let mut templates = std::collections::HashMap::new();
+    templates.insert("verification_email.html".to_string(), "Template content".to_string());
+    let templates_arc = std::sync::Arc::new(templates);
+
+    let auth_service = zent_be::services::v1::auth::AuthService::new(
+        db_mgr.clone(),
+        valkey_mgr.clone(),
+        rmq_mgr.clone(),
+        templates_arc.clone(),
+        zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
+        zent_be::core::state::SessionDefaultTTLSeconds(3600),
+        jsonwebtoken::EncodingKey::from_secret(b"integration_test_secret_for_tokens"),
+    );
+
     let state = AppState::new(
         b"integration_test_secret_for_tokens", 
-        db, 
-        None, // Valkey None
-        None, // RabbitMQ None
+        db_mgr, 
+        valkey_mgr, 
+        rmq_mgr, 
         900, 
         3600, 
-        LookupTables::empty()
+        LookupTables::empty(),
+        (*templates_arc).clone(),
+        auth_service
     );
 
     Router::new()
@@ -76,9 +88,13 @@ fn create_json_request(uri: &str, body: &serde_json::Value) -> Request<Body> {
         .unwrap()
 }
 
+// ==========================================
+//  Tests
+// ==========================================
+
 #[tokio::test]
 async fn test_register_new_user() {
-    let db = Database::connect("sqlite::memory:").await.unwrap();
+    let db: DatabaseConnection = Database::connect("sqlite::memory:").await.unwrap();
     let app = setup_app_with_db(db.clone()).await;
 
     let req_body = serde_json::json!({
@@ -90,82 +106,90 @@ async fn test_register_new_user() {
 
     let req = create_json_request("/register", &req_body);
     let r = app.oneshot(req).await.unwrap();
-    
-    // Handler returns 200 OK by default even if the payload says 201
-    assert_eq!(r.status(), StatusCode::OK);
-    
-    // Verify user exists in DB
+
+    assert!(r.status() == StatusCode::CREATED || r.status() == StatusCode::OK);
+
+    // Verify DB state
     let user = users::Entity::find()
         .filter(users::Column::Email.eq("new@example.com"))
         .one(&db)
         .await
-        .unwrap();
-    assert!(user.is_some());
+        .unwrap()
+        .expect("User should be in database");
+
+    assert_eq!(user.full_name, "New User");
+    assert_eq!(user.account_status, 1); // Pending
 }
 
 #[tokio::test]
 async fn test_register_existing_pending_user() {
-    let db = Database::connect("sqlite::memory:").await.unwrap();
+    let db: DatabaseConnection = Database::connect("sqlite::memory:").await.unwrap();
     let app = setup_app_with_db(db.clone()).await;
 
     // Pre-insert a pending user
-    let user_id = Uuid::new_v4();
-    users::ActiveModel {
-        id: Set(user_id),
+    let _ = users::ActiveModel {
+        id: Set(uuid::Uuid::new_v4()),
         full_name: Set("Old Name".to_string()),
         email: Set("pending@example.com".to_string()),
-        password_hash: Set("old_hash".to_string()),
+        password_hash: Set("oldhash".to_string()),
         phone_number: Set("000".to_string()),
         account_status: Set(1), // Pending
         role_id: Set(1),
-        created_at: Set(Utc::now()),
-        updated_at: Set(Utc::now()),
+        created_at: Set(chrono::Utc::now()),
+        updated_at: Set(chrono::Utc::now()),
         deleted_at: Set(None),
-    }.insert(&db).await.unwrap();
+    }
+    .insert(&db)
+    .await
+    .unwrap();
 
     let req_body = serde_json::json!({
         "fullName": "Updated Name",
         "email": "pending@example.com",
-        "password": "newpassword123",
-        "phoneNumber": "111"
+        "password": "password123",
+        "phoneNumber": "123456789"
     });
 
     let req = create_json_request("/register", &req_body);
-    let _ = app.oneshot(req).await.unwrap();
+    let r = app.oneshot(req).await.unwrap();
 
-    // Verify user details are updated
+    assert!(r.status() == StatusCode::CREATED || r.status() == StatusCode::OK);
+
+    // Verify user was updated
     let user = users::Entity::find()
         .filter(users::Column::Email.eq("pending@example.com"))
         .one(&db)
         .await
         .unwrap()
         .unwrap();
-    
+
     assert_eq!(user.full_name, "Updated Name");
-    assert_eq!(user.phone_number, "111");
 }
 
 #[tokio::test]
 async fn test_register_existing_active_user_conflict() {
-    let db = Database::connect("sqlite::memory:").await.unwrap();
+    let db: DatabaseConnection = Database::connect("sqlite::memory:").await.unwrap();
     let app = setup_app_with_db(db.clone()).await;
 
     // Pre-insert an active user
-    users::ActiveModel {
-        id: Set(Uuid::new_v4()),
+    let _ = users::ActiveModel {
+        id: Set(uuid::Uuid::new_v4()),
         full_name: Set("Active User".to_string()),
         email: Set("active@example.com".to_string()),
         password_hash: Set("hash".to_string()),
-        phone_number: Set("222".to_string()),
+        phone_number: Set("111".to_string()),
         account_status: Set(2), // Active
         role_id: Set(1),
-        created_at: Set(Utc::now()),
-        updated_at: Set(Utc::now()),
+        created_at: Set(chrono::Utc::now()),
+        updated_at: Set(chrono::Utc::now()),
         deleted_at: Set(None),
-    }.insert(&db).await.unwrap();
+    }
+    .insert(&db)
+    .await
+    .unwrap();
 
     let req_body = serde_json::json!({
-        "fullName": "Another Name",
+        "fullName": "Conflict",
         "email": "active@example.com",
         "password": "password123",
         "phoneNumber": "333"

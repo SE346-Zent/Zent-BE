@@ -16,14 +16,77 @@ use crate::{
             user_registration_request::UserRegistrationRequest,
             verify_otp_request::VerifyOtpRequest,
             resend_otp_request::ResendOtpRequest,
+            forgot_password_request::ForgotPasswordRequest,
+            verify_forgot_password_otp_request::VerifyForgotPasswordOtpRequest,
+            reset_password_request::ResetPasswordRequest,
         },
         responses::{
             auth::login_response::LoginResponseData,
+            auth::verify_forgot_password_otp_response::VerifyForgotPasswordOtpResponseData,
             base::{ApiResponse, MessageOnlyResponse},
         },
     },
-    services::v1::auth::{login_service, register_service, verify_otp_service, resend_otp_service, refresh_token_service},
 };
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/forgot-password",
+    request_body = ForgotPasswordRequest,
+    responses(
+        (status = 200, description = "OTP sent successfully", body = MessageOnlyResponse),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 404, description = "User not found", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    )
+)]
+pub async fn forgot_password_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ForgotPasswordRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.forgot_password(payload).await?;
+    Ok(Json(result))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/verify-forgot-password-otp",
+    request_body = VerifyForgotPasswordOtpRequest,
+    responses(
+        (status = 200, description = "OTP verified successfully", body = ApiResponse<VerifyForgotPasswordOtpResponseData>),
+        (status = 400, description = "Invalid OTP", body = ErrorResponse),
+        (status = 403, description = "Too many failed attempts", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    )
+)]
+pub async fn verify_forgot_password_otp_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<VerifyForgotPasswordOtpRequest>,
+) -> Result<Json<ApiResponse<VerifyForgotPasswordOtpResponseData>>, AppError> {
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.verify_forgot_password_otp(payload).await?;
+    Ok(Json(result))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/reset-password",
+    request_body = ResetPasswordRequest,
+    responses(
+        (status = 200, description = "Password reset successfully", body = MessageOnlyResponse),
+        (status = 400, description = "Invalid token", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    )
+)]
+pub async fn reset_password_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ResetPasswordRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.reset_password(payload).await?;
+    Ok(Json(result))
+}
+
 use crate::model::requests::auth::refresh_token_request::RefreshTokenRequest;
 
 #[utoipa::path(
@@ -41,20 +104,8 @@ pub async fn refresh_token_handler(
     State(state): State<AppState>,
     Json(payload): Json<RefreshTokenRequest>,
 ) -> Result<Json<ApiResponse<LoginResponseData>>, AppError> {
-    if let Err(errors) = payload.validate() {
-        let err_msg = errors.to_string();
-        return Err(AppError::BadRequest(err_msg));
-    }
-
-    let result = refresh_token_service::perform_refresh(
-        state.db.clone(),
-        state.valkey.clone(),
-        state.access_token_ttl,
-        state.session_ttl,
-        state.encoding_key.clone(),
-        payload
-    ).await?;
-    
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.refresh_token(payload).await?;
     Ok(Json(result))
 }
 
@@ -74,21 +125,15 @@ pub async fn login_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<UserLoginRequest>,
 ) -> Result<Json<ApiResponse<LoginResponseData>>, AppError> {
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+
     let ip_address = headers
         .get("X-Real-IP")
         .and_then(|val| val.to_str().ok())
         .map(|s| s.to_string())
         .unwrap_or_else(|| addr.ip().to_string());
 
-    let result = login_service::perform_login(
-        state.db.clone(),
-        state.valkey.clone(),
-        state.access_token_ttl,
-        state.session_ttl,
-        state.encoding_key.clone(),
-        payload,
-        ip_address
-    ).await?;
+    let result = state.auth_service.login(payload, ip_address).await?;
     Ok(Json(result))
 }
 
@@ -107,18 +152,8 @@ pub async fn register_handler(
     State(state): State<AppState>,
     Json(payload): Json<UserRegistrationRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    if let Err(errors) = payload.validate() {
-        let err_msg = errors.to_string();
-        return Err(AppError::BadRequest(err_msg));
-    }
-
-    let result = register_service::perform_register(
-        state.db.clone(), 
-        state.valkey.clone(), 
-        state.rabbitmq.clone(), 
-        payload
-    ).await?;
-    
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.register(payload).await?;
     Ok(Json(result))
 }
 
@@ -137,22 +172,8 @@ pub async fn verify_otp_handler(
     State(state): State<AppState>,
     Json(payload): Json<VerifyOtpRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    if let Err(errors) = payload.validate() {
-        let err_msg = errors.to_string();
-        return Err(AppError::BadRequest(err_msg));
-    }
-
-    let rabbitmq = state.rabbitmq.clone().ok_or_else(|| {
-        AppError::Internal(anyhow::anyhow!("RabbitMQ is not initialized"))
-    })?;
-
-    let result = verify_otp_service::perform_verify_otp(
-        state.db.clone(), 
-        state.valkey.clone().unwrap(), 
-        rabbitmq, 
-        payload
-    ).await?;
-    
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.verify_otp(payload).await?;
     Ok(Json(result))
 }
 
@@ -170,22 +191,8 @@ pub async fn resend_otp_handler(
     State(state): State<AppState>,
     Json(payload): Json<ResendOtpRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    if let Err(errors) = payload.validate() {
-        let err_msg = errors.to_string();
-        return Err(AppError::BadRequest(err_msg));
-    }
-
-    let rabbitmq = state.rabbitmq.clone().ok_or_else(|| {
-        AppError::Internal(anyhow::anyhow!("RabbitMQ is not initialized"))
-    })?;
-
-    let result = resend_otp_service::perform_resend_otp(
-        state.db.clone(), 
-        state.valkey.clone().unwrap(), 
-        rabbitmq, 
-        payload
-    ).await?;
-    
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let result = state.auth_service.resend_otp(payload).await?;
     Ok(Json(result))
 }
 
@@ -196,4 +203,7 @@ pub fn router() -> Router<AppState> {
         .route("/verify-otp", post(verify_otp_handler))
         .route("/resend-otp", post(resend_otp_handler))
         .route("/refresh-token", post(refresh_token_handler))
+        .route("/forgot-password", post(forgot_password_handler))
+        .route("/verify-forgot-password-otp", post(verify_forgot_password_otp_handler))
+        .route("/reset-password", post(reset_password_handler))
 }

@@ -48,11 +48,15 @@ async fn cleanup_pending_accounts(db: &DatabaseConnection, lut: &LookupTables) -
             .and_then(|v| v.parse::<i64>().ok())
             .unwrap_or(3);
 
-        // let customer_cutoff = Utc::now() - Duration::hours(customer_cleanup_hours);
-        // let staff_cutoff = Utc::now() - Duration::days(staff_cleanup_days);
+        // For testing: use 1 minute. For production, uncomment the lines below.
+        let _ = customer_cleanup_hours;
+        let _ = staff_cleanup_days;
+        // let customer_cutoff = Utc::now() - Duration::minutes(1);
+        // let staff_cutoff = Utc::now() - Duration::minutes(1);
 
-        let customer_cutoff = Utc::now() - Duration::minutes(1);
-        let staff_cutoff = Utc::now() - Duration::minutes(1);
+        let customer_cutoff = Utc::now() - Duration::hours(customer_cleanup_hours);
+        let staff_cutoff = Utc::now() - Duration::days(staff_cleanup_days);
+
         // 2. Build the condition for deletion
         let mut cleanup_condition = Condition::any();
 
