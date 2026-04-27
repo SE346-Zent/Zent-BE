@@ -93,13 +93,13 @@ async fn shutdown_signal() {
             .expect("Failed to install Ctrl+C handler");
     };
 
-    // #[cfg(unix)]
-    // let terminate = async {
-    //     tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-    //         .expect("Failed to install SIGTERM signal handler")
-    //         .recv()
-    //         .await;
-    // };
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM signal handler")
+            .recv()
+            .await;
+    };
 
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
