@@ -1,12 +1,12 @@
 use sea_orm::*;
+use sea_orm::prelude::Expr;
 use crate::{
     core::errors::AppError,
-    entities::users,
+    entities::{users, sessions},
     model::{
         requests::auth::reset_password_request::ResetPasswordRequest,
         responses::base::ApiResponse,
     },
-    repository::{user_repository, session_repository},
 };
 use crate::utils::hasher;
 use redis::AsyncCommands;
@@ -22,7 +22,10 @@ pub async fn handle_reset_password(
     let email: Option<String> = conn.get(&reset_token_key).await?;
     let email = email.ok_or_else(|| AppError::BadRequest("Invalid or expired token".to_string()))?;
 
-    let user = user_repository::find_by_email(&db, &email).await?
+    let user = users::Entity::find()
+        .filter(users::Column::Email.eq(&email))
+        .one(&db)
+        .await?
         .ok_or_else(|| AppError::NotFound("User missing".to_string()))?;
 
     // Same password check
@@ -36,15 +39,20 @@ pub async fn handle_reset_password(
     let mut user_active: users::ActiveModel = user.into();
     user_active.password_hash = Set(new_hash);
     user_active.updated_at = Set(Utc::now());
-    user_repository::update(&db, user_active).await?;
+    user_active.update(&db).await?;
 
     // Revoke sessions
-    let active_sessions = crate::entities::sessions::Entity::find()
-        .filter(crate::entities::sessions::Column::UserId.eq(user_id))
-        .filter(crate::entities::sessions::Column::RevokedAt.is_null())
+    let active_sessions = sessions::Entity::find()
+        .filter(sessions::Column::UserId.eq(user_id))
+        .filter(sessions::Column::RevokedAt.is_null())
         .all(&db).await?;
 
-    let _ = session_repository::revoke_all_by_user_id(&db, user_id).await;
+    let _ = sessions::Entity::update_many()
+        .col_expr(sessions::Column::RevokedAt, Expr::value(chrono::Utc::now()))
+        .filter(sessions::Column::UserId.eq(user_id))
+        .filter(sessions::Column::RevokedAt.is_null())
+        .exec(&db)
+        .await;
 
     for session in active_sessions {
         let whitelist_key = format!("whitelist:session:{}", session.id);

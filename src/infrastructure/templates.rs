@@ -5,6 +5,10 @@ use tokio::fs;
 pub async fn load_templates() -> HashMap<String, String> {
     let mut templates = HashMap::new();
     let template_dir = Path::new("templates");
+    
+    if let Ok(abs_path) = std::env::current_dir() {
+        tracing::info!("Searching for templates in: {}/templates", abs_path.display());
+    }
 
     if let Ok(mut entries) = fs::read_dir(template_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {

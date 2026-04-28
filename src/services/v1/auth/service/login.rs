@@ -4,7 +4,7 @@ use crate::{
         errors::AppError,
         state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds},
     },
-    entities::sessions,
+    entities::{sessions, users},
     model::{
         requests::auth::user_login_request::UserLoginRequest,
         responses::{
@@ -12,7 +12,6 @@ use crate::{
             auth::login_response::{LoginResponseData, UserInfo, AccountStatusEnum},
         },
     },
-    repository::user_repository,
     services::v1::core::token_service,
     utils::hasher,
 };
@@ -31,7 +30,9 @@ pub async fn handle_login(
     ip_address: String,
 ) -> Result<ApiResponse<LoginResponseData>, AppError> {
     // 1. Find user by email
-    let user_model = user_repository::find_by_email(&db, &req.email)
+    let user_model = users::Entity::find()
+        .filter(users::Column::Email.eq(&req.email))
+        .one(&db)
         .await?
         .ok_or_else(|| AppError::Unauthorized("Invalid credentials".to_string()))?;
 
