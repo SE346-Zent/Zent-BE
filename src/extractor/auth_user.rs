@@ -14,6 +14,7 @@ use crate::{
     extractor::jwt_claims::AuthError,
 };
 
+#[derive(Clone)]
 pub struct AuthUser {
     pub user: users::Model,
     pub role: roles::Model,

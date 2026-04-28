@@ -17,6 +17,8 @@ pub enum AuthError {
     ExpiredTokenError,
     AuthHeaderNotFound,
     InternalServerError,
+    MissingRole,
+    Forbidden,
 }
 
 impl IntoResponse for AuthError {
@@ -26,6 +28,8 @@ impl IntoResponse for AuthError {
             AuthError::ExpiredTokenError => StatusCode::UNAUTHORIZED,
             AuthError::AuthHeaderNotFound => StatusCode::UNAUTHORIZED,
             AuthError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
+            AuthError::MissingRole => StatusCode::FORBIDDEN,
+            AuthError::Forbidden => StatusCode::FORBIDDEN,
         };
         status.into_response()
     }
