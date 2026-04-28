@@ -10,6 +10,25 @@ pub struct Model {
     pub name: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    Admin,
+    SuperAdmin,
+    Customer,
+    Technician,
+}
+
+impl Role {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Role::Admin => "Admin",
+            Role::SuperAdmin => "SuperAdmin",
+            Role::Customer => "Customer",
+            Role::Technician => "Technician",
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(has_many = "super::users::Entity")]
