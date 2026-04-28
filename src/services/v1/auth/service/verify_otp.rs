@@ -3,12 +3,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use crate::{
     core::errors::AppError,
-    entities::users,
+    entities::{account_status, users},
     model::{
         requests::auth::verify_otp_request::VerifyOtpRequest,
         responses::base::ApiResponse,
     },
-    repository::{user_repository, account_status_repository},
     services::v1::core::email_service,
     infrastructure::mq::RabbitMQManager,
 };
@@ -38,14 +37,20 @@ pub async fn handle_verify_otp(
     }
 
     // Update to Active
-    let user = user_repository::find_by_email(&db, &req.email).await?
+    let user = users::Entity::find()
+        .filter(users::Column::Email.eq(&req.email))
+        .one(&db)
+        .await?
         .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
-    let active_status = account_status_repository::find_by_name(&db, "Active").await?
+    let active_status = account_status::Entity::find()
+        .filter(account_status::Column::Name.eq("Active"))
+        .one(&db)
+        .await?
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Active status missing")))?;
 
     let mut user_active: users::ActiveModel = user.clone().into();
     user_active.account_status = Set(active_status.id);
-    user_repository::update(&db, user_active).await?;
+    user_active.update(&db).await?;
 
     if let Some(rmq) = rabbitmq {
         email_service::send_welcome_email(&rmq, templates, &user.email, &user.full_name).await?;

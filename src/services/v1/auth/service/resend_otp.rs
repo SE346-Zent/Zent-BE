@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use crate::{
     core::errors::AppError,
+    entities::{account_status, users},
     model::{
         requests::auth::resend_otp_request::ResendOtpRequest,
         responses::base::ApiResponse,
     },
-    repository::{user_repository, account_status_repository},
     services::v1::core::email_service,
     infrastructure::mq::RabbitMQManager,
 };
@@ -21,10 +21,16 @@ pub async fn handle_resend_otp(
     templates: &HashMap<String, String>,
     req: ResendOtpRequest,
 ) -> Result<ApiResponse<()>, AppError> {
-    let user = user_repository::find_by_email(&db, &req.email).await?
+    let user = users::Entity::find()
+        .filter(users::Column::Email.eq(&req.email))
+        .one(&db)
+        .await?
         .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
     
-    let pending_status = account_status_repository::find_by_name(&db, "Pending").await?
+    let pending_status = account_status::Entity::find()
+        .filter(account_status::Column::Name.eq("Pending"))
+        .one(&db)
+        .await?
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing")))?;
 
     if user.account_status != pending_status.id {

@@ -3,12 +3,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use crate::{
     core::errors::AppError,
-    entities::users,
+    entities::{account_status, roles, users},
     model::{
         requests::auth::user_registration_request::UserRegistrationRequest,
         responses::base::ApiResponse,
     },
-    repository::{user_repository, account_status_repository, role_repository},
     services::v1::core::email_service,
     infrastructure::mq::RabbitMQManager,
 };
@@ -25,13 +24,22 @@ pub async fn handle_register(
     req: UserRegistrationRequest,
 ) -> Result<ApiResponse<()>, AppError> {
     // 1. Load required statuses/roles first
-    let pending_status = account_status_repository::find_by_name(&db, "Pending").await?
+    let pending_status = account_status::Entity::find()
+        .filter(account_status::Column::Name.eq("Pending"))
+        .one(&db)
+        .await?
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing")))?;
-    let customer_role = role_repository::find_by_name(&db, "Customer").await?
+    let customer_role = roles::Entity::find()
+        .filter(roles::Column::Name.eq("Customer"))
+        .one(&db)
+        .await?
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Customer role missing")))?;
 
     // 2. Check existing user
-    let existing = user_repository::find_by_email(&db, &req.email).await?;
+    let existing = users::Entity::find()
+        .filter(users::Column::Email.eq(&req.email))
+        .one(&db)
+        .await?;
 
     if let Some(user) = existing.as_ref() {
         if user.account_status != pending_status.id { 
@@ -63,10 +71,11 @@ pub async fn handle_register(
         ..Default::default()
     };
 
-    if user_repository::find_by_id(&db, user_id).await?.is_none() {
-        user_repository::create(&db, user_active).await?;
+    let existing_user = users::Entity::find_by_id(user_id).one(&db).await?;
+    if existing_user.is_none() {
+        user_active.insert(&db).await?;
     } else {
-        user_repository::update(&db, user_active).await?;
+        user_active.update(&db).await?;
     }
 
     // 5. OTP

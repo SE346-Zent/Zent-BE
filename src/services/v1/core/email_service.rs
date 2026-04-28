@@ -19,7 +19,11 @@ pub async fn send_verification_email(
             .replace("{{code}}", &escaped_code)
             .replace("{{name}}", &escaped_name)
     } else {
-        format!("Welcome to Zent, {}! Your verification code is: {}", escaped_name, escaped_code)
+        tracing::warn!("Template 'verification_email.html' not found in cache! Using minimal HTML fallback.");
+        format!(
+            "<html><body><h2>Welcome to Zent, {}!</h2><p>Your verification code is: <strong style='color:#007bff; font-size:24px;'>{}</strong></p></body></html>", 
+            escaped_name, escaped_code
+        )
     };
 
     // 2. Deliver async email task to RabbitMQ
@@ -53,7 +57,11 @@ pub async fn send_forgot_password_email(
             .replace("{{code}}", &escaped_code)
             .replace("{{name}}", &escaped_name)
     } else {
-        format!("Hello {}, Your password reset code is: {}", escaped_name, escaped_code)
+        tracing::warn!("Template 'forgot_password_email.html' not found in cache! Using minimal HTML fallback.");
+        format!(
+            "<html><body><h2>Reset Your Password, {}</h2><p>Your password reset code is: <strong style='color:#dc3545; font-size:24px;'>{}</strong></p></body></html>", 
+            escaped_name, escaped_code
+        )
     };
 
     let email_payload = serde_json::json!({

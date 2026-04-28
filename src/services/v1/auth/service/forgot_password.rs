@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use crate::{
     core::errors::AppError,
+    entities::users,
     model::{
         requests::auth::forgot_password_request::ForgotPasswordRequest,
         responses::base::ApiResponse,
     },
-    repository::user_repository,
     services::v1::core::email_service,
     infrastructure::mq::RabbitMQManager,
 };
@@ -21,7 +21,10 @@ pub async fn handle_forgot_password(
     templates: &HashMap<String, String>,
     req: ForgotPasswordRequest,
 ) -> Result<ApiResponse<()>, AppError> {
-    let user = user_repository::find_by_email(&db, &req.email).await?
+    let user = users::Entity::find()
+        .filter(users::Column::Email.eq(&req.email))
+        .one(&db)
+        .await?
         .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
     let otp_code = otp::generate_6digit_otp();
