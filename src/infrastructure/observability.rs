@@ -137,7 +137,6 @@ fn build_otlp_logger_provider(endpoint: &str, resource: Resource) -> Option<SdkL
     Some(provider)
 }
 
-/// Flush remaining signals when the application shuts down.
 pub fn shutdown_tracing() {
     global::shutdown_tracer_provider();
     if let Some(mp) = METER_PROVIDER.get() {
@@ -148,7 +147,6 @@ pub fn shutdown_tracing() {
     }
 }
 
-/// Returns the global meter for the application.
 pub fn meter() -> opentelemetry::metrics::Meter {
     global::meter("zent-be")
 }
