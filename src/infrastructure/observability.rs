@@ -86,7 +86,7 @@ pub fn init_tracing() {
 
 fn build_otlp_tracer_provider(endpoint: &str, resource: Resource) -> Option<SdkTracerProvider> {
     let exporter = opentelemetry_otlp::SpanExporter::builder()
-        .with_tonic()
+        .with_http()
         .with_endpoint(endpoint)
         .build()
         .ok()?;
@@ -103,7 +103,7 @@ fn build_otlp_tracer_provider(endpoint: &str, resource: Resource) -> Option<SdkT
 
 fn build_otlp_meter_provider(endpoint: &str, resource: Resource) -> Option<SdkMeterProvider> {
     let exporter = opentelemetry_otlp::MetricExporter::builder()
-        .with_tonic()
+        .with_http()
         .with_endpoint(endpoint)
         .build()
         .ok()?;
@@ -122,7 +122,7 @@ fn build_otlp_meter_provider(endpoint: &str, resource: Resource) -> Option<SdkMe
 
 fn build_otlp_logger_provider(endpoint: &str, resource: Resource) -> Option<SdkLoggerProvider> {
     let exporter = opentelemetry_otlp::LogExporter::builder()
-        .with_tonic()
+        .with_http()
         .with_endpoint(endpoint)
         .build()
         .ok()?;

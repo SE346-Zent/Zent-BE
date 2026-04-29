@@ -57,7 +57,7 @@ tracing-subscriber = { version = "0.3.22", features = ["json", "env-filter"] }
 tracing-opentelemetry = "0.28"
 opentelemetry = { version = "0.27", features = ["logs", "metrics"] }
 opentelemetry_sdk = { version = "0.27", features = ["rt-tokio", "logs", "metrics"] }
-opentelemetry-otlp = { version = "0.27", features = ["grpc-tonic", "logs", "metrics"] }
+opentelemetry-otlp = { version = "0.27", features = ["http-json", "grpc-tonic", "logs", "metrics"] }
 opentelemetry-appender-tracing = "0.27"
 utoipa = { version = "5.4.0", features = [
     "axum_extras",
