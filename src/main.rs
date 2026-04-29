@@ -8,15 +8,15 @@ use zent_be::{core, handlers, infrastructure, services};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Structured JSON logs + OpenTelemetry pipeline
-    infrastructure::tracing::init_tracing();
-
-    tracing::info!("Server starting...");
-    
     // Initialize central configuration manager
     AppConfig::init();
     let cfg = AppConfig::get();
 
+    // Structured JSON logs + OpenTelemetry pipeline
+    infrastructure::observability::init_tracing();
+
+    tracing::info!("Server starting...");
+    
     // Initialize database (MySQL) via infrastructure layer
     let db = infrastructure::database::init_database(cfg).await?;
 
@@ -67,8 +67,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to start maintenance scheduler");
 
     // Apply strict nested modular Router mapping with dynamic dispatch boundaries safely inside axum
+    let requests_counter = infrastructure::observability::meter()
+        .u64_counter("http.requests_total")
+        .with_description("Total number of HTTP requests")
+        .build();
+
     let app = Router::new()
         .nest("/api/v1", handlers::v1::router())
+        .layer(axum::middleware::from_fn(move |req, next: axum::middleware::Next| {
+            let requests_counter = requests_counter.clone();
+            async move {
+                requests_counter.add(1, &[]);
+                next.run(req).await
+            }
+        }))
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", cfg.port);
@@ -81,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // Flush remaining OTel spans
-    infrastructure::tracing::shutdown_tracing();
+    infrastructure::observability::shutdown_tracing();
 
     Ok(())
 }

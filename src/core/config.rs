@@ -43,6 +43,10 @@ pub struct AppConfig {
 
     #[serde(default = "default_db_max_lifetime")]
     pub db_max_lifetime_seconds: u64,
+
+    pub otel_exporter_otlp_endpoint: Option<String>,
+    pub otel_exporter_otlp_headers: Option<String>,
+    pub otel_service_name: Option<String>,
 }
 
 fn default_access_token_ttl() -> i64 { 3600 }

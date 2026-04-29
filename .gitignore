@@ -57,3 +57,4 @@ db_seed.rs
 .env.example
 errors.txt
 seeder_errors.txt
+*config*
