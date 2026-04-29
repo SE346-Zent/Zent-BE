@@ -36,7 +36,6 @@ pub fn init_tracing() {
         KeyValue::new("deployment.environment", cfg.app_stage.clone()),
     ]);
 
-    // Default to local agent if endpoint is not configured
     let agent_endpoint = cfg.otel_exporter_otlp_endpoint.clone()
         .unwrap_or_else(|| "http://localhost:4317".to_string());
 
