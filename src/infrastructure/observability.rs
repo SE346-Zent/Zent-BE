@@ -40,13 +40,6 @@ pub fn init_tracing() {
     let agent_endpoint = cfg.otel_exporter_otlp_endpoint.clone()
         .unwrap_or_else(|| "http://localhost:4317".to_string());
 
-    // --- Set up global error handler to print export errors ---
-    if let Err(err) = opentelemetry::global::set_error_handler(|error| {
-        eprintln!("OpenTelemetry Error: {:?}", error);
-    }) {
-        eprintln!("Failed to set OpenTelemetry error handler: {:?}", err);
-    }
-    
     println!("OTEL Agent Endpoint configured as: {}", agent_endpoint);
 
     
