@@ -20,7 +20,7 @@ COPY --from=cacher /app/target target
 COPY --from=cacher $CARGO_HOME $CARGO_HOME
 # Build the application
 # Removed --locked here as well to handle minor inconsistencies between local and container environments
-RUN cargo build --release --package zent-be --package seeder -j 4
+RUN cargo build --release --package zent-be --package seeder
 
 # Stage 4: Runtime
 FROM debian:bookworm-slim AS runtime
