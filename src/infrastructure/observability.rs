@@ -40,8 +40,10 @@ pub fn init_tracing() {
     let agent_endpoint = cfg.otel_exporter_otlp_endpoint.clone()
         .unwrap_or_else(|| "http://localhost:4317".to_string());
 
+    
+
     // --- Build OTLP tracer provider ------------------------------
-    let otel_trace_layer = if let Some(provider) = build_otlp_tracer_provider(&agent_endpoint, resource.clone()) {
+    let otel_trace_layer = if let Some(provider) = build_otlp_tracer_provider(format!("{agent_endpoint}/v1/traces").as_str(), resource.clone()) {
         let tracer = provider.tracer("zent-be");
         global::set_tracer_provider(provider);
         Some(tracing_opentelemetry::layer().with_tracer(tracer))
@@ -50,13 +52,13 @@ pub fn init_tracing() {
     };
 
     // --- Build OTLP meter provider -------------------------------
-    if let Some(meter_provider) = build_otlp_meter_provider(&agent_endpoint, resource.clone()) {
+    if let Some(meter_provider) = build_otlp_meter_provider(format!("{agent_endpoint}/v1/metrics").as_str(), resource.clone()) {
         global::set_meter_provider(meter_provider.clone());
         let _ = METER_PROVIDER.set(meter_provider);
     }
 
     // --- Build OTLP logger provider ------------------------------
-    let otel_log_layer = if let Some(logger_provider) = build_otlp_logger_provider(&agent_endpoint, resource) {
+    let otel_log_layer = if let Some(logger_provider) = build_otlp_logger_provider(format!("{agent_endpoint}/v1/logs").as_str(), resource) {
         let layer = opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge::new(&logger_provider);
         let _ = LOGGER_PROVIDER.set(logger_provider);
         Some(layer)
