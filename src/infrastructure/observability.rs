@@ -75,8 +75,10 @@ pub fn init_tracing() {
         None
     };
 
-    // 7. Configure EnvFilter (defaults to debug)
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| "debug".into());
+    // 7. Configure EnvFilter (defaults to debug, but suppress noisy OTEL/HTTP crates)
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        "debug,hyper_util=info,reqwest=info,opentelemetry=off,opentelemetry_sdk=off,opentelemetry_otlp=off".into()
+    });
 
     // 8. Configure Console JSON layer
     let json_layer = fmt::layer()

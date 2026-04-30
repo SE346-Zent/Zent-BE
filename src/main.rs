@@ -28,7 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rabbitmq = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url).await;
 
     // Start background asynchronous AMQP email consumer pool globally
-    infrastructure::mq::start_email_consumer(rabbitmq.clone()).await;
+    infrastructure::consumers::email::start_email_consumer(rabbitmq.clone()).await;
 
     // Load lookup tables (roles, account_statuses, etc.) into memory
     let db_conn = db.get_connection().await.expect("Failed to get DB connection for LUT");
@@ -63,8 +63,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Start background cron scheduler for maintenance tasks using pre-loaded LUT
-    infrastructure::scheduler::start_scheduler(db_conn, state.lookup_tables.clone()).await
-        .expect("Failed to start maintenance scheduler");
+    let app_scheduler = infrastructure::scheduler::AppScheduler::new()
+        .await
+        .expect("Failed to initialize scheduler");
+
+    let user_cleanup_job = infrastructure::cron_tasks::cleanup_pending_users::build_cleanup_job(
+        db_conn,
+        state.lookup_tables.clone(),
+    )
+    .expect("Failed to build cleanup job");
+    
+    app_scheduler.register_job(user_cleanup_job)
+        .await
+        .expect("Failed to register cleanup job");
+        
+    app_scheduler.start()
+        .await
+        .expect("Failed to start scheduler");
 
     // Apply strict nested modular Router mapping with dynamic dispatch boundaries safely inside axum
     let requests_counter = infrastructure::observability::meter()
