@@ -90,17 +90,23 @@ impl EmailProducer {
         // Ensure topology is set up (Idempotent)
         setup_email_topology(&channel).await?;
 
-        match channel.basic_publish(
+        let confirm = channel.basic_publish(
             EMAIL_EXCHANGE,
             EMAIL_ROUTING_KEY,
             BasicPublishOptions::default(),
             payload,
             BasicProperties::default().with_delivery_mode(2), // Persistent
-        ).await {
-            Ok(_) => {
+        ).await?;
+
+        match confirm.await {
+            Ok(lapin::publisher_confirm::Confirmation::Ack(_)) | Ok(lapin::publisher_confirm::Confirmation::NotRequested) => {
                 publish_count.add(1, &[opentelemetry::KeyValue::new("exchange", EMAIL_EXCHANGE)]);
                 let _ = channel.close(200, "OK").await;
                 Ok(())
+            }
+            Ok(lapin::publisher_confirm::Confirmation::Nack(_)) => {
+                publish_errors.add(1, &[opentelemetry::KeyValue::new("exchange", EMAIL_EXCHANGE)]);
+                Err(anyhow::anyhow!("Broker returned Nack"))
             }
             Err(err) => {
                 publish_errors.add(1, &[opentelemetry::KeyValue::new("exchange", EMAIL_EXCHANGE)]);

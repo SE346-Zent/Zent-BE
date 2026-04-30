@@ -120,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = Router::new()
         .nest("/api/v1", handlers::v1::router())
-        .layer(axum::middleware::from_fn(move |req: axum::extract::Request, next: axum::middleware::Next| {
+        .route_layer(axum::middleware::from_fn(move |req: axum::extract::Request, next: axum::middleware::Next| {
             let requests_counter = requests_counter.clone();
             let request_duration = request_duration.clone();
             let active_requests = active_requests.clone();
@@ -128,7 +128,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let response_size = response_size.clone();
             
             let start = std::time::Instant::now();
-            let path = req.uri().path().to_string();
+            let path = req
+                .extensions()
+                .get::<axum::extract::MatchedPath>()
+                .map_or_else(|| req.uri().path().to_string(), |mp| mp.as_str().to_string());
             let method = req.method().to_string();
             
             // Capture request size
