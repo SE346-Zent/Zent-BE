@@ -37,6 +37,10 @@ impl DatabaseManager {
     }
 
     pub async fn get_connection(&self) -> Result<DatabaseConnection, sea_orm::DbErr> {
+        let meter = crate::infrastructure::observability::meter();
+        let wait_time = meter.f64_histogram("db.client.connections.wait_time").with_unit("s").build();
+        let db_errors = meter.u64_counter("db.client.connections.errors").build();
+        
         if self.is_stub {
             let guard = self.connection.lock().await;
             if let Some(conn) = &*guard {
@@ -53,14 +57,23 @@ impl DatabaseManager {
             }
         }
 
-        let db = Database::connect(self.opt.clone()).await?;
+        let start = std::time::Instant::now();
+        match Database::connect(self.opt.clone()).await {
+            Ok(db) => {
+                wait_time.record(start.elapsed().as_secs_f64(), &[]);
+                
+                tracing::info!("Running database migrations");
+                Migrator::up(&db, None).await.expect("Failed to run database migrations");
+                tracing::info!("Database migrations applied successfully");
 
-        tracing::info!("Running database migrations");
-        Migrator::up(&db, None).await.expect("Failed to run database migrations");
-        tracing::info!("Database migrations applied successfully");
-
-        *guard = Some(db.clone());
-        Ok(db)
+                *guard = Some(db.clone());
+                Ok(db)
+            }
+            Err(err) => {
+                db_errors.add(1, &[]);
+                Err(err)
+            }
+        }
     }
 
     pub fn from_connection(db: DatabaseConnection) -> Arc<Self> {

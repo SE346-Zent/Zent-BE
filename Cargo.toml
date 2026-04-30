@@ -69,6 +69,7 @@ utoipa-scalar = { version = "0.3.0", features = ["axum"] }
 uuid = { version = "1.21.0", features = ["serde", "v4"] }
 validator = { version = "0.20.0", features = ["derive"] }
 v_htmlescape = "0.15"
+sysinfo = "0.33.1"
 migration = { path = "migration" }
 redis = { version = "1.2.0", features = ["tokio-comp"] }
 tokio-cron-scheduler = "0.13.0"

@@ -72,31 +72,109 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state.lookup_tables.clone(),
     )
     .expect("Failed to build cleanup job");
+
+    let metrics_job = infrastructure::cron_tasks::observability_metrics::build_metrics_job()
+        .expect("Failed to build metrics collection job");
     
     app_scheduler.register_job(user_cleanup_job)
         .await
         .expect("Failed to register cleanup job");
+
+    app_scheduler.register_job(metrics_job)
+        .await
+        .expect("Failed to register metrics job");
         
     app_scheduler.start()
         .await
         .expect("Failed to start scheduler");
 
     // Apply strict nested modular Router mapping with dynamic dispatch boundaries safely inside axum
-    let requests_counter = infrastructure::observability::meter()
-        .u64_counter("http.requests_total")
+    let meter = infrastructure::observability::meter();
+    let requests_counter = meter
+        .u64_counter("http.server.request.count")
         .with_description("Total number of HTTP requests")
+        .build();
+
+    let request_duration = meter
+        .f64_histogram("http.server.request.duration")
+        .with_description("Time taken to process HTTP requests")
+        .with_unit("s")
+        .build();
+
+    let active_requests = meter
+        .i64_up_down_counter("http.server.active_requests")
+        .with_description("Number of active HTTP requests")
+        .build();
+
+    let request_size = meter
+        .u64_histogram("http.server.request.size")
+        .with_description("Size of HTTP request bodies")
+        .with_unit("By")
+        .build();
+
+    let response_size = meter
+        .u64_histogram("http.server.response.size")
+        .with_description("Size of HTTP response bodies")
+        .with_unit("By")
         .build();
 
     let app = Router::new()
         .nest("/api/v1", handlers::v1::router())
-        .layer(tower_http::trace::TraceLayer::new_for_http())
-        .layer(axum::middleware::from_fn(move |req, next: axum::middleware::Next| {
+        .route_layer(axum::middleware::from_fn(move |req: axum::extract::Request, next: axum::middleware::Next| {
             let requests_counter = requests_counter.clone();
+            let request_duration = request_duration.clone();
+            let active_requests = active_requests.clone();
+            let request_size = request_size.clone();
+            let response_size = response_size.clone();
+            
+            let start = std::time::Instant::now();
+            let path = req
+                .extensions()
+                .get::<axum::extract::MatchedPath>()
+                .map_or_else(|| req.uri().path().to_string(), |mp| mp.as_str().to_string());
+            let method = req.method().to_string();
+            
+            // Capture request size
+            let req_content_length = req.headers()
+                .get(http::header::CONTENT_LENGTH)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0);
+
             async move {
-                requests_counter.add(1, &[]);
-                next.run(req).await
+                active_requests.add(1, &[]);
+                request_size.record(req_content_length, &[opentelemetry::KeyValue::new("http.method", method.clone())]);
+
+                let response = next.run(req).await;
+                
+                let latency = start.elapsed().as_secs_f64();
+                let status = response.status().as_u16().to_string();
+                
+                // Capture response size
+                let res_content_length = response.headers()
+                    .get(http::header::CONTENT_LENGTH)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok())
+                    .unwrap_or(0);
+
+                let labels = [
+                    opentelemetry::KeyValue::new("http.method", method),
+                    opentelemetry::KeyValue::new("http.route", path),
+                    opentelemetry::KeyValue::new("http.status_code", status),
+                ];
+
+                requests_counter.add(1, &labels);
+                request_duration.record(latency, &labels);
+                response_size.record(res_content_length, &labels);
+                active_requests.add(-1, &[]);
+
+                response
             }
         }))
+        .layer(tower_http::trace::TraceLayer::new_for_http()
+            .make_span_with(tower_http::trace::DefaultMakeSpan::new().level(tracing::Level::INFO))
+            .on_response(tower_http::trace::DefaultOnResponse::new().level(tracing::Level::INFO))
+        )
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", cfg.port);
