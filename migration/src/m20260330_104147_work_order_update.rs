@@ -73,7 +73,7 @@ impl MigrationTrait for Migration {
                     .col(string(WorkOrders::Address))
                     .col(string_null(WorkOrders::Building))
                     .col(timestamp(WorkOrders::Appointment))
-                    .col(uuid(WorkOrders::AdminId))
+                    .col(uuid_null(WorkOrders::AdminId))
                     .col(uuid_null(WorkOrders::TechnicianId))
                     .col(uuid_null(WorkOrders::CompleteFormId))
                     .col(string(WorkOrders::WorkOrderNumber))

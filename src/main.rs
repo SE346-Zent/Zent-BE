@@ -74,6 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = Router::new()
         .nest("/api/v1", handlers::v1::router())
+        .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(axum::middleware::from_fn(move |req, next: axum::middleware::Next| {
             let requests_counter = requests_counter.clone();
             async move {

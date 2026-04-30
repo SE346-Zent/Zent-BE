@@ -86,7 +86,7 @@ pub async fn seed_random_work_orders(
                 created_at: Set(now),
                 updated_at: Set(now),
                 deleted_at: Set(None),
-                admin_id: Set(*admin_id),
+                admin_id: Set(Some(*admin_id)),
                 customer_id: Set(customer_id),
                 technician_id: Set(technician_id.copied()),
                 complete_form_id: if closing_form_ids.is_empty() { Set(Some(Uuid::new_v4())) } else { Set(Some(*closing_form_ids.choose(&mut rng).unwrap())) },
