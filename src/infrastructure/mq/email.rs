@@ -76,6 +76,10 @@ impl EmailProducer {
     }
 
     pub async fn publish(&self, payload: &[u8]) -> Result<(), anyhow::Error> {
+        let meter = crate::infrastructure::observability::meter();
+        let publish_count = meter.u64_counter("messaging.publish.count").build();
+        let publish_errors = meter.u64_counter("messaging.publish.errors").build();
+
         if self.manager.is_stub() {
             return Ok(());
         }
@@ -86,15 +90,22 @@ impl EmailProducer {
         // Ensure topology is set up (Idempotent)
         setup_email_topology(&channel).await?;
 
-        channel.basic_publish(
+        match channel.basic_publish(
             EMAIL_EXCHANGE,
             EMAIL_ROUTING_KEY,
             BasicPublishOptions::default(),
             payload,
             BasicProperties::default().with_delivery_mode(2), // Persistent
-        ).await?;
-        
-        let _ = channel.close(200, "OK").await;
-        Ok(())
+        ).await {
+            Ok(_) => {
+                publish_count.add(1, &[opentelemetry::KeyValue::new("exchange", EMAIL_EXCHANGE)]);
+                let _ = channel.close(200, "OK").await;
+                Ok(())
+            }
+            Err(err) => {
+                publish_errors.add(1, &[opentelemetry::KeyValue::new("exchange", EMAIL_EXCHANGE)]);
+                Err(err.into())
+            }
+        }
     }
 }

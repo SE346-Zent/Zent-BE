@@ -124,7 +124,7 @@ impl AuthService {
         verify_forgot_password_otp::handle_verify_forgot_password_otp(valkey, &script_hashes, req).await
     }
 
-    #[tracing::instrument(skip(self, req), fields(user_new_password = %req.new_password))]
+    #[tracing::instrument(skip(self, req))]
     pub async fn reset_password(&self, req: ResetPasswordRequest) -> Result<ApiResponse<()>, AppError> {
         let db = self.db.get_connection().await?;
         let valkey = self.valkey.get_connection().await.ok();
