@@ -10,7 +10,7 @@ use lettre::transport::smtp::authentication::Credentials;
 use tokio::time::{sleep, Duration};
 
 use crate::core::config::AppConfig;
-use crate::infrastructure::mq::RabbitMQManager;
+use crate::infrastructure::mq::{RabbitMQManager, email::{EMAIL_QUEUE, setup_email_topology}};
 
 pub async fn start_email_consumer(manager: Arc<RabbitMQManager>) {
     tokio::spawn(async move {
@@ -33,8 +33,15 @@ pub async fn start_email_consumer(manager: Arc<RabbitMQManager>) {
                 }
             };
 
+            // Ensure topology is set up (Idempotent)
+            if let Err(e) = setup_email_topology(&channel).await {
+                error!("Failed to setup email topology for consumer: {:?}. Retrying in 5s...", e);
+                sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+
             let mut consumer = match channel.basic_consume(
-                "email_queue",
+                EMAIL_QUEUE,
                 "email_consumer",
                 BasicConsumeOptions::default(),
                 FieldTable::default(),

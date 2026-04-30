@@ -1,9 +1,10 @@
 use std::collections::HashMap;
-use crate::infrastructure::mq::RabbitMQManager;
+use std::sync::Arc;
+use crate::infrastructure::mq::{RabbitMQManager, email::EmailProducer};
 use crate::core::errors::AppError;
 
 pub async fn send_verification_email(
-    rabbitmq: &RabbitMQManager,
+    rabbitmq: &Arc<RabbitMQManager>,
     templates: &HashMap<String, String>,
     to: &str,
     name: &str,
@@ -33,7 +34,8 @@ pub async fn send_verification_email(
         "body": email_body
     });
     
-    rabbitmq.publish_email_message(email_payload.to_string().as_bytes()).await
+    let producer = EmailProducer::new(rabbitmq.clone());
+    producer.publish(email_payload.to_string().as_bytes()).await
         .map_err(|e| {
             tracing::error!("Failed to enqueue verification email task into RabbitMQ: {}", e);
             AppError::Internal(anyhow::anyhow!("Failed to send verification email"))
@@ -43,7 +45,7 @@ pub async fn send_verification_email(
 }
 
 pub async fn send_forgot_password_email(
-    rabbitmq: &RabbitMQManager,
+    rabbitmq: &Arc<RabbitMQManager>,
     templates: &HashMap<String, String>,
     to: &str,
     name: &str,
@@ -70,7 +72,8 @@ pub async fn send_forgot_password_email(
         "body": email_body
     });
     
-    rabbitmq.publish_email_message(email_payload.to_string().as_bytes()).await
+    let producer = EmailProducer::new(rabbitmq.clone());
+    producer.publish(email_payload.to_string().as_bytes()).await
         .map_err(|e| {
             tracing::error!("Failed to enqueue forgot password email task into RabbitMQ: {}", e);
             AppError::Internal(anyhow::anyhow!("Failed to send reset email"))
@@ -80,7 +83,7 @@ pub async fn send_forgot_password_email(
 }
 
 pub async fn send_welcome_email(
-    rabbitmq: &RabbitMQManager,
+    rabbitmq: &Arc<RabbitMQManager>,
     _templates: &HashMap<String, String>,
     to: &str,
     name: &str,
@@ -92,7 +95,8 @@ pub async fn send_welcome_email(
         "body": format!("Welcome to Zent, {}! Your account has been successfully created.", escaped_name)
     });
     
-    rabbitmq.publish_email_message(email_payload.to_string().as_bytes()).await
+    let producer = EmailProducer::new(rabbitmq.clone());
+    producer.publish(email_payload.to_string().as_bytes()).await
         .map_err(|e| {
             tracing::error!("Failed to enqueue welcome email task into RabbitMQ: {}", e);
             AppError::Internal(anyhow::anyhow!("Failed to send welcome email"))
