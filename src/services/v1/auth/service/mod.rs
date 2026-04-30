@@ -70,12 +70,14 @@ impl AuthService {
         }
     }
 
+    #[tracing::instrument(skip(self, req, ip_address), fields(user_email = %req.email))]
     pub async fn login(&self, req: UserLoginRequest, ip_address: String) -> Result<ApiResponse<LoginResponseData>, AppError> {
         let db = self.db.get_connection().await?;
         let valkey = self.valkey.get_connection().await.ok();
         login::handle_login(db, valkey, self.access_token_ttl, self.session_ttl, self.encoding_key.clone(), req, ip_address).await
     }
 
+    #[tracing::instrument(skip(self, req), fields(user_email = %req.email))]
     pub async fn register(&self, req: UserRegistrationRequest) -> Result<ApiResponse<()>, AppError> {
         let db = self.db.get_connection().await?;
         let valkey = self.valkey.get_connection().await.ok();
@@ -83,6 +85,7 @@ impl AuthService {
         register::handle_register(db, valkey, rmq, &self.templates, req).await
     }
 
+    #[tracing::instrument(skip(self, req), fields(user_email = %req.email))]
     pub async fn verify_otp(&self, req: VerifyOtpRequest) -> Result<ApiResponse<()>, AppError> {
         let db = self.db.get_connection().await?;
         let valkey = self.valkey.get_connection().await.ok();
@@ -91,6 +94,7 @@ impl AuthService {
         verify_otp::handle_verify_otp(db, valkey, rmq, &self.templates, &script_hashes, req).await
     }
 
+    #[tracing::instrument(skip(self, req), fields(user_email = %req.email))]
     pub async fn resend_otp(&self, req: ResendOtpRequest) -> Result<ApiResponse<()>, AppError> {
         let db = self.db.get_connection().await?;
         let valkey = self.valkey.get_connection().await.ok();
@@ -98,12 +102,14 @@ impl AuthService {
         resend_otp::handle_resend_otp(db, valkey, Some(rmq), &self.templates, req).await
     }
 
+    #[tracing::instrument(skip(self, req))]
     pub async fn refresh_token(&self, req: RefreshTokenRequest) -> Result<ApiResponse<LoginResponseData>, AppError> {
         let db = self.db.get_connection().await?;
         let valkey = self.valkey.get_connection().await.ok();
         refresh_token::handle_refresh_token(db, valkey, self.access_token_ttl, self.encoding_key.clone(), req).await
     }
 
+    #[tracing::instrument(skip(self, req), fields(user_email = %req.email))]
     pub async fn forgot_password(&self, req: ForgotPasswordRequest) -> Result<ApiResponse<()>, AppError> {
         let db = self.db.get_connection().await?;
         let valkey = self.valkey.get_connection().await.ok();
@@ -111,12 +117,14 @@ impl AuthService {
         forgot_password::handle_forgot_password(db, valkey, rmq, &self.templates, req).await
     }
 
+    #[tracing::instrument(skip(self, req), fields(user_email = %req.email))]
     pub async fn verify_forgot_password_otp(&self, req: VerifyForgotPasswordOtpRequest) -> Result<ApiResponse<VerifyForgotPasswordOtpResponseData>, AppError> {
         let valkey = self.valkey.get_connection().await.ok();
         let script_hashes = self.valkey.get_script_hashes().await;
         verify_forgot_password_otp::handle_verify_forgot_password_otp(valkey, &script_hashes, req).await
     }
 
+    #[tracing::instrument(skip(self, req), fields(user_new_password = %req.new_password))]
     pub async fn reset_password(&self, req: ResetPasswordRequest) -> Result<ApiResponse<()>, AppError> {
         let db = self.db.get_connection().await?;
         let valkey = self.valkey.get_connection().await.ok();

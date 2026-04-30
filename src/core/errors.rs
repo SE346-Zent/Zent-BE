@@ -31,7 +31,11 @@ impl IntoResponse for AppError {
             AppError::ValidationError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
             AppError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg),
             AppError::Internal(err) => {
-                tracing::error!("Internal server error: {:?}", err);
+                tracing::error!(
+                    error.message = %err,
+                    error.details = ?err,
+                    "Internal server error occurred"
+                );
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Internal server error".to_string(),
