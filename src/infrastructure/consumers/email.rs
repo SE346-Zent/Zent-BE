@@ -5,7 +5,7 @@ use lapin::{
 };
 use futures::stream::StreamExt;
 use tracing::{info, error, warn};
-use lettre::{Message, SmtpTransport, Transport};
+use lettre::{Message, AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 use lettre::transport::smtp::authentication::Credentials;
 use tokio::time::{sleep, Duration};
 
@@ -135,12 +135,12 @@ async fn send_email_with_lettre(payload: &str) -> bool {
 
     let creds = Credentials::new(cfg.smtp_username.clone(), cfg.smtp_password.clone());
 
-    let mailer = SmtpTransport::relay("smtp.gmail.com")
+    let mailer: AsyncSmtpTransport<Tokio1Executor> = AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
         .unwrap()
         .credentials(creds)
         .build();
 
-    match mailer.send(&email) {
+    match mailer.send(email).await {
         Ok(_) => {
             tracing::info!("Email sent successfully to {}", to);
             true
