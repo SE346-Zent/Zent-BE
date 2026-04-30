@@ -76,6 +76,10 @@ impl EmailProducer {
     }
 
     pub async fn publish(&self, payload: &[u8]) -> Result<(), anyhow::Error> {
+        if self.manager.is_stub() {
+            return Ok(());
+        }
+
         let conn = self.manager.get_connection().await?;
         let channel = conn.create_channel().await?;
         
@@ -90,6 +94,7 @@ impl EmailProducer {
             BasicProperties::default().with_delivery_mode(2), // Persistent
         ).await?;
         
+        let _ = channel.close(200, "OK").await;
         Ok(())
     }
 }

@@ -21,6 +21,10 @@ impl RabbitMQManager {
         })
     }
 
+    pub fn is_stub(&self) -> bool {
+        self.is_stub
+    }
+
     pub async fn get_connection(&self) -> Result<Arc<Connection>, lapin::Error> {
         if self.is_stub {
             return Err(lapin::Error::ChannelsLimitReached); // Some error for stub
