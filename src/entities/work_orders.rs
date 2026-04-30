@@ -23,7 +23,7 @@ pub struct Model {
     pub address: String,
     pub building: Option<String>,
     pub appointment: DateTimeUtc,
-    pub admin_id: Uuid,
+    pub admin_id: Option<Uuid>,
     pub technician_id: Option<Uuid>,
     pub complete_form_id: Option<Uuid>,
     pub work_order_number: String,
