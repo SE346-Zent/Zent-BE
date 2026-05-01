@@ -5,11 +5,11 @@ use std::collections::HashMap;
 
 use zent_be::core::state::AppState;
 use zent_be::core::config::AppConfig;
-use zent_be::infrastructure::database::DatabasePool;
 use zent_be::infrastructure::cache::ValkeyClient;
 use zent_be::infrastructure::mq::RabbitMQClient;
 use zent_be::infrastructure::scheduler::AppScheduler;
 use zent_be::{core, handlers, infrastructure, services};
+use sea_orm::DatabaseConnection;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Server starting...");
     
     // Initialize database (MySQL) via infrastructure layer
-    let db: Arc<DatabasePool> = infrastructure::database::init_database(cfg).await?;
+    let db: DatabaseConnection = infrastructure::database::init_database(cfg).await?;
 
     // Initialize Valkey cache via infrastructure layer
     let valkey: Arc<ValkeyClient> = infrastructure::cache::init_cache(cfg).await
@@ -37,8 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     infrastructure::consumers::email::start_email_consumer(rabbitmq.clone()).await;
 
     // Load lookup tables (roles, account_statuses, etc.) into memory
-    let db_conn = db.get_connection().await.expect("Failed to get DB connection for LUT");
-    let lookup_tables = core::lookup_tables::LookupTables::load(&db_conn)
+    let lookup_tables = core::lookup_tables::LookupTables::load(&db)
         .await
         .expect("Failed to load lookup tables from database");
 
@@ -68,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to initialize scheduler");
 
     let user_cleanup_job = infrastructure::cron_tasks::cleanup_pending_users::build_cleanup_job(
-        db_conn,
+        db,
         state.lookup_tables.clone(),
     )
     .expect("Failed to build cleanup job");

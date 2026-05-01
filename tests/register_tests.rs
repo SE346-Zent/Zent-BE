@@ -44,7 +44,6 @@ async fn setup_app_with_db(db: DatabaseConnection) -> Router {
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
 
-    let db_mgr = zent_be::infrastructure::database::DatabaseManager::from_connection(db);
     let valkey_mgr = zent_be::infrastructure::cache::ValkeyManager::stub();
     let rmq_mgr = zent_be::infrastructure::mq::RabbitMQManager::stub();
     
@@ -53,7 +52,7 @@ async fn setup_app_with_db(db: DatabaseConnection) -> Router {
     let templates_arc = std::sync::Arc::new(templates);
 
     let auth_service = zent_be::services::v1::auth::AuthService::new(
-        db_mgr.clone(),
+        db.clone(),
         valkey_mgr.clone(),
         rmq_mgr.clone(),
         templates_arc.clone(),

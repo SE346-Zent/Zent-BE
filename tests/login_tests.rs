@@ -114,12 +114,11 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>
         active_user.insert(&db).await.unwrap();
     }
 
-    let db_mgr = zent_be::infrastructure::database::DatabaseManager::from_connection(db);
     let valkey_mgr = zent_be::infrastructure::cache::ValkeyManager::stub();
     let rmq_mgr = zent_be::infrastructure::mq::RabbitMQManager::stub();
 
     let auth_service = zent_be::services::v1::auth::AuthService::new(
-        db_mgr.clone(),
+        db.clone(),
         valkey_mgr.clone(),
         rmq_mgr.clone(),
         std::sync::Arc::new(std::collections::HashMap::new()),
@@ -379,12 +378,11 @@ async fn test_cat2_unknown_status_legacy_data() {
     // Re-enable FK for normal application flow execution
     db.execute_unprepared("PRAGMA foreign_keys = ON;").await.unwrap();
 
-    let db_mgr = zent_be::infrastructure::database::DatabaseManager::from_connection(db);
     let valkey_mgr = zent_be::infrastructure::cache::ValkeyManager::stub();
     let rmq_mgr = zent_be::infrastructure::mq::RabbitMQManager::stub();
 
     let auth_service = zent_be::services::v1::auth::AuthService::new(
-        db_mgr.clone(),
+        db.clone(),
         valkey_mgr.clone(),
         rmq_mgr.clone(),
         std::sync::Arc::new(std::collections::HashMap::new()),
@@ -517,12 +515,11 @@ async fn test_cat3_12_13_zero_ttl() {
     active_user.insert(&db).await.unwrap();
 
 
-    let db_mgr = zent_be::infrastructure::database::DatabaseManager::from_connection(db.clone());
     let valkey_mgr = zent_be::infrastructure::cache::ValkeyManager::stub();
     let rmq_mgr = zent_be::infrastructure::mq::RabbitMQManager::stub();
 
     let auth_service = zent_be::services::v1::auth::AuthService::new(
-        db_mgr.clone(),
+        db.clone(),
         valkey_mgr.clone(),
         rmq_mgr.clone(),
         std::sync::Arc::new(std::collections::HashMap::new()),

@@ -24,10 +24,10 @@ use crate::{
             auth::verify_forgot_password_otp_response::VerifyForgotPasswordOtpResponseData,
         },
     },
-    infrastructure::database::DatabasePool,
     infrastructure::cache::ValkeyClient,
     infrastructure::mq::RabbitMQClient,
 };
+use sea_orm::DatabaseConnection;
 
 // Internal logic modules
 mod login;
@@ -40,7 +40,7 @@ mod verify_forgot_password_otp;
 mod reset_password;
 
 pub struct AuthService {
-    db: Arc<DatabasePool>,
+    db: DatabaseConnection,
     valkey: Arc<ValkeyClient>,
     rabbitmq: Arc<RabbitMQClient>,
     templates: Arc<HashMap<String, String>>,
@@ -51,7 +51,7 @@ pub struct AuthService {
 
 impl AuthService {
     pub fn new(
-        db: Arc<DatabasePool>,
+        db: DatabaseConnection,
         valkey: Arc<ValkeyClient>,
         rabbitmq: Arc<RabbitMQClient>,
         templates: Arc<HashMap<String, String>>,
@@ -72,14 +72,14 @@ impl AuthService {
 
     #[tracing::instrument(skip(self, req, ip_address), fields(user_email = %req.email))]
     pub async fn login(&self, req: UserLoginRequest, ip_address: String) -> Result<ApiResponse<LoginResponseData>, AppError> {
-        let db = self.db.get_connection().await?;
+        let db = self.db.clone();
         let valkey = self.valkey.get_connection().await.ok();
         login::handle_login(db, valkey, self.access_token_ttl, self.session_ttl, self.encoding_key.clone(), req, ip_address).await
     }
 
     #[tracing::instrument(skip(self, req), fields(user_email = %req.email))]
     pub async fn register(&self, req: UserRegistrationRequest) -> Result<ApiResponse<()>, AppError> {
-        let db = self.db.get_connection().await?;
+        let db = self.db.clone();
         let valkey = self.valkey.get_connection().await.ok();
         let rmq = Some(self.rabbitmq.clone());
         register::handle_register(db, valkey, rmq, &self.templates, req).await
@@ -87,7 +87,7 @@ impl AuthService {
 
     #[tracing::instrument(skip(self, req), fields(user_email = %req.email))]
     pub async fn verify_otp(&self, req: VerifyOtpRequest) -> Result<ApiResponse<()>, AppError> {
-        let db = self.db.get_connection().await?;
+        let db = self.db.clone();
         let valkey = self.valkey.get_connection().await.ok();
         let rmq = Some(self.rabbitmq.clone());
         let script_hashes = self.valkey.get_script_hashes().await;
@@ -96,7 +96,7 @@ impl AuthService {
 
     #[tracing::instrument(skip(self, req), fields(user_email = %req.email))]
     pub async fn resend_otp(&self, req: ResendOtpRequest) -> Result<ApiResponse<()>, AppError> {
-        let db = self.db.get_connection().await?;
+        let db = self.db.clone();
         let valkey = self.valkey.get_connection().await.ok();
         let rmq = self.rabbitmq.clone();
         resend_otp::handle_resend_otp(db, valkey, Some(rmq), &self.templates, req).await
@@ -104,14 +104,14 @@ impl AuthService {
 
     #[tracing::instrument(skip(self, req))]
     pub async fn refresh_token(&self, req: RefreshTokenRequest) -> Result<ApiResponse<LoginResponseData>, AppError> {
-        let db = self.db.get_connection().await?;
+        let db = self.db.clone();
         let valkey = self.valkey.get_connection().await.ok();
         refresh_token::handle_refresh_token(db, valkey, self.access_token_ttl, self.encoding_key.clone(), req).await
     }
 
     #[tracing::instrument(skip(self, req), fields(user_email = %req.email))]
     pub async fn forgot_password(&self, req: ForgotPasswordRequest) -> Result<ApiResponse<()>, AppError> {
-        let db = self.db.get_connection().await?;
+        let db = self.db.clone();
         let valkey = self.valkey.get_connection().await.ok();
         let rmq = Some(self.rabbitmq.clone());
         forgot_password::handle_forgot_password(db, valkey, rmq, &self.templates, req).await
@@ -126,7 +126,7 @@ impl AuthService {
 
     #[tracing::instrument(skip(self, req))]
     pub async fn reset_password(&self, req: ResetPasswordRequest) -> Result<ApiResponse<()>, AppError> {
-        let db = self.db.get_connection().await?;
+        let db = self.db.clone();
         let valkey = self.valkey.get_connection().await.ok();
         reset_password::handle_reset_password(db, valkey, req).await
     }
