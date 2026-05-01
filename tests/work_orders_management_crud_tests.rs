@@ -182,7 +182,6 @@ pub struct CancelWorkOrderPayload {
 // 2.1. Customer Flow
 // =====================================================================
 #[cfg(test)]
-#[cfg(feature = "mock")]
 mod customer_flow {
     use super::*;
     use rstest::rstest;
@@ -259,16 +258,20 @@ mod customer_flow {
         let payload = CreateWorkOrderPayload::default();
         let idempotency_key = Uuid::new_v4().to_string();
 
-        let mut req1 = create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload));
-        req1.headers_mut().insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
-        
-        let mut req2 = create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload));
-        req2.headers_mut().insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
+        let mut req1 =
+            create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload));
+        req1.headers_mut()
+            .insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
+
+        let mut req2 =
+            create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload));
+        req2.headers_mut()
+            .insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
 
         let app_clone = app.clone();
         let r1 = app_clone.oneshot(req1).await.unwrap();
         let r2 = app.oneshot(req2).await.unwrap();
-        
+
         assert_eq!(
             r1.status(),
             StatusCode::CREATED,
@@ -279,10 +282,17 @@ mod customer_flow {
             StatusCode::CREATED,
             "Idempotency key must prevent duplicate errors and return the same successful status"
         );
-        
-        let b1 = axum::body::to_bytes(r1.into_body(), usize::MAX).await.unwrap();
-        let b2 = axum::body::to_bytes(r2.into_body(), usize::MAX).await.unwrap();
-        assert_eq!(b1, b2, "Idempotent requests must return the exact same response body");
+
+        let b1 = axum::body::to_bytes(r1.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let b2 = axum::body::to_bytes(r2.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            b1, b2,
+            "Idempotent requests must return the exact same response body"
+        );
     }
 
     #[tokio::test]
@@ -296,16 +306,20 @@ mod customer_flow {
 
         let idempotency_key = Uuid::new_v4().to_string();
 
-        let mut req1 = create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload1));
-        req1.headers_mut().insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
-        
-        let mut req2 = create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload2));
-        req2.headers_mut().insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
+        let mut req1 =
+            create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload1));
+        req1.headers_mut()
+            .insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
+
+        let mut req2 =
+            create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload2));
+        req2.headers_mut()
+            .insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
 
         let app_clone = app.clone();
         let r1 = app_clone.oneshot(req1).await.unwrap();
         let r2 = app.oneshot(req2).await.unwrap();
-        
+
         assert_eq!(
             r1.status(),
             StatusCode::CREATED,
@@ -323,7 +337,6 @@ mod customer_flow {
 // 2.2. Administration Flow
 // =====================================================================
 #[cfg(test)]
-#[cfg(feature = "mock")]
 mod admin_flow {
     use super::*;
     use rstest::rstest;
@@ -404,7 +417,6 @@ mod admin_flow {
 // 2.3. Execution Flow
 // =====================================================================
 #[cfg(test)]
-#[cfg(feature = "mock")]
 mod execution_flow {
     use super::*;
     use rstest::rstest;
@@ -515,7 +527,6 @@ mod execution_flow {
 // 2.4. Completion Flow
 // =====================================================================
 #[cfg(test)]
-#[cfg(feature = "mock")]
 mod completion_flow {
     use super::*;
     use rstest::rstest;
@@ -584,7 +595,6 @@ mod completion_flow {
 // 2.5. Visibility Flow
 // =====================================================================
 #[cfg(test)]
-#[cfg(feature = "mock")]
 mod visibility_flow {
     use super::*;
 
@@ -648,8 +658,10 @@ mod visibility_flow {
 
         let uri = format!("/api/v1/work_orders/{}", Uuid::new_v4());
         let mut req = create_empty_request(http::Method::GET, &uri);
-        req.headers_mut()
-            .insert(http::header::AUTHORIZATION, "Bearer malicious_user_jwt_token".parse().unwrap());
+        req.headers_mut().insert(
+            http::header::AUTHORIZATION,
+            "Bearer malicious_user_jwt_token".parse().unwrap(),
+        );
 
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(
@@ -670,8 +682,10 @@ mod visibility_flow {
             &uri,
             &json!({ "latitude": 10.0, "longitude": 106.0, "timestamp": "2026-10-30T10:05:00Z" }),
         );
-        req.headers_mut()
-            .insert(http::header::AUTHORIZATION, "Bearer unassigned_technician_jwt_token".parse().unwrap());
+        req.headers_mut().insert(
+            http::header::AUTHORIZATION,
+            "Bearer unassigned_technician_jwt_token".parse().unwrap(),
+        );
 
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(
