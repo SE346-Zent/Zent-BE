@@ -64,13 +64,7 @@ async fn setup_app_with_db(db: DatabaseConnection) -> Router {
 
     let state = AppState::new(
         b"integration_test_secret_for_tokens", 
-        db_mgr, 
-        valkey_mgr, 
-        rmq_mgr, 
-        900, 
-        3600, 
         LookupTables::empty(),
-        (*templates_arc).clone(),
         auth_service
     );
 

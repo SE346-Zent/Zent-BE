@@ -9,7 +9,7 @@ use crate::{
         responses::base::ApiResponse,
     },
     services::v1::core::email_service,
-    infrastructure::mq::RabbitMQManager,
+    infrastructure::mq::RabbitMQClient,
 };
 use crate::utils::{hasher, otp};
 use uuid::Uuid;
@@ -19,7 +19,7 @@ use redis::AsyncCommands;
 pub async fn handle_register(
     db: DatabaseConnection,
     valkey: Option<redis::aio::MultiplexedConnection>,
-    rabbitmq: Option<Arc<RabbitMQManager>>,
+    rabbitmq: Option<Arc<RabbitMQClient>>,
     templates: &HashMap<String, String>,
     req: UserRegistrationRequest,
 ) -> Result<ApiResponse<()>, AppError> {

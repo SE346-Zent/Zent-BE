@@ -10,9 +10,9 @@ use lettre::transport::smtp::authentication::Credentials;
 use tokio::time::{sleep, Duration};
 
 use crate::core::config::AppConfig;
-use crate::infrastructure::mq::{RabbitMQManager, email::{EMAIL_QUEUE, setup_email_topology}};
+use crate::infrastructure::mq::{RabbitMQClient, email::{EMAIL_QUEUE, setup_email_topology}};
 
-pub async fn start_email_consumer(manager: Arc<RabbitMQManager>) {
+pub async fn start_email_consumer(manager: Arc<RabbitMQClient>) {
     tokio::spawn(async move {
         loop {
             let conn = match manager.get_connection().await {
