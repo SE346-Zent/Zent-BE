@@ -1,12 +1,8 @@
 use axum::extract::FromRef;
-use std::collections::HashMap;
 use std::sync::Arc;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 
 use crate::core::lookup_tables::LookupTables;
-use crate::infrastructure::database::DatabasePool;
-use crate::infrastructure::cache::ValkeyClient;
-use crate::infrastructure::mq::RabbitMQClient;
 use crate::services::v1::auth::AuthService;
 
 #[derive(Clone, Copy)]
@@ -28,19 +24,11 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Constructor kept with the original 9-parameter signature so that
-    /// existing integration tests compile without modification.
-    /// Infrastructure parameters are accepted but not stored — they
-    /// are already owned by the services themselves.
+    /// AppState now strictly acts as a ServiceRegistry.
+    /// It only requires the JWT secret, lookup tables, and service instances.
     pub fn new(
         secret: &[u8],
-        _db: Arc<DatabasePool>,
-        _valkey: Arc<ValkeyClient>,
-        _rabbitmq: Arc<RabbitMQClient>,
-        _access_token_ttl: i64,
-        _session_ttl: i64,
         lookup_tables: LookupTables,
-        _templates: HashMap<String, String>,
         auth_service: AuthService,
     ) -> Self {
         Self {

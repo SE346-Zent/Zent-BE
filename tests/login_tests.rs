@@ -130,13 +130,7 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>
 
     let state = AppState::new(
         b"integration_test_secret_for_tokens", 
-        db_mgr, 
-        valkey_mgr, 
-        rmq_mgr, 
-        900, 
-        3600, 
         LookupTables::empty(),
-        std::collections::HashMap::new(),
         auth_service
     );
 
@@ -401,13 +395,7 @@ async fn test_cat2_unknown_status_legacy_data() {
 
     let state = AppState::new(
         b"integration_test_secret_for_tokens", 
-        db_mgr, 
-        valkey_mgr, 
-        rmq_mgr, 
-        900, 
-        3600, 
         LookupTables::empty(),
-        std::collections::HashMap::new(),
         auth_service
     );
     let app = Router::new()
@@ -545,13 +533,7 @@ async fn test_cat3_12_13_zero_ttl() {
 
     let state = AppState::new(
         b"secret", 
-        db_mgr, 
-        valkey_mgr, 
-        rmq_mgr, 
-        0, 
-        0, 
         LookupTables::empty(),
-        std::collections::HashMap::new(),
         auth_service
     ); // 0 TTLs
     let app = Router::new()
