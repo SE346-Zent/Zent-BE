@@ -1,41 +1,49 @@
 use serde::{Deserialize, Serialize};
 
-/// Cursor-based pagination metadata included in list/paginated responses.
+/// Page-based pagination metadata included in list/paginated responses.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaginationResponse {
     /// Number of items returned in this page.
     pub limit: u64,
 
+    /// Current page number.
+    pub current_page: u64,
+
     /// Total number of records matching the query.
     pub total_records: u64,
 
-    /// Opaque cursor pointing to the last item of the current page.
-    /// Pass this value as `cursor` in the next request to fetch the next page.
-    /// `null` when there are no more pages.
-    pub next_cursor: Option<String>,
+    /// Total number of pages.
+    pub total_pages: u64,
 
     /// Whether there are more items after this page.
     pub has_next: bool,
 }
 
 impl PaginationResponse {
-    /// Construct cursor-based pagination metadata.
+    /// Construct page-based pagination metadata.
     ///
     /// - `limit`: the page size that was requested.
+    /// - `current_page`: the current page index.
     /// - `total_records`: total matching records (from a COUNT query).
-    /// - `next_cursor`: the cursor value for the next page, or `None` if this is the last page.
-    /// - `has_next`: whether more pages exist.
     pub fn new(
         limit: u64,
+        current_page: u64,
         total_records: u64,
-        next_cursor: Option<String>,
-        has_next: bool,
     ) -> Self {
+        let total_pages = if limit == 0 {
+            0
+        } else {
+            (total_records as f64 / limit as f64).ceil() as u64
+        };
+        
+        let has_next = current_page < total_pages;
+
         Self {
             limit,
+            current_page,
             total_records,
-            next_cursor,
+            total_pages,
             has_next,
         }
     }

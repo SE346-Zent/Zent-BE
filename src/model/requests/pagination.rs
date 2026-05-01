@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-/// Cursor-based pagination query parameters for list endpoints.
+/// Page-based pagination query parameters for list endpoints.
 ///
 /// Embed via `#[serde(flatten)]` inside endpoint-specific query structs:
 /// ```rust,ignore
@@ -13,13 +13,17 @@ use serde::Deserialize;
 /// ```
 #[derive(Deserialize, Debug, utoipa::IntoParams, utoipa::ToSchema)]
 pub struct PaginationRequest {
-    /// Opaque cursor pointing to the last item of the previous page.
-    /// Pass `null` or omit for the first request.
-    pub cursor: Option<String>,
+    /// The page number (1-indexed). Default is 1.
+    #[serde(default = "default_page")]
+    pub page: u64,
 
     /// Maximum number of items to return (default: 20).
     #[serde(default = "default_limit")]
     pub limit: u64,
+}
+
+fn default_page() -> u64 {
+    1
 }
 
 fn default_limit() -> u64 {

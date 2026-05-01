@@ -583,7 +583,7 @@ mod visibility_flow {
         let mq = Arc::new(MockRabbitMQManager::default());
         let app = setup_test_app(mock_db().await, mq).await;
 
-        let uri = "/api/v1/work_orders?cursor=eyJpZCI6MTIzfQ&limit=20";
+        let uri = "/api/v1/work_orders?page=1&limit=20";
         let req = create_empty_request(http::Method::GET, uri);
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(
@@ -620,7 +620,7 @@ mod visibility_flow {
         let mq = Arc::new(MockRabbitMQManager::default());
         let app = setup_test_app(mock_db().await, mq).await;
 
-        let uri = "/api/v1/work_orders?cursor=eyJpZCI6MTIzfQ&limit=1000";
+        let uri = "/api/v1/work_orders?page=1&limit=1000";
         let req = create_empty_request(http::Method::GET, uri);
         let r = app.oneshot(req).await.unwrap();
 
