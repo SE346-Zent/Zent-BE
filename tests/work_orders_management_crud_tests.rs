@@ -93,9 +93,6 @@ fn create_json_request(method: http::Method, uri: &str, body: &serde_json::Value
         .uri(uri)
         .header(http::header::CONTENT_TYPE, "application/json")
         .header(http::header::AUTHORIZATION, "Bearer mock_jwt_token")
-        .header(http::header::USER_AGENT, "ZentTestClient/1.0")
-        .header("X-Device-Fingerprint", "mock_device_fingerprint")
-        .header("X-Idempotency-Key", Uuid::new_v4().to_string())
         .body(Body::from(serde_json::to_string(body).unwrap()))
         .unwrap();
 
@@ -112,8 +109,6 @@ fn create_empty_request(method: http::Method, uri: &str) -> Request<Body> {
         .method(method)
         .uri(uri)
         .header(http::header::AUTHORIZATION, "Bearer mock_jwt_token")
-        .header(http::header::USER_AGENT, "ZentTestClient/1.0")
-        .header("X-Device-Fingerprint", "mock_device_fingerprint")
         .body(Body::empty())
         .unwrap();
 
@@ -251,6 +246,73 @@ mod customer_flow {
             r.status(),
             StatusCode::INTERNAL_SERVER_ERROR,
             "Expects complete transaction rollback on failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tc1_2_idempotent_creation() {
+        let mq = Arc::new(MockRabbitMQManager::default());
+        let app = setup_test_app(mock_db().await, mq).await;
+
+        let payload = CreateWorkOrderPayload::default();
+        let idempotency_key = Uuid::new_v4().to_string();
+
+        let mut req1 = create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload));
+        req1.headers_mut().insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
+        
+        let mut req2 = create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload));
+        req2.headers_mut().insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
+
+        let app_clone = app.clone();
+        let r1 = app_clone.oneshot(req1).await.unwrap();
+        let r2 = app.oneshot(req2).await.unwrap();
+        
+        assert_eq!(
+            r1.status(),
+            StatusCode::CREATED,
+            "First request should succeed"
+        );
+        assert_eq!(
+            r2.status(),
+            StatusCode::CREATED,
+            "Idempotency key must prevent duplicate errors and return the same successful status"
+        );
+        
+        let b1 = axum::body::to_bytes(r1.into_body(), usize::MAX).await.unwrap();
+        let b2 = axum::body::to_bytes(r2.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(b1, b2, "Idempotent requests must return the exact same response body");
+    }
+
+    #[tokio::test]
+    async fn test_tc1_3_idempotency_key_conflict() {
+        let mq = Arc::new(MockRabbitMQManager::default());
+        let app = setup_test_app(mock_db().await, mq).await;
+
+        let payload1 = CreateWorkOrderPayload::default();
+        let mut payload2 = CreateWorkOrderPayload::default();
+        payload2.city = "Different City".to_string();
+
+        let idempotency_key = Uuid::new_v4().to_string();
+
+        let mut req1 = create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload1));
+        req1.headers_mut().insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
+        
+        let mut req2 = create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload2));
+        req2.headers_mut().insert("X-Idempotency-Key", idempotency_key.parse().unwrap());
+
+        let app_clone = app.clone();
+        let r1 = app_clone.oneshot(req1).await.unwrap();
+        let r2 = app.oneshot(req2).await.unwrap();
+        
+        assert_eq!(
+            r1.status(),
+            StatusCode::CREATED,
+            "First request should succeed"
+        );
+        assert_eq!(
+            r2.status(),
+            StatusCode::CONFLICT,
+            "Reused idempotency key with different payload must fail"
         );
     }
 }
