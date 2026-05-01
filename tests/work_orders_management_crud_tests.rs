@@ -181,6 +181,8 @@ pub struct CancelWorkOrderPayload {
 // =====================================================================
 // 2.1. Customer Flow
 // =====================================================================
+#[cfg(test)]
+#[cfg(feature = "mock")]
 mod customer_flow {
     use super::*;
     use rstest::rstest;
@@ -320,6 +322,8 @@ mod customer_flow {
 // =====================================================================
 // 2.2. Administration Flow
 // =====================================================================
+#[cfg(test)]
+#[cfg(feature = "mock")]
 mod admin_flow {
     use super::*;
     use rstest::rstest;
@@ -399,6 +403,8 @@ mod admin_flow {
 // =====================================================================
 // 2.3. Execution Flow
 // =====================================================================
+#[cfg(test)]
+#[cfg(feature = "mock")]
 mod execution_flow {
     use super::*;
     use rstest::rstest;
@@ -508,6 +514,8 @@ mod execution_flow {
 // =====================================================================
 // 2.4. Completion Flow
 // =====================================================================
+#[cfg(test)]
+#[cfg(feature = "mock")]
 mod completion_flow {
     use super::*;
     use rstest::rstest;
@@ -575,6 +583,8 @@ mod completion_flow {
 // =====================================================================
 // 2.5. Visibility Flow
 // =====================================================================
+#[cfg(test)]
+#[cfg(feature = "mock")]
 mod visibility_flow {
     use super::*;
 
