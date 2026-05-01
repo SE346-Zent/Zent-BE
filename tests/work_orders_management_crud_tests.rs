@@ -92,6 +92,10 @@ fn create_json_request(method: http::Method, uri: &str, body: &serde_json::Value
         .method(method)
         .uri(uri)
         .header(http::header::CONTENT_TYPE, "application/json")
+        .header(http::header::AUTHORIZATION, "Bearer mock_jwt_token")
+        .header(http::header::USER_AGENT, "ZentTestClient/1.0")
+        .header("X-Device-Fingerprint", "mock_device_fingerprint")
+        .header("X-Idempotency-Key", Uuid::new_v4().to_string())
         .body(Body::from(serde_json::to_string(body).unwrap()))
         .unwrap();
 
@@ -107,6 +111,9 @@ fn create_empty_request(method: http::Method, uri: &str) -> Request<Body> {
     let mut req = Request::builder()
         .method(method)
         .uri(uri)
+        .header(http::header::AUTHORIZATION, "Bearer mock_jwt_token")
+        .header(http::header::USER_AGENT, "ZentTestClient/1.0")
+        .header("X-Device-Fingerprint", "mock_device_fingerprint")
         .body(Body::empty())
         .unwrap();
 
@@ -268,6 +275,15 @@ mod admin_flow {
         );
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK, "Assigned transition");
+
+        let body_bytes = axum::body::to_bytes(r.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let response_json: Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(
+            response_json["status"], "Assigned",
+            "Guardrail: Assigned technician must transition WO to 'Assigned' status"
+        );
     }
 
     #[tokio::test]
@@ -363,6 +379,15 @@ mod execution_flow {
         );
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK, "Assigned -> In Progress");
+
+        let body_bytes = axum::body::to_bytes(r.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let response_json: Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(
+            response_json["status"], "In Progress",
+            "Guardrail: Starting work must transition WO to 'In Progress' status"
+        );
     }
 
     #[tokio::test]
@@ -378,6 +403,15 @@ mod execution_flow {
         );
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK, "Assigned -> Refused");
+
+        let body_bytes = axum::body::to_bytes(r.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let response_json: Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(
+            response_json["status"], "Refused",
+            "Guardrail: Refusing work must transition WO to 'Refused' status"
+        );
     }
 
     #[tokio::test]
@@ -397,6 +431,15 @@ mod execution_flow {
         let req = create_json_request(http::Method::POST, &uri, &json!(payload));
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK, "Transition to Refused");
+
+        let body_bytes = axum::body::to_bytes(r.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let response_json: Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(
+            response_json["status"], "Refused",
+            "Guardrail: Cancelling work must transition WO to 'Refused' status"
+        );
     }
 }
 
@@ -433,6 +476,17 @@ mod completion_flow {
             expected,
             "Work order completion form must be strictly validated"
         );
+
+        if expected == StatusCode::OK {
+            let body_bytes = axum::body::to_bytes(r.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let response_json: Value = serde_json::from_slice(&body_bytes).unwrap();
+            assert_eq!(
+                response_json["status"], "Completed",
+                "Guardrail: Completed work must transition WO to 'Completed' status"
+            );
+        }
     }
 
     #[tokio::test]
@@ -523,7 +577,7 @@ mod visibility_flow {
         let uri = format!("/api/v1/work_orders/{}", Uuid::new_v4());
         let mut req = create_empty_request(http::Method::GET, &uri);
         req.headers_mut()
-            .insert("X-Mock-User-ID", "malicious_user".parse().unwrap());
+            .insert(http::header::AUTHORIZATION, "Bearer malicious_user_jwt_token".parse().unwrap());
 
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(
@@ -545,7 +599,7 @@ mod visibility_flow {
             &json!({ "latitude": 10.0, "longitude": 106.0, "timestamp": "2026-10-30T10:05:00Z" }),
         );
         req.headers_mut()
-            .insert("X-Mock-Tech-ID", "other_tech".parse().unwrap());
+            .insert(http::header::AUTHORIZATION, "Bearer unassigned_technician_jwt_token".parse().unwrap());
 
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(
