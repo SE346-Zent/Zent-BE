@@ -21,12 +21,6 @@ pub struct MockRabbitMQManager {
     pub published_messages: Arc<Mutex<Vec<(String, Value)>>>,
 }
 
-#[derive(Clone)]
-pub struct AppState {
-    pub db: DatabaseConnection,
-    pub mq: Arc<MockRabbitMQManager>,
-}
-
 async fn mock_db() -> DatabaseConnection {
     Database::connect("sqlite::memory:").await.unwrap()
 }
@@ -39,8 +33,36 @@ async fn not_implemented() -> StatusCode {
     StatusCode::NOT_IMPLEMENTED
 }
 
-async fn setup_test_app(db: DatabaseConnection, mq: Arc<MockRabbitMQManager>) -> Router {
-    let state = AppState { db, mq };
+async fn setup_test_app(db: DatabaseConnection, _mq: Arc<MockRabbitMQManager>) -> Router {
+    let db_mgr = zent_be::infrastructure::database::DatabaseManager::from_connection(db);
+    let valkey_mgr = zent_be::infrastructure::cache::ValkeyManager::stub();
+    let rmq_mgr = zent_be::infrastructure::mq::RabbitMQManager::stub();
+    
+    let mut templates = std::collections::HashMap::new();
+    templates.insert("verification_email.html".to_string(), "Template content".to_string());
+    let templates_arc = std::sync::Arc::new(templates);
+
+    let auth_service = zent_be::services::v1::auth::AuthService::new(
+        db_mgr.clone(),
+        valkey_mgr.clone(),
+        rmq_mgr.clone(),
+        templates_arc.clone(),
+        zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
+        zent_be::core::state::SessionDefaultTTLSeconds(3600),
+        jsonwebtoken::EncodingKey::from_secret(b"integration_test_secret_for_tokens"),
+    );
+
+    let state = zent_be::core::state::AppState::new(
+        b"integration_test_secret_for_tokens", 
+        db_mgr, 
+        valkey_mgr, 
+        rmq_mgr, 
+        900, 
+        3600, 
+        zent_be::core::lookup_tables::LookupTables::empty(),
+        (*templates_arc).clone(),
+        auth_service
+    );
 
     Router::new()
         .route("/api/v1/work_orders/{id}/parts", post(not_implemented))
