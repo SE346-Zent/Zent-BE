@@ -1,9 +1,14 @@
 use axum::Router;
 use tracing::info;
 use std::sync::Arc;
+use std::collections::HashMap;
 
 use zent_be::core::state::AppState;
 use zent_be::core::config::AppConfig;
+use zent_be::infrastructure::database::DatabasePool;
+use zent_be::infrastructure::cache::ValkeyClient;
+use zent_be::infrastructure::mq::RabbitMQClient;
+use zent_be::infrastructure::scheduler::AppScheduler;
 use zent_be::{core, handlers, infrastructure, services};
 
 #[tokio::main]
@@ -18,14 +23,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Server starting...");
     
     // Initialize database (MySQL) via infrastructure layer
-    let db = infrastructure::database::init_database(cfg).await?;
+    let db: Arc<DatabasePool> = infrastructure::database::init_database(cfg).await?;
 
     // Initialize Valkey cache via infrastructure layer
-    let valkey = infrastructure::cache::init_cache(cfg).await
+    let valkey: Arc<ValkeyClient> = infrastructure::cache::init_cache(cfg).await
         .expect("Failed to initialize Valkey cache client");
 
     // Connect to RabbitMQ using configured URI mapping efficiently
-    let rabbitmq = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url).await;
+    let rabbitmq: Arc<RabbitMQClient> = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url).await
+        .expect("Failed to initialize RabbitMQ client");
 
     // Start background asynchronous AMQP email consumer pool globally
     infrastructure::consumers::email::start_email_consumer(rabbitmq.clone()).await;
@@ -37,10 +43,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to load lookup tables from database");
 
     // Pre-load email templates into memory cache
-    let templates = infrastructure::templates::load_templates().await;
+    let templates: HashMap<String, String> = infrastructure::templates::load_templates().await;
 
     // Initialize AuthService with dependencies
-    let auth_service = services::v1::auth::AuthService::new(
+    let auth_service = services::v1::init_auth_service(
         db.clone(),
         valkey.clone(),
         rabbitmq.clone(),
@@ -63,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Start background cron scheduler for maintenance tasks using pre-loaded LUT
-    let app_scheduler = infrastructure::scheduler::AppScheduler::new()
+    let app_scheduler: AppScheduler = infrastructure::scheduler::AppScheduler::new()
         .await
         .expect("Failed to initialize scheduler");
 

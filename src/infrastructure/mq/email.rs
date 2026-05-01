@@ -4,7 +4,7 @@ use lapin::{
     BasicProperties, ExchangeKind,
 };
 use std::sync::Arc;
-use crate::infrastructure::mq::RabbitMQManager;
+use crate::infrastructure::mq::RabbitMQClient;
 
 pub const EMAIL_EXCHANGE: &str = "email_exchange";
 pub const EMAIL_QUEUE: &str = "email_queue";
@@ -67,11 +67,11 @@ pub async fn setup_email_topology(channel: &lapin::Channel) -> Result<(), lapin:
 }
 
 pub struct EmailProducer {
-    manager: Arc<RabbitMQManager>,
+    manager: Arc<RabbitMQClient>,
 }
 
 impl EmailProducer {
-    pub fn new(manager: Arc<RabbitMQManager>) -> Self {
+    pub fn new(manager: Arc<RabbitMQClient>) -> Self {
         Self { manager }
     }
 
