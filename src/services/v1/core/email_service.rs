@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::infrastructure::mq::{RabbitMQManager, email::EmailProducer};
+use crate::infrastructure::mq::{RabbitMQClient, email::EmailProducer};
 use crate::core::errors::AppError;
 
 pub async fn send_verification_email(
-    rabbitmq: &Arc<RabbitMQManager>,
+    rabbitmq: &Arc<RabbitMQClient>,
     templates: &HashMap<String, String>,
     to: &str,
     name: &str,
@@ -45,7 +45,7 @@ pub async fn send_verification_email(
 }
 
 pub async fn send_forgot_password_email(
-    rabbitmq: &Arc<RabbitMQManager>,
+    rabbitmq: &Arc<RabbitMQClient>,
     templates: &HashMap<String, String>,
     to: &str,
     name: &str,
@@ -83,7 +83,7 @@ pub async fn send_forgot_password_email(
 }
 
 pub async fn send_welcome_email(
-    rabbitmq: &Arc<RabbitMQManager>,
+    rabbitmq: &Arc<RabbitMQClient>,
     _templates: &HashMap<String, String>,
     to: &str,
     name: &str,

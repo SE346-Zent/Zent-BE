@@ -2,61 +2,50 @@ use lapin::{
     Connection, ConnectionProperties,
 };
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 pub mod email;
 
-pub struct RabbitMQManager {
-    url: String,
-    connection: Mutex<Option<Arc<Connection>>>,
-    is_stub: bool,
+/// Lightweight RabbitMQ client.
+/// Unlike SeaORM and redis, lapin's `Connection` is already a handle that can
+/// be cloned cheaply. We initialize it once at startup.
+pub struct RabbitMQClient {
+    connection: Option<Arc<Connection>>,
 }
 
-impl RabbitMQManager {
-    pub fn new(url: &str) -> Arc<Self> {
-        Arc::new(Self {
-            url: url.to_string(),
-            connection: Mutex::new(None),
-            is_stub: false,
-        })
-    }
-
+impl RabbitMQClient {
     pub fn is_stub(&self) -> bool {
-        self.is_stub
+        self.connection.is_none()
     }
 
     pub async fn get_connection(&self) -> Result<Arc<Connection>, lapin::Error> {
-        if self.is_stub {
-            return Err(lapin::Error::ChannelsLimitReached); // Some error for stub
-        }
-
-        let mut guard = self.connection.lock().await;
-        
-        if let Some(conn) = &*guard {
-            if conn.status().connected() {
-                return Ok(conn.clone());
-            }
-        }
-
-        let conn = Connection::connect(&self.url, ConnectionProperties::default()).await?;
-        let arc_conn = Arc::new(conn);
-        
-        *guard = Some(arc_conn.clone());
-        Ok(arc_conn)
+        self.connection.clone().ok_or_else(|| {
+            lapin::Error::ChannelsLimitReached // Or another suitable error for stub mode
+        })
     }
 
-    /// Create a stub manager that will fail to connect
+    /// Wrap an existing connection.
+    pub fn from_connection(conn: Connection) -> Arc<Self> {
+        Arc::new(Self {
+            connection: Some(Arc::new(conn)),
+        })
+    }
+
+    /// Create a non-functional stub for tests that don't need MQ access.
     pub fn stub() -> Arc<Self> {
         Arc::new(Self {
-            url: "amqp://invalid:5672".to_string(),
-            connection: Mutex::new(None),
-            is_stub: true,
+            connection: None,
         })
     }
 }
 
-pub async fn init_rabbitmq(url: &str) -> Arc<RabbitMQManager> {
-    RabbitMQManager::new(url)
+/// Backward-compatible alias so existing tests that reference
+/// `RabbitMQManager` continue to compile.
+pub type RabbitMQManager = RabbitMQClient;
+
+/// Initialize RabbitMQ: connect and return client.
+pub async fn init_rabbitmq(url: &str) -> Result<Arc<RabbitMQClient>, lapin::Error> {
+    let conn = Connection::connect(url, ConnectionProperties::default()).await?;
+    Ok(Arc::new(RabbitMQClient {
+        connection: Some(Arc::new(conn)),
+    }))
 }
-
-

@@ -9,7 +9,7 @@ use crate::{
         responses::base::ApiResponse,
     },
     services::v1::core::email_service,
-    infrastructure::mq::RabbitMQManager,
+    infrastructure::mq::RabbitMQClient,
 };
 use crate::utils::otp;
 use redis::AsyncCommands;
@@ -17,7 +17,7 @@ use redis::AsyncCommands;
 pub async fn handle_resend_otp(
     db: DatabaseConnection,
     valkey: Option<redis::aio::MultiplexedConnection>,
-    rabbitmq: Option<Arc<RabbitMQManager>>,
+    rabbitmq: Option<Arc<RabbitMQClient>>,
     templates: &HashMap<String, String>,
     req: ResendOtpRequest,
 ) -> Result<ApiResponse<()>, AppError> {
