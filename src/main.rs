@@ -6,10 +6,10 @@ use std::collections::HashMap;
 use zent_be::core::state::AppState;
 use zent_be::core::config::AppConfig;
 use zent_be::infrastructure::cache::ValkeyClient;
-use zent_be::infrastructure::mq::RabbitMQClient;
 use zent_be::infrastructure::scheduler::AppScheduler;
 use zent_be::{core, handlers, infrastructure, services};
 use sea_orm::DatabaseConnection;
+use lapin::Connection;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -26,12 +26,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db: DatabaseConnection = infrastructure::database::init_database(cfg).await?;
 
     // Initialize Valkey cache via infrastructure layer
-    let valkey: Arc<ValkeyClient> = infrastructure::cache::init_cache(cfg).await
-        .expect("Failed to initialize Valkey cache client");
+    let valkey: Option<Arc<ValkeyClient>> = infrastructure::cache::init_cache(cfg).await
+        .map(Arc::new)
+        .ok();
+    if valkey.is_none() {
+        tracing::warn!("Valkey cache client not initialized - continuing in degraded mode");
+    }
 
     // Connect to RabbitMQ using configured URI mapping efficiently
-    let rabbitmq: Arc<RabbitMQClient> = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url).await
-        .expect("Failed to initialize RabbitMQ client");
+    let rabbitmq: Option<Arc<Connection>> = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url).await
+        .map(Arc::new)
+        .ok();
+    if rabbitmq.is_none() {
+        tracing::warn!("RabbitMQ client not initialized - continuing in degraded mode");
+    }
 
     // Start background asynchronous AMQP email consumer pool globally
     infrastructure::consumers::email::start_email_consumer(rabbitmq.clone()).await;

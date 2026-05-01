@@ -1,6 +1,5 @@
 use redis::{Client, aio::MultiplexedConnection};
 use std::collections::HashMap;
-use std::sync::Arc;
 use crate::core::config::AppConfig;
 
 /// Atomic OTP verification script loaded at compile time.
@@ -12,7 +11,7 @@ pub const VERIFY_OTP_LUA: &str = include_str!("lua_script/verify_otp.lua");
 /// init time and clone it on each request (cloning is cheap).
 /// Lua script hashes are loaded once at startup and stored immutably.
 pub struct ValkeyClient {
-    connection: Option<MultiplexedConnection>,
+    connection: MultiplexedConnection,
     script_hashes: HashMap<String, String>,
 }
 
@@ -20,32 +19,18 @@ impl ValkeyClient {
     /// Returns a clone of the cached multiplexed connection.
     /// `MultiplexedConnection` is cheaply cloneable and handles
     /// internal reconnection automatically.
-    pub async fn get_connection(&self) -> Result<MultiplexedConnection, redis::RedisError> {
-        self.connection.clone().ok_or_else(|| {
-            redis::RedisError::from((redis::ErrorKind::InvalidClientConfig, "Valkey is in stub mode"))
-        })
+    pub fn get_connection(&self) -> MultiplexedConnection {
+        self.connection.clone()
     }
 
     /// Returns a copy of the pre-loaded Lua script SHA hashes.
-    pub async fn get_script_hashes(&self) -> HashMap<String, String> {
+    pub fn get_script_hashes(&self) -> HashMap<String, String> {
         self.script_hashes.clone()
-    }
-
-    /// Create a non-functional stub for tests that don't need cache access.
-    pub fn stub() -> Arc<Self> {
-        Arc::new(Self {
-            connection: None,
-            script_hashes: HashMap::new(),
-        })
     }
 }
 
-/// Backward-compatible alias so existing tests that reference
-/// `ValkeyManager` continue to compile.
-pub type ValkeyManager = ValkeyClient;
-
 /// Initialize Valkey: connect, load Lua scripts, return client.
-pub async fn init_cache(cfg: &AppConfig) -> Result<Arc<ValkeyClient>, redis::RedisError> {
+pub async fn init_cache(cfg: &AppConfig) -> Result<ValkeyClient, redis::RedisError> {
     let db_index = match cfg.app_stage.as_str() {
         "production" => 0,
         _ => 1,
@@ -68,8 +53,8 @@ pub async fn init_cache(cfg: &AppConfig) -> Result<Arc<ValkeyClient>, redis::Red
 
     script_hashes.insert("verify_otp".to_string(), verify_otp_sha);
 
-    Ok(Arc::new(ValkeyClient {
-        connection: Some(conn),
+    Ok(ValkeyClient {
+        connection: conn,
         script_hashes,
-    }))
+    })
 }

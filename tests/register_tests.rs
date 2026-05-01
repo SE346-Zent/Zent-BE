@@ -44,17 +44,14 @@ async fn setup_app_with_db(db: DatabaseConnection) -> Router {
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
 
-    let valkey_mgr = zent_be::infrastructure::cache::ValkeyManager::stub();
-    let rmq_mgr = zent_be::infrastructure::mq::RabbitMQManager::stub();
-    
     let mut templates = std::collections::HashMap::new();
     templates.insert("verification_email.html".to_string(), "Template content".to_string());
     let templates_arc = std::sync::Arc::new(templates);
 
     let auth_service = zent_be::services::v1::auth::AuthService::new(
         db.clone(),
-        valkey_mgr.clone(),
-        rmq_mgr.clone(),
+        None,
+        None,
         templates_arc.clone(),
         zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
         zent_be::core::state::SessionDefaultTTLSeconds(3600),

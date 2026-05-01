@@ -9,13 +9,13 @@ use crate::{
         responses::base::ApiResponse,
     },
     services::v1::core::email_service,
-    infrastructure::mq::RabbitMQClient,
 };
+use lapin::Connection;
 
 pub async fn handle_verify_otp(
     db: DatabaseConnection,
     valkey: Option<redis::aio::MultiplexedConnection>,
-    rabbitmq: Option<Arc<RabbitMQClient>>,
+    rabbitmq: Option<Arc<Connection>>,
     templates: &HashMap<String, String>,
     script_hashes: &HashMap<String, String>,
     req: VerifyOtpRequest,
