@@ -7,7 +7,7 @@ use zent_be::core::state::AppState;
 use zent_be::core::config::AppConfig;
 use zent_be::infrastructure::cache::ValkeyClient;
 use zent_be::infrastructure::scheduler::AppScheduler;
-use zent_be::{core, handlers, infrastructure, services};
+use zent_be::{core, handlers, infrastructure};
 use sea_orm::DatabaseConnection;
 use lapin::Connection;
 
@@ -52,21 +52,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Pre-load email templates into memory cache
     let templates: HashMap<String, String> = infrastructure::templates::load_templates().await;
 
-    // Initialize AuthService with dependencies
-    let auth_service = services::v1::init_auth_service(
-        db.clone(),
-        valkey.clone(),
-        rabbitmq.clone(),
-        Arc::new(templates.clone()),
-        core::state::AccessTokenDefaultTTLSeconds(cfg.access_token_ttl_seconds),
-        core::state::SessionDefaultTTLSeconds(cfg.session_ttl_seconds),
-        jsonwebtoken::EncodingKey::from_secret(cfg.jwt_sign_key.as_bytes()),
-    );
-
+    // Initialize AppState with directly injected infrastructure
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
         lookup_tables.clone(),
-        auth_service,
+        db.clone(),
+        valkey.clone(),
+        rabbitmq.clone(),
+        templates.clone(),
+        core::state::AccessTokenDefaultTTLSeconds(cfg.access_token_ttl_seconds),
+        core::state::SessionDefaultTTLSeconds(cfg.session_ttl_seconds),
     );
 
     // Start background cron scheduler for maintenance tasks using pre-loaded LUT
