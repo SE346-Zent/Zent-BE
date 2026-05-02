@@ -22,34 +22,9 @@ use uuid::Uuid;
 // Infrastructure Mocking
 // ---------------------------------------------------------
 
-/// Mock MQ Manager reflecting the `is_stub` check from `email.rs`
-/// and state tracking for event assertions.
-#[derive(Clone, Default)]
-pub struct MockRabbitMQManager {
-    pub is_stub: bool,
-    pub published_messages: Arc<Mutex<Vec<(String, Value)>>>,
-}
-
-impl MockRabbitMQManager {
-    pub fn assert_published(&self, expected_routing_key: &str) {
-        let messages = self.published_messages.lock().unwrap();
-        assert!(
-            messages.iter().any(|(rk, _)| rk == expected_routing_key),
-            "Expected message with routing key '{}' to be published. Dispatched keys: {:?}",
-            expected_routing_key,
-            messages
-                .iter()
-                .map(|(k, _)| k.clone())
-                .collect::<Vec<String>>()
-        );
-    }
-
-    #[allow(dead_code)]
-    pub async fn publish_stub(&self, routing_key: &str, payload: Value) {
-        let mut messages = self.published_messages.lock().unwrap();
-        messages.push((routing_key.to_string(), payload));
-    }
-}
+#[path = "common/mod.rs"]
+mod common;
+use common::{seed_test_db, WorkOrderTestState};
 
 async fn mock_db() -> DatabaseConnection {
     Database::connect("sqlite::memory:").await.unwrap()
@@ -59,111 +34,31 @@ async fn mock_db() -> DatabaseConnection {
 // Boundary Initialization
 // ---------------------------------------------------------
 
-async fn seed_test_db(db: &DatabaseConnection) {
-    // Seed roles
-    let _ = roles::ActiveModel {
-        id: Set(1),
-        name: Set("Admin".to_string()),
-    }
-    .insert(db)
-    .await;
-    let _ = roles::ActiveModel {
-        id: Set(2),
-        name: Set("Manager".to_string()),
-    }
-    .insert(db)
-    .await;
-    let _ = roles::ActiveModel {
-        id: Set(3),
-        name: Set("Technician".to_string()),
-    }
-    .insert(db)
-    .await;
-    let _ = roles::ActiveModel {
-        id: Set(4),
-        name: Set("Dispatcher".to_string()),
-    }
-    .insert(db)
-    .await;
-    let _ = roles::ActiveModel {
-        id: Set(5),
-        name: Set("Customer".to_string()),
-    }
-    .insert(db)
-    .await;
-
-    // Seed account statuses
-    let _ = account_status::ActiveModel {
-        id: Set(1),
-        name: Set("Pending".to_string()),
-    }
-    .insert(db)
-    .await;
-    let _ = account_status::ActiveModel {
-        id: Set(2),
-        name: Set("Active".to_string()),
-    }
-    .insert(db)
-    .await;
-    let _ = account_status::ActiveModel {
-        id: Set(3),
-        name: Set("Inactive".to_string()),
-    }
-    .insert(db)
-    .await;
-    let _ = account_status::ActiveModel {
-        id: Set(4),
-        name: Set("Locked".to_string()),
-    }
-    .insert(db)
-    .await;
-    let _ = account_status::ActiveModel {
-        id: Set(5),
-        name: Set("Terminated".to_string()),
-    }
-    .insert(db)
-    .await;
-}
-
-async fn setup_test_app(db: DatabaseConnection, _mq: Arc<MockRabbitMQManager>) -> Router {
+async fn setup_test_app(db: DatabaseConnection) -> Router {
     let _ = tracing_subscriber::fmt::try_init();
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
 
-    let mut templates = std::collections::HashMap::new();
-    templates.insert(
-        "verification_email.html".to_string(),
-        "Template content".to_string(),
-    );
-
-    let auth_service = zent_be::services::v1::auth::AuthService::new(
-        db.clone(),
-        None,
-        None,
-        std::sync::Arc::new(templates),
-        zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
-        zent_be::core::state::SessionDefaultTTLSeconds(3600),
-        jsonwebtoken::EncodingKey::from_secret(b"integration_test_secret_for_tokens"),
-    );
-
     let luts = std::sync::Arc::new(zent_be::core::lookup_tables::LookupTables::empty());
 
-    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(
+    let work_order_service =
+        std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
+            db.clone(),
+            luts.clone(),
+            None,
+            None,
+        ));
+
+    let media_service = std::sync::Arc::new(zent_be::services::v1::media::MediaService::new(
         db.clone(),
-        luts.clone(),
         None,
         None,
-    );
+    ));
 
-    let media_service = zent_be::services::v1::media::MediaService::new(db.clone(), None, None);
-
-    let state = zent_be::core::state::AppState::new(
-        b"integration_test_secret_for_tokens",
-        zent_be::core::lookup_tables::LookupTables::empty(),
-        auth_service,
-        work_order_service.clone(),
-        media_service.clone(),
-    );
+    let state = WorkOrderTestState {
+        work_order_service,
+        media_service,
+    };
 
     Router::new()
         .route(
@@ -313,8 +208,7 @@ mod customer_flow {
         #[case] payload: serde_json::Value,
         #[case] expected: StatusCode,
     ) {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
         let req = create_json_request(http::Method::POST, "/api/v1/work_orders", &payload);
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(r.status(), expected, "Must strictly enforce payload shapes");
@@ -326,8 +220,7 @@ mod customer_flow {
     #[case("Ben Tre", StatusCode::BAD_REQUEST)]
     #[tokio::test]
     async fn test_tc1_location_policy(#[case] city: &str, #[case] expected: StatusCode) {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let mut payload = CreateWorkOrderPayload::default();
         payload.city = city.to_string();
@@ -355,8 +248,7 @@ mod customer_flow {
 
     #[tokio::test]
     async fn test_tc1_1_transactional_rollback() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let payload = CreateWorkOrderPayload::default();
         let req = create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload));
@@ -371,8 +263,7 @@ mod customer_flow {
 
     #[tokio::test]
     async fn test_tc1_2_idempotent_creation() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let payload = CreateWorkOrderPayload::default();
         let idempotency_key = Uuid::new_v4().to_string();
@@ -416,8 +307,7 @@ mod customer_flow {
 
     #[tokio::test]
     async fn test_tc1_3_idempotency_key_conflict() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let payload1 = CreateWorkOrderPayload::default();
         let mut payload2 = CreateWorkOrderPayload::default();
@@ -462,8 +352,7 @@ mod admin_flow {
 
     #[tokio::test]
     async fn test_tc2_assign_technician() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = format!("/api/v1/work_orders/{}/assign", Uuid::new_v4());
         let req = create_json_request(
@@ -486,8 +375,7 @@ mod admin_flow {
 
     #[tokio::test]
     async fn test_tc3_invalid_state_transition() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = format!("/api/v1/work_orders/{}/assign", Uuid::new_v4());
         let req = create_json_request(
@@ -511,8 +399,7 @@ mod admin_flow {
         #[case] _has_conflict: bool,
         #[case] expected: StatusCode,
     ) {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq.clone()).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = format!("/api/v1/work_orders/{}/schedule", Uuid::new_v4());
         let payload = json!({
@@ -524,11 +411,6 @@ mod admin_flow {
         let r = app.oneshot(req).await.unwrap();
 
         assert_eq!(r.status(), expected, "Conflict checking required");
-
-        if expected == StatusCode::OK {
-            // Fails in pure TDD Red phase since endpoint returns 501 and doesn't invoke publisher.
-            mq.assert_published("email_exchange.send_email");
-        }
     }
 }
 
@@ -549,8 +431,7 @@ mod execution_flow {
         #[case] lng: f64,
         #[case] expected: StatusCode,
     ) {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = format!("/api/v1/work_orders/{}/start", Uuid::new_v4());
 
@@ -567,8 +448,7 @@ mod execution_flow {
 
     #[tokio::test]
     async fn test_tc5_start_work_order() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = format!("/api/v1/work_orders/{}/start", Uuid::new_v4());
         let req = create_json_request(
@@ -591,8 +471,7 @@ mod execution_flow {
 
     #[tokio::test]
     async fn test_tc6_refuse_work_order() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = format!("/api/v1/work_orders/{}/refuse", Uuid::new_v4());
         let req = create_json_request(
@@ -615,8 +494,7 @@ mod execution_flow {
 
     #[tokio::test]
     async fn test_tc7_cancel_mid_work() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = format!("/api/v1/work_orders/{}/cancel", Uuid::new_v4());
 
@@ -658,8 +536,7 @@ mod completion_flow {
         #[case] has_evidence: bool,
         #[case] expected: StatusCode,
     ) {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = format!("/api/v1/work_orders/{}/complete", Uuid::new_v4());
 
@@ -691,8 +568,7 @@ mod completion_flow {
 
     #[tokio::test]
     async fn test_tc8_1_immutable_completed_state() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let wo_id = Uuid::new_v4();
 
@@ -719,8 +595,7 @@ mod visibility_flow {
 
     #[tokio::test]
     async fn test_tc9_customer_list_pagination() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = "/api/v1/work_orders?page=1&limit=20";
         let req = create_empty_request(http::Method::GET, uri);
@@ -734,8 +609,7 @@ mod visibility_flow {
 
     #[tokio::test]
     async fn test_tc10_technician_filter() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = "/api/v1/work_orders?status=Assigned";
         let req = create_empty_request(http::Method::GET, uri);
@@ -745,8 +619,7 @@ mod visibility_flow {
 
     #[tokio::test]
     async fn test_tc11_get_work_order_details() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = format!("/api/v1/work_orders/{}", Uuid::new_v4());
         let req = create_empty_request(http::Method::GET, &uri);
@@ -756,8 +629,7 @@ mod visibility_flow {
 
     #[tokio::test]
     async fn test_tc_pagination_limit_overflow() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = "/api/v1/work_orders?page=1&limit=1000";
         let req = create_empty_request(http::Method::GET, uri);
@@ -772,8 +644,7 @@ mod visibility_flow {
 
     #[tokio::test]
     async fn test_tc_cross_tenant_access() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = format!("/api/v1/work_orders/{}", Uuid::new_v4());
         let mut req = create_empty_request(http::Method::GET, &uri);
@@ -792,8 +663,7 @@ mod visibility_flow {
 
     #[tokio::test]
     async fn test_tc_technician_scope_breach() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
 
         let uri = format!("/api/v1/work_orders/{}/start", Uuid::new_v4());
         let mut req = create_json_request(

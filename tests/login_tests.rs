@@ -124,10 +124,16 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>
         jsonwebtoken::EncodingKey::from_secret(b"integration_test_secret_for_tokens"),
     );
 
+    let luts = std::sync::Arc::new(LookupTables::empty());
+    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(db.clone(), luts, None, None);
+    let media_service = zent_be::services::v1::media::MediaService::new(db.clone(), None, None);
+
     let state = AppState::new(
         b"integration_test_secret_for_tokens", 
         LookupTables::empty(),
-        auth_service
+        auth_service,
+        work_order_service,
+        media_service,
     );
 
     // Provide the application endpoints explicitly for tests
@@ -385,10 +391,16 @@ async fn test_cat2_unknown_status_legacy_data() {
         jsonwebtoken::EncodingKey::from_secret(b"integration_test_secret_for_tokens"),
     );
 
+    let luts = std::sync::Arc::new(LookupTables::empty());
+    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(db.clone(), luts, None, None);
+    let media_service = zent_be::services::v1::media::MediaService::new(db.clone(), None, None);
+
     let state = AppState::new(
         b"integration_test_secret_for_tokens", 
         LookupTables::empty(),
-        auth_service
+        auth_service,
+        work_order_service,
+        media_service,
     );
     let app = Router::new()
         .route("/login", post(login_handler))
@@ -519,10 +531,16 @@ async fn test_cat3_12_13_zero_ttl() {
         jsonwebtoken::EncodingKey::from_secret(b"secret"),
     );
 
+    let luts = std::sync::Arc::new(LookupTables::empty());
+    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(db.clone(), luts, None, None);
+    let media_service = zent_be::services::v1::media::MediaService::new(db.clone(), None, None);
+
     let state = AppState::new(
         b"secret", 
         LookupTables::empty(),
-        auth_service
+        auth_service,
+        work_order_service,
+        media_service,
     ); // 0 TTLs
     let app = Router::new()
         .route("/login", post(login_handler))

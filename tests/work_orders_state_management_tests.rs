@@ -19,11 +19,9 @@ use uuid::Uuid;
 // Infrastructure Mocking
 // ---------------------------------------------------------
 
-#[derive(Clone, Default)]
-pub struct MockRabbitMQManager {
-    pub is_stub: bool,
-    pub published_messages: Arc<Mutex<Vec<(String, Value)>>>,
-}
+#[path = "common/mod.rs"]
+mod common;
+use common::{seed_test_db, WorkOrderTestState};
 
 async fn mock_db() -> DatabaseConnection {
     Database::connect("sqlite::memory:").await.unwrap()
@@ -33,60 +31,31 @@ async fn mock_db() -> DatabaseConnection {
 // Boundary Initialization
 // ---------------------------------------------------------
 
-async fn seed_test_db(db: &DatabaseConnection) {
-    let _ = roles::ActiveModel { id: Set(1), name: Set("Admin".to_string()) }.insert(db).await;
-    let _ = roles::ActiveModel { id: Set(2), name: Set("Manager".to_string()) }.insert(db).await;
-    let _ = roles::ActiveModel { id: Set(3), name: Set("Technician".to_string()) }.insert(db).await;
-    let _ = roles::ActiveModel { id: Set(4), name: Set("Dispatcher".to_string()) }.insert(db).await;
-    let _ = roles::ActiveModel { id: Set(5), name: Set("Customer".to_string()) }.insert(db).await;
-
-    let _ = account_status::ActiveModel { id: Set(1), name: Set("Pending".to_string()) }.insert(db).await;
-    let _ = account_status::ActiveModel { id: Set(2), name: Set("Active".to_string()) }.insert(db).await;
-    let _ = account_status::ActiveModel { id: Set(3), name: Set("Inactive".to_string()) }.insert(db).await;
-    let _ = account_status::ActiveModel { id: Set(4), name: Set("Locked".to_string()) }.insert(db).await;
-    let _ = account_status::ActiveModel { id: Set(5), name: Set("Terminated".to_string()) }.insert(db).await;
-}
-
-async fn setup_test_app(db: DatabaseConnection, _mq: Arc<MockRabbitMQManager>) -> Router {
+async fn setup_test_app(db: DatabaseConnection) -> Router {
     let _ = tracing_subscriber::fmt::try_init();
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
 
-    let mut templates = std::collections::HashMap::new();
-    templates.insert("verification_email.html".to_string(), "Template content".to_string());
-
-    let auth_service = zent_be::services::v1::auth::AuthService::new(
-        db.clone(),
-        None,
-        None,
-        std::sync::Arc::new(templates),
-        zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
-        zent_be::core::state::SessionDefaultTTLSeconds(3600),
-        jsonwebtoken::EncodingKey::from_secret(b"integration_test_secret_for_tokens"),
-    );
-
     let luts = std::sync::Arc::new(zent_be::core::lookup_tables::LookupTables::empty());
     
-    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(
+    let work_order_service = std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
         db.clone(),
         luts.clone(),
         None,
         None,
-    );
+    ));
     
-    let media_service = zent_be::services::v1::media::MediaService::new(
+    let media_service = std::sync::Arc::new(zent_be::services::v1::media::MediaService::new(
         db.clone(),
         None,
         None,
-    );
+    ));
 
-    let state = zent_be::core::state::AppState::new(
-        b"integration_test_secret_for_tokens",
-        zent_be::core::lookup_tables::LookupTables::empty(),
-        auth_service,
+    let state = WorkOrderTestState {
         work_order_service,
         media_service,
-    );
+    };
+
 
     Router::new()
         // Core status transitions endpoints
@@ -145,8 +114,7 @@ mod state_management_tests {
 
     #[tokio::test]
     async fn test_valid_state_transitions() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
         let wo_id = Uuid::new_v4();
 
         // 1. Pending -> Assigned
@@ -183,8 +151,7 @@ mod state_management_tests {
 
     #[tokio::test]
     async fn test_invalid_state_transitions() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
         let wo_id = Uuid::new_v4();
 
         // Directly from Pending -> Completed (Invalid)
@@ -201,8 +168,7 @@ mod state_management_tests {
 
     #[tokio::test]
     async fn test_state_history_recording() {
-        let mq = Arc::new(MockRabbitMQManager::default());
-        let app = setup_test_app(mock_db().await, mq).await;
+        let app = setup_test_app(mock_db().await).await;
         let wo_id = Uuid::new_v4();
 
         // Get History
