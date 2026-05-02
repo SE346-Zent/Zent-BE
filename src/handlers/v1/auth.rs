@@ -44,7 +44,15 @@ pub async fn forgot_password_handler(
     Json(payload): Json<ForgotPasswordRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
-    let result = state.auth_service.forgot_password(payload).await?;
+    
+    let valkey = state.valkey.as_ref().map(|v| v.get_connection());
+    let result = crate::services::v1::auth::forgot_password::handle_forgot_password(
+        (*state.db).clone(),
+        valkey,
+        state.rabbitmq.clone(),
+        &state.templates,
+        payload,
+    ).await?;
     Ok(Json(result))
 }
 
@@ -64,7 +72,14 @@ pub async fn verify_forgot_password_otp_handler(
     Json(payload): Json<VerifyForgotPasswordOtpRequest>,
 ) -> Result<Json<ApiResponse<VerifyForgotPasswordOtpResponseData>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
-    let result = state.auth_service.verify_forgot_password_otp(payload).await?;
+    
+    let valkey = state.valkey.as_ref().map(|v| v.get_connection());
+    let script_hashes = state.valkey.as_ref().map(|v| v.get_script_hashes()).unwrap_or_default();
+    let result = crate::services::v1::auth::verify_forgot_password_otp::handle_verify_forgot_password_otp(
+        valkey,
+        &script_hashes,
+        payload,
+    ).await?;
     Ok(Json(result))
 }
 
@@ -83,7 +98,13 @@ pub async fn reset_password_handler(
     Json(payload): Json<ResetPasswordRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
-    let result = state.auth_service.reset_password(payload).await?;
+    
+    let valkey = state.valkey.as_ref().map(|v| v.get_connection());
+    let result = crate::services::v1::auth::reset_password::handle_reset_password(
+        (*state.db).clone(),
+        valkey,
+        payload,
+    ).await?;
     Ok(Json(result))
 }
 
@@ -105,7 +126,15 @@ pub async fn refresh_token_handler(
     Json(payload): Json<RefreshTokenRequest>,
 ) -> Result<Json<ApiResponse<LoginResponseData>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
-    let result = state.auth_service.refresh_token(payload).await?;
+    
+    let valkey = state.valkey.as_ref().map(|v| v.get_connection());
+    let result = crate::services::v1::auth::refresh_token::handle_refresh_token(
+        (*state.db).clone(),
+        valkey,
+        state.access_token_ttl,
+        state.encoding_key.clone(),
+        payload,
+    ).await?;
     Ok(Json(result))
 }
 
@@ -133,7 +162,16 @@ pub async fn login_handler(
         .map(|s| s.to_string())
         .unwrap_or_else(|| addr.ip().to_string());
 
-    let result = state.auth_service.login(payload, ip_address).await?;
+    let valkey = state.valkey.as_ref().map(|v| v.get_connection());
+    let result = crate::services::v1::auth::login::handle_login(
+        (*state.db).clone(),
+        valkey,
+        state.access_token_ttl,
+        state.session_ttl,
+        state.encoding_key.clone(),
+        payload,
+        ip_address,
+    ).await?;
     Ok(Json(result))
 }
 
@@ -153,7 +191,15 @@ pub async fn register_handler(
     Json(payload): Json<UserRegistrationRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
-    let result = state.auth_service.register(payload).await?;
+    
+    let valkey = state.valkey.as_ref().map(|v| v.get_connection());
+    let result = crate::services::v1::auth::register::handle_register(
+        (*state.db).clone(),
+        valkey,
+        state.rabbitmq.clone(),
+        &state.templates,
+        payload,
+    ).await?;
     Ok(Json(result))
 }
 
@@ -173,7 +219,17 @@ pub async fn verify_otp_handler(
     Json(payload): Json<VerifyOtpRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
-    let result = state.auth_service.verify_otp(payload).await?;
+    
+    let valkey = state.valkey.as_ref().map(|v| v.get_connection());
+    let script_hashes = state.valkey.as_ref().map(|v| v.get_script_hashes()).unwrap_or_default();
+    let result = crate::services::v1::auth::verify_otp::handle_verify_otp(
+        (*state.db).clone(),
+        valkey,
+        state.rabbitmq.clone(),
+        &state.templates,
+        &script_hashes,
+        payload,
+    ).await?;
     Ok(Json(result))
 }
 
@@ -192,7 +248,15 @@ pub async fn resend_otp_handler(
     Json(payload): Json<ResendOtpRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
-    let result = state.auth_service.resend_otp(payload).await?;
+    
+    let valkey = state.valkey.as_ref().map(|v| v.get_connection());
+    let result = crate::services::v1::auth::resend_otp::handle_resend_otp(
+        (*state.db).clone(),
+        valkey,
+        state.rabbitmq.clone(),
+        &state.templates,
+        payload,
+    ).await?;
     Ok(Json(result))
 }
 

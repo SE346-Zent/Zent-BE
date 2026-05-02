@@ -29,15 +29,15 @@ use crate::{
 use sea_orm::DatabaseConnection;
 use lapin::Connection;
 
-// Internal logic modules
-mod login;
-mod register;
-mod verify_otp;
-mod resend_otp;
-mod refresh_token;
-mod forgot_password;
-mod verify_forgot_password_otp;
-mod reset_password;
+// Internal logic modules made public for handler orchestration
+pub mod login;
+pub mod register;
+pub mod verify_otp;
+pub mod resend_otp;
+pub mod refresh_token;
+pub mod forgot_password;
+pub mod verify_forgot_password_otp;
+pub mod reset_password;
 
 pub struct AuthService {
     db: DatabaseConnection,
@@ -69,6 +69,15 @@ impl AuthService {
             encoding_key,
         }
     }
+
+    // Getters for AppState to extract infrastructure during transition
+    pub fn get_db(&self) -> &DatabaseConnection { &self.db }
+    pub fn get_valkey(&self) -> &Option<Arc<ValkeyClient>> { &self.valkey }
+    pub fn get_rabbitmq(&self) -> &Option<Arc<Connection>> { &self.rabbitmq }
+    pub fn get_templates(&self) -> &Arc<HashMap<String, String>> { &self.templates }
+    pub fn get_access_token_ttl(&self) -> AccessTokenDefaultTTLSeconds { self.access_token_ttl }
+    pub fn get_session_ttl(&self) -> SessionDefaultTTLSeconds { self.session_ttl }
+    pub fn get_encoding_key(&self) -> EncodingKey { self.encoding_key.clone() }
 
     #[tracing::instrument(skip(self, req, ip_address), fields(user_email = %req.email))]
     pub async fn login(&self, req: UserLoginRequest, ip_address: String) -> Result<ApiResponse<LoginResponseData>, AppError> {
