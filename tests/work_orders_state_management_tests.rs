@@ -125,8 +125,7 @@ mod state_management_tests {
             &json!({ "technician_id": Uuid::new_v4() }),
         );
         let r_assign = app.clone().oneshot(req_assign).await.unwrap();
-        // Assuming mock returns NOT_IMPLEMENTED, in real test it would be OK
-        assert_eq!(r_assign.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r_assign.status(), StatusCode::OK);
 
         // 2. Assigned -> In Progress
         let uri_start = format!("/api/v1/work_orders/{}/start", wo_id);
@@ -136,7 +135,7 @@ mod state_management_tests {
             &json!({ "latitude": 10.0, "longitude": 106.0 }),
         );
         let r_start = app.clone().oneshot(req_start).await.unwrap();
-        assert_eq!(r_start.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r_start.status(), StatusCode::OK);
 
         // 3. In Progress -> Completed
         let uri_complete = format!("/api/v1/work_orders/{}/complete", wo_id);
@@ -146,7 +145,7 @@ mod state_management_tests {
             &json!({ "evidence_image_ids": ["img_1"], "signature_id": "sig_1" }),
         );
         let r_complete = app.clone().oneshot(req_complete).await.unwrap();
-        assert_eq!(r_complete.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r_complete.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -163,7 +162,7 @@ mod state_management_tests {
         );
         let r_complete = app.clone().oneshot(req_complete).await.unwrap();
         // This expects to be handled by the endpoint logically, we just check routing
-        assert_eq!(r_complete.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r_complete.status(), StatusCode::CONFLICT);
     }
 
     #[tokio::test]
@@ -177,6 +176,6 @@ mod state_management_tests {
 
         let r_history = app.oneshot(req_history).await.unwrap();
         // Endpoint should exist
-        assert_eq!(r_history.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r_history.status(), StatusCode::OK);
     }
 }

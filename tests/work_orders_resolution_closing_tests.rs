@@ -4,15 +4,15 @@ use axum::{
     routing::post,
     Router,
 };
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use migration::{Migrator, MigratorTrait};
-use zent_be::entities::{roles, account_status};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use sea_orm::{Database, DatabaseConnection};
 use serde_json::{json, Value};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 use uuid::Uuid;
+use zent_be::entities::{account_status, roles};
 
 // ---------------------------------------------------------
 // Infrastructure Mocking
@@ -36,14 +36,15 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
     seed_test_db(&db).await;
 
     let luts = std::sync::Arc::new(zent_be::core::lookup_tables::LookupTables::empty());
-    
-    let work_order_service = std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
-        db.clone(),
-        luts.clone(),
-        None,
-        None,
-    ));
-    
+
+    let work_order_service =
+        std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
+            db.clone(),
+            luts.clone(),
+            None,
+            None,
+        ));
+
     let media_service = std::sync::Arc::new(zent_be::services::v1::core::media::MediaService::new(
         db.clone(),
         None,
@@ -55,9 +56,11 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
         media_service,
     };
 
-
     Router::new()
-        .route("/api/v1/work_orders/{id}/complete", post(zent_be::handlers::v1::work_orders::complete))
+        .route(
+            "/api/v1/work_orders/{id}/complete",
+            post(zent_be::handlers::v1::work_orders::complete),
+        )
         .route(
             "/api/v1/signatures/work_orders/{id}/upload",
             post(zent_be::handlers::v1::media::upload_work_order_signature),
@@ -130,7 +133,10 @@ mod resolution_closing_tests {
             .unwrap();
 
         assert!(form.is_some(), "Expected a closing form for the work order");
-        assert!(!form.unwrap().signature_url.is_empty(), "Expected a signature URL linkage to be made");
+        assert!(
+            !form.unwrap().signature_url.is_empty(),
+            "Expected a signature URL linkage to be made"
+        );
     }
 
     #[tokio::test]
@@ -148,7 +154,7 @@ mod resolution_closing_tests {
 
         let r = app.oneshot(req).await.unwrap();
         // This expects to be handled by the endpoint logically, we just check routing
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
@@ -180,13 +186,20 @@ mod resolution_closing_tests {
             .unwrap();
 
         assert!(form.is_some(), "WorkOrderClosingForm must be created");
-        
+
         let links = zent_be::entities::closing_form_image_links::Entity::find()
-            .filter(zent_be::entities::closing_form_image_links::Column::WorkOrderClosingFormId.eq(form.unwrap().id))
+            .filter(
+                zent_be::entities::closing_form_image_links::Column::WorkOrderClosingFormId
+                    .eq(form.unwrap().id),
+            )
             .all(&db)
             .await
             .unwrap();
-            
-        assert_eq!(links.len(), 2, "Expected 2 evidence images linked to the closing form");
+
+        assert_eq!(
+            links.len(),
+            2,
+            "Expected 2 evidence images linked to the closing form"
+        );
     }
 }

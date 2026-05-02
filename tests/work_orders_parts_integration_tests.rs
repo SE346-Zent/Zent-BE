@@ -120,7 +120,7 @@ mod parts_integration_tests {
         );
 
         let r = app.oneshot(req).await.unwrap();
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -146,6 +146,6 @@ mod parts_integration_tests {
         let r = app.oneshot(req).await.unwrap();
         // In actual implementation, we'd mock the DB state to simulate a Completed order
         // Here we just test routing
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r.status(), StatusCode::CONFLICT);
     }
 }

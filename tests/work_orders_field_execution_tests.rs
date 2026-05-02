@@ -223,7 +223,7 @@ mod field_execution_tests {
         let req = create_empty_request(http::Method::POST, &uri);
 
         let r = app.oneshot(req).await.unwrap();
-        assert_eq!(r.status(), StatusCode::OK);
+        assert_eq!(r.status(), StatusCode::CREATED);
 
         let links = zent_be::entities::work_order_image_links::Entity::find()
             .filter(zent_be::entities::work_order_image_links::Column::WorkOrderId.eq(wo_id))
@@ -243,6 +243,6 @@ mod field_execution_tests {
         let req = create_empty_request(http::Method::GET, &uri);
 
         let r = app.oneshot(req).await.unwrap();
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r.status(), StatusCode::OK);
     }
 }
