@@ -63,10 +63,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         jsonwebtoken::EncodingKey::from_secret(cfg.jwt_sign_key.as_bytes()),
     );
 
+    let work_order_service = services::v1::work_orders::WorkOrderService::new(
+        db.clone(),
+        Arc::new(lookup_tables.clone()),
+        valkey.clone(),
+        rabbitmq.clone(),
+    );
+
+    let media_service = services::v1::media::MediaService::new(
+        db.clone(),
+        valkey.clone(),
+        rabbitmq.clone(),
+    );
+
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
         lookup_tables.clone(),
         auth_service,
+        work_order_service,
+        media_service,
     );
 
     // Start background cron scheduler for maintenance tasks using pre-loaded LUT

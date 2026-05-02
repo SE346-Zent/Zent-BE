@@ -4,6 +4,10 @@ use axum::{
     routing::post,
     Router,
 };
+use sea_orm::ActiveModelTrait;
+use sea_orm::Set;
+use migration::{Migrator, MigratorTrait};
+use zent_be::entities::{roles, account_status};
 use sea_orm::{Database, DatabaseConnection};
 use serde_json::{json, Value};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -29,40 +33,63 @@ async fn mock_db() -> DatabaseConnection {
 // Boundary Initialization
 // ---------------------------------------------------------
 
-async fn not_implemented() -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
+async fn seed_test_db(db: &DatabaseConnection) {
+    let _ = roles::ActiveModel { id: Set(1), name: Set("Admin".to_string()) }.insert(db).await;
+    let _ = roles::ActiveModel { id: Set(2), name: Set("Manager".to_string()) }.insert(db).await;
+    let _ = roles::ActiveModel { id: Set(3), name: Set("Technician".to_string()) }.insert(db).await;
+    let _ = roles::ActiveModel { id: Set(4), name: Set("Dispatcher".to_string()) }.insert(db).await;
+    let _ = roles::ActiveModel { id: Set(5), name: Set("Customer".to_string()) }.insert(db).await;
+
+    let _ = account_status::ActiveModel { id: Set(1), name: Set("Pending".to_string()) }.insert(db).await;
+    let _ = account_status::ActiveModel { id: Set(2), name: Set("Active".to_string()) }.insert(db).await;
+    let _ = account_status::ActiveModel { id: Set(3), name: Set("Inactive".to_string()) }.insert(db).await;
+    let _ = account_status::ActiveModel { id: Set(4), name: Set("Locked".to_string()) }.insert(db).await;
+    let _ = account_status::ActiveModel { id: Set(5), name: Set("Terminated".to_string()) }.insert(db).await;
 }
 
 async fn setup_test_app(db: DatabaseConnection, _mq: Arc<MockRabbitMQManager>) -> Router {
-    let db_mgr = zent_be::infrastructure::database::DatabaseManager::from_connection(db);
-    let valkey_mgr = zent_be::infrastructure::cache::ValkeyManager::stub();
-    let rmq_mgr = zent_be::infrastructure::mq::RabbitMQManager::stub();
+    let _ = tracing_subscriber::fmt::try_init();
+    Migrator::up(&db, None).await.unwrap();
+    seed_test_db(&db).await;
 
     let mut templates = std::collections::HashMap::new();
-    templates.insert(
-        "verification_email.html".to_string(),
-        "Template content".to_string(),
-    );
-    let templates_arc = std::sync::Arc::new(templates);
+    templates.insert("verification_email.html".to_string(), "Template content".to_string());
 
     let auth_service = zent_be::services::v1::auth::AuthService::new(
-        db_mgr.clone(),
-        valkey_mgr.clone(),
-        rmq_mgr.clone(),
-        templates_arc.clone(),
+        db.clone(),
+        None,
+        None,
+        std::sync::Arc::new(templates),
         zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
         zent_be::core::state::SessionDefaultTTLSeconds(3600),
         jsonwebtoken::EncodingKey::from_secret(b"integration_test_secret_for_tokens"),
+    );
+
+    let luts = std::sync::Arc::new(zent_be::core::lookup_tables::LookupTables::empty());
+    
+    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(
+        db.clone(),
+        luts.clone(),
+        None,
+        None,
+    );
+    
+    let media_service = zent_be::services::v1::media::MediaService::new(
+        db.clone(),
+        None,
+        None,
     );
 
     let state = zent_be::core::state::AppState::new(
         b"integration_test_secret_for_tokens",
         zent_be::core::lookup_tables::LookupTables::empty(),
         auth_service,
+        work_order_service,
+        media_service,
     );
 
     Router::new()
-        .route("/api/v1/work_orders/{id}/parts", post(not_implemented))
+        .route("/api/v1/work_orders/{id}/parts", post(zent_be::handlers::v1::work_orders::add_parts))
         .with_state(state)
 }
 
