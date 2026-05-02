@@ -5,6 +5,7 @@ use axum::{
     Router,
 };
 use migration::{Migrator, MigratorTrait};
+use sea_orm::prelude::*;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use sea_orm::{Database, DatabaseConnection};
 use serde_json::{json, Value};

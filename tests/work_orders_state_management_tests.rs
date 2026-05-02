@@ -4,16 +4,17 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use migration::{Migrator, MigratorTrait};
+use sea_orm::prelude::*;
 use sea_orm::ActiveModelTrait;
 use sea_orm::Set;
-use migration::{Migrator, MigratorTrait};
-use zent_be::entities::{roles, account_status};
 use sea_orm::{Database, DatabaseConnection};
 use serde_json::{json, Value};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 use uuid::Uuid;
+use zent_be::entities::{account_status, roles};
 
 // ---------------------------------------------------------
 // Infrastructure Mocking
@@ -37,14 +38,15 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
     seed_test_db(&db).await;
 
     let luts = std::sync::Arc::new(zent_be::core::lookup_tables::LookupTables::empty());
-    
-    let work_order_service = std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
-        db.clone(),
-        luts.clone(),
-        None,
-        None,
-    ));
-    
+
+    let work_order_service =
+        std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
+            db.clone(),
+            luts.clone(),
+            None,
+            None,
+        ));
+
     let media_service = std::sync::Arc::new(zent_be::services::v1::core::media::MediaService::new(
         db.clone(),
         None,
@@ -56,14 +58,25 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
         media_service,
     };
 
-
     Router::new()
         // Core status transitions endpoints
-        .route("/api/v1/work_orders/{id}/assign", post(zent_be::handlers::v1::work_orders::assign))
-        .route("/api/v1/work_orders/{id}/start", post(zent_be::handlers::v1::work_orders::start))
-        .route("/api/v1/work_orders/{id}/complete", post(zent_be::handlers::v1::work_orders::complete))
+        .route(
+            "/api/v1/work_orders/{id}/assign",
+            post(zent_be::handlers::v1::work_orders::assign),
+        )
+        .route(
+            "/api/v1/work_orders/{id}/start",
+            post(zent_be::handlers::v1::work_orders::start),
+        )
+        .route(
+            "/api/v1/work_orders/{id}/complete",
+            post(zent_be::handlers::v1::work_orders::complete),
+        )
         // New endpoint: State History
-        .route("/api/v1/work_orders/{id}/history", get(zent_be::handlers::v1::work_orders::history))
+        .route(
+            "/api/v1/work_orders/{id}/history",
+            get(zent_be::handlers::v1::work_orders::history),
+        )
         .with_state(state)
 }
 

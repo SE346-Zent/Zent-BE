@@ -6,9 +6,8 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use migration::{Migrator, MigratorTrait};
+use sea_orm::prelude::*;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
-use zent_be::entities::{account_status, roles};
-
 use sea_orm::{Database, DatabaseConnection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -16,6 +15,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 use uuid::Uuid;
+use zent_be::entities::{account_status, roles};
 
 // ---------------------------------------------------------
 // Infrastructure Mocking
@@ -369,9 +369,13 @@ mod customer_flow {
             .one(&db)
             .await
             .unwrap();
-        
+
         assert!(wo.is_some(), "Work order must be created in db");
-        assert_eq!(wo.unwrap().reference_ticket_id, Some(ref_id), "Reference ticket ID must be properly linked in the database");
+        assert_eq!(
+            wo.unwrap().reference_ticket_id,
+            Some(ref_id),
+            "Reference ticket ID must be properly linked in the database"
+        );
     }
 }
 
@@ -413,11 +417,18 @@ mod admin_flow {
             .one(&db)
             .await
             .unwrap();
-        
+
         assert!(wo.is_some(), "Work order must exist");
         let wo = wo.unwrap();
-        assert_eq!(wo.technician_id, Some(tech_id), "Assignee ID must be properly set");
-        assert!(wo.admin_id.is_some(), "Assigner ID must be set to the user performing the assignment");
+        assert_eq!(
+            wo.technician_id,
+            Some(tech_id),
+            "Assignee ID must be properly set"
+        );
+        assert!(
+            wo.admin_id.is_some(),
+            "Assigner ID must be set to the user performing the assignment"
+        );
     }
 
     #[tokio::test]

@@ -5,6 +5,7 @@ use axum::{
     Router,
 };
 use migration::{Migrator, MigratorTrait};
+use sea_orm::prelude::*;
 use sea_orm::ActiveModelTrait;
 use sea_orm::Set;
 use sea_orm::{Database, DatabaseConnection};

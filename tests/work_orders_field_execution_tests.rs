@@ -4,15 +4,16 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use migration::{Migrator, MigratorTrait};
-use zent_be::entities::{roles, account_status};
+use sea_orm::prelude::*;
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use sea_orm::{Database, DatabaseConnection};
 use serde_json::{json, Value};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 use uuid::Uuid;
+use zent_be::entities::{account_status, roles};
 
 // ---------------------------------------------------------
 // Infrastructure Mocking
@@ -36,14 +37,15 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
     seed_test_db(&db).await;
 
     let luts = std::sync::Arc::new(zent_be::core::lookup_tables::LookupTables::empty());
-    
-    let work_order_service = std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
-        db.clone(),
-        luts.clone(),
-        None,
-        None,
-    ));
-    
+
+    let work_order_service =
+        std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
+            db.clone(),
+            luts.clone(),
+            None,
+            None,
+        ));
+
     let media_service = std::sync::Arc::new(zent_be::services::v1::core::media::MediaService::new(
         db.clone(),
         None,
@@ -55,14 +57,31 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
         media_service,
     };
 
-
     Router::new()
-        .route("/api/v1/work_orders/{id}/refuse", post(zent_be::handlers::v1::work_orders::refuse))
-        .route("/api/v1/work_orders/{id}/refusal/approve", post(zent_be::handlers::v1::work_orders::approve_refusal))
-        .route("/api/v1/work_orders/{id}/refusal/deny", post(zent_be::handlers::v1::work_orders::deny_refusal))
-        .route("/api/v1/photos/work_orders/{id}/upload", post(zent_be::handlers::v1::media::upload_work_order_photo))
-        .route("/api/v1/photos/work_orders/{id}", get(zent_be::handlers::v1::media::get_work_order_photo))
-        .route("/api/v1/photos/work_orders", get(zent_be::handlers::v1::media::list_work_order_photos))
+        .route(
+            "/api/v1/work_orders/{id}/refuse",
+            post(zent_be::handlers::v1::work_orders::refuse),
+        )
+        .route(
+            "/api/v1/work_orders/{id}/refusal/approve",
+            post(zent_be::handlers::v1::work_orders::approve_refusal),
+        )
+        .route(
+            "/api/v1/work_orders/{id}/refusal/deny",
+            post(zent_be::handlers::v1::work_orders::deny_refusal),
+        )
+        .route(
+            "/api/v1/photos/work_orders/{id}/upload",
+            post(zent_be::handlers::v1::media::upload_work_order_photo),
+        )
+        .route(
+            "/api/v1/photos/work_orders/{id}",
+            get(zent_be::handlers::v1::media::get_work_order_photo),
+        )
+        .route(
+            "/api/v1/photos/work_orders",
+            get(zent_be::handlers::v1::media::list_work_order_photos),
+        )
         .with_state(state)
 }
 
@@ -132,17 +151,25 @@ mod field_execution_tests {
             .await
             .unwrap()
             .expect("Work order should exist");
-        
-        assert!(wo.reject_form_id.is_some(), "Expected reject form to be linked to work order");
 
-        let reject_form = zent_be::entities::work_order_reject_forms::Entity::find_by_id(wo.reject_form_id.unwrap())
-            .one(&db)
-            .await
-            .unwrap()
-            .expect("Reject form should exist");
+        assert!(
+            wo.reject_form_id.is_some(),
+            "Expected reject form to be linked to work order"
+        );
+
+        let reject_form = zent_be::entities::work_order_reject_forms::Entity::find_by_id(
+            wo.reject_form_id.unwrap(),
+        )
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Reject form should exist");
 
         // Assuming default is unapproved (false)
-        assert_eq!(reject_form.approved, false, "Initial refusal should have approved=false");
+        assert_eq!(
+            reject_form.approved, false,
+            "Initial refusal should have approved=false"
+        );
     }
     #[tokio::test]
     async fn test_admin_refusal_approve() {
@@ -165,16 +192,24 @@ mod field_execution_tests {
             .await
             .unwrap()
             .expect("Work order should exist");
-        
-        assert!(wo.reject_form_id.is_some(), "Expected reject form to be linked to work order");
 
-        let reject_form = zent_be::entities::work_order_reject_forms::Entity::find_by_id(wo.reject_form_id.unwrap())
-            .one(&db)
-            .await
-            .unwrap()
-            .expect("Reject form should exist");
+        assert!(
+            wo.reject_form_id.is_some(),
+            "Expected reject form to be linked to work order"
+        );
 
-        assert_eq!(reject_form.approved, true, "Refusal should be approved=true");
+        let reject_form = zent_be::entities::work_order_reject_forms::Entity::find_by_id(
+            wo.reject_form_id.unwrap(),
+        )
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Reject form should exist");
+
+        assert_eq!(
+            reject_form.approved, true,
+            "Refusal should be approved=true"
+        );
         // In a real app we would assert approver_id is set to the token's user id
     }
 
@@ -199,16 +234,24 @@ mod field_execution_tests {
             .await
             .unwrap()
             .expect("Work order should exist");
-        
-        assert!(wo.reject_form_id.is_some(), "Expected reject form to be linked to work order");
 
-        let reject_form = zent_be::entities::work_order_reject_forms::Entity::find_by_id(wo.reject_form_id.unwrap())
-            .one(&db)
-            .await
-            .unwrap()
-            .expect("Reject form should exist");
+        assert!(
+            wo.reject_form_id.is_some(),
+            "Expected reject form to be linked to work order"
+        );
 
-        assert_eq!(reject_form.approved, false, "Refusal should be approved=false");
+        let reject_form = zent_be::entities::work_order_reject_forms::Entity::find_by_id(
+            wo.reject_form_id.unwrap(),
+        )
+        .one(&db)
+        .await
+        .unwrap()
+        .expect("Reject form should exist");
+
+        assert_eq!(
+            reject_form.approved, false,
+            "Refusal should be approved=false"
+        );
     }
 
     #[tokio::test]
@@ -231,7 +274,10 @@ mod field_execution_tests {
             .await
             .unwrap();
 
-        assert!(!links.is_empty(), "Expected a linkage in work_order_image_links");
+        assert!(
+            !links.is_empty(),
+            "Expected a linkage in work_order_image_links"
+        );
     }
 
     #[tokio::test]
