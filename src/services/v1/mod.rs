@@ -1,6 +1,5 @@
 pub mod auth;
 pub mod core;
-pub mod media;
 pub mod work_orders;
 
 use std::sync::Arc;

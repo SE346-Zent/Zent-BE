@@ -126,7 +126,7 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>
 
     let luts = std::sync::Arc::new(LookupTables::empty());
     let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(db.clone(), luts, None, None);
-    let media_service = zent_be::services::v1::media::MediaService::new(db.clone(), None, None);
+    let media_service = zent_be::services::v1::core::media::MediaService::new(db.clone(), None, None);
 
     let state = AppState::new(
         b"integration_test_secret_for_tokens", 
@@ -393,7 +393,7 @@ async fn test_cat2_unknown_status_legacy_data() {
 
     let luts = std::sync::Arc::new(LookupTables::empty());
     let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(db.clone(), luts, None, None);
-    let media_service = zent_be::services::v1::media::MediaService::new(db.clone(), None, None);
+    let media_service = zent_be::services::v1::core::media::MediaService::new(db.clone(), None, None);
 
     let state = AppState::new(
         b"integration_test_secret_for_tokens", 
@@ -533,7 +533,7 @@ async fn test_cat3_12_13_zero_ttl() {
 
     let luts = std::sync::Arc::new(LookupTables::empty());
     let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(db.clone(), luts, None, None);
-    let media_service = zent_be::services::v1::media::MediaService::new(db.clone(), None, None);
+    let media_service = zent_be::services::v1::core::media::MediaService::new(db.clone(), None, None);
 
     let state = AppState::new(
         b"secret", 

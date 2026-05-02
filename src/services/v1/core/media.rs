@@ -23,8 +23,7 @@ impl MediaService {
         }
     }
 
-    pub async fn upload_work_order_photo(&self) -> Result<(), ()> { unimplemented!() }
-    pub async fn get_work_order_photo(&self) -> Result<(), ()> { unimplemented!() }
-    pub async fn list_work_order_photos(&self) -> Result<(), ()> { unimplemented!() }
-    pub async fn upload_work_order_signature(&self) -> Result<(), ()> { unimplemented!() }
+    pub async fn upload_media(&self) -> Result<(), ()> { unimplemented!() }
+    pub async fn get_media(&self) -> Result<(), ()> { unimplemented!() }
+    pub async fn list_media(&self) -> Result<(), ()> { unimplemented!() }
 }

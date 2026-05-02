@@ -5,7 +5,7 @@ use jsonwebtoken::{DecodingKey, EncodingKey};
 use crate::core::lookup_tables::LookupTables;
 use crate::services::v1::auth::AuthService;
 use crate::services::v1::work_orders::WorkOrderService;
-use crate::services::v1::media::MediaService;
+use crate::services::v1::core::media::MediaService;
 
 #[derive(Clone, Copy)]
 pub struct AccessTokenDefaultTTLSeconds(pub i64);

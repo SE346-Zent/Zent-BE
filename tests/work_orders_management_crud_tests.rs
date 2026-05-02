@@ -49,7 +49,7 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
             None,
         ));
 
-    let media_service = std::sync::Arc::new(zent_be::services::v1::media::MediaService::new(
+    let media_service = std::sync::Arc::new(zent_be::services::v1::core::media::MediaService::new(
         db.clone(),
         None,
         None,

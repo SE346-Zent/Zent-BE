@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         rabbitmq.clone(),
     );
 
-    let media_service = services::v1::media::MediaService::new(
+    let media_service = services::v1::core::media::MediaService::new(
         db.clone(),
         valkey.clone(),
         rabbitmq.clone(),

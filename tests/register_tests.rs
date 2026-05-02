@@ -60,7 +60,7 @@ async fn setup_app_with_db(db: DatabaseConnection) -> Router {
 
     let luts = std::sync::Arc::new(LookupTables::empty());
     let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(db.clone(), luts, None, None);
-    let media_service = zent_be::services::v1::media::MediaService::new(db.clone(), None, None);
+    let media_service = zent_be::services::v1::core::media::MediaService::new(db.clone(), None, None);
 
     let state = AppState::new(
         b"integration_test_secret_for_tokens", 
