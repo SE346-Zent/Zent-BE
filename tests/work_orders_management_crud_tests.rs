@@ -6,8 +6,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use migration::{Migrator, MigratorTrait};
-use sea_orm::ActiveModelTrait;
-use sea_orm::Set;
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use zent_be::entities::{account_status, roles};
 
 use sea_orm::{Database, DatabaseConnection};
@@ -340,6 +339,40 @@ mod customer_flow {
             "Reused idempotency key with different payload must fail"
         );
     }
+
+    #[tokio::test]
+    async fn test_tc1_4_create_with_reference_ticket() {
+        let db = mock_db().await;
+        let app = setup_test_app(db.clone()).await;
+
+        let mut payload = CreateWorkOrderPayload::default();
+        let ref_id = Uuid::new_v4();
+        payload.reference_ticket_id = Some(ref_id);
+
+        let req = create_json_request(http::Method::POST, "/api/v1/work_orders", &json!(payload));
+        let r = app.oneshot(req).await.unwrap();
+
+        assert_eq!(
+            r.status(),
+            StatusCode::CREATED,
+            "Must allow creation with reference ticket"
+        );
+
+        let body_bytes = axum::body::to_bytes(r.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let response_json: Value = serde_json::from_slice(&body_bytes).unwrap();
+        let wo_id_str = response_json["id"].as_str().expect("id must be string");
+        let wo_id = Uuid::parse_str(wo_id_str).unwrap();
+
+        let wo = zent_be::entities::work_orders::Entity::find_by_id(wo_id)
+            .one(&db)
+            .await
+            .unwrap();
+        
+        assert!(wo.is_some(), "Work order must be created in db");
+        assert_eq!(wo.unwrap().reference_ticket_id, Some(ref_id), "Reference ticket ID must be properly linked in the database");
+    }
 }
 
 // =====================================================================
@@ -352,13 +385,17 @@ mod admin_flow {
 
     #[tokio::test]
     async fn test_tc2_assign_technician() {
-        let app = setup_test_app(mock_db().await).await;
+        let db = mock_db().await;
+        let app = setup_test_app(db.clone()).await;
 
-        let uri = format!("/api/v1/work_orders/{}/assign", Uuid::new_v4());
+        let wo_id = Uuid::new_v4();
+        let tech_id = Uuid::new_v4();
+
+        let uri = format!("/api/v1/work_orders/{}/assign", wo_id);
         let req = create_json_request(
             http::Method::POST,
             &uri,
-            &json!({ "technician_id": Uuid::new_v4() }),
+            &json!({ "technician_id": tech_id }),
         );
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK, "Assigned transition");
@@ -371,6 +408,16 @@ mod admin_flow {
             response_json["status"], "Assigned",
             "Guardrail: Assigned technician must transition WO to 'Assigned' status"
         );
+
+        let wo = zent_be::entities::work_orders::Entity::find_by_id(wo_id)
+            .one(&db)
+            .await
+            .unwrap();
+        
+        assert!(wo.is_some(), "Work order must exist");
+        let wo = wo.unwrap();
+        assert_eq!(wo.technician_id, Some(tech_id), "Assignee ID must be properly set");
+        assert!(wo.admin_id.is_some(), "Assigner ID must be set to the user performing the assignment");
     }
 
     #[tokio::test]

@@ -4,8 +4,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use sea_orm::ActiveModelTrait;
-use sea_orm::Set;
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use migration::{Migrator, MigratorTrait};
 use zent_be::entities::{roles, account_status};
 use sea_orm::{Database, DatabaseConnection};
@@ -114,7 +113,8 @@ mod field_execution_tests {
 
     #[tokio::test]
     async fn test_technician_refusal_submission() {
-        let app = setup_test_app(mock_db().await).await;
+        let db = mock_db().await;
+        let app = setup_test_app(db.clone()).await;
         let wo_id = Uuid::new_v4();
 
         let uri = format!("/api/v1/work_orders/{}/refuse", wo_id);
@@ -125,12 +125,29 @@ mod field_execution_tests {
         );
 
         let r = app.oneshot(req).await.unwrap();
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED);
-    }
+        assert_eq!(r.status(), StatusCode::OK);
 
+        let wo = zent_be::entities::work_orders::Entity::find_by_id(wo_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .expect("Work order should exist");
+        
+        assert!(wo.reject_form_id.is_some(), "Expected reject form to be linked to work order");
+
+        let reject_form = zent_be::entities::work_order_reject_forms::Entity::find_by_id(wo.reject_form_id.unwrap())
+            .one(&db)
+            .await
+            .unwrap()
+            .expect("Reject form should exist");
+
+        // Assuming default is unapproved (false)
+        assert_eq!(reject_form.approved, false, "Initial refusal should have approved=false");
+    }
     #[tokio::test]
     async fn test_admin_refusal_approve() {
-        let app = setup_test_app(mock_db().await).await;
+        let db = mock_db().await;
+        let app = setup_test_app(db.clone()).await;
         let wo_id = Uuid::new_v4();
 
         let uri = format!("/api/v1/work_orders/{}/refusal/approve", wo_id);
@@ -141,12 +158,30 @@ mod field_execution_tests {
         );
 
         let r = app.oneshot(req).await.unwrap();
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r.status(), StatusCode::OK);
+
+        let wo = zent_be::entities::work_orders::Entity::find_by_id(wo_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .expect("Work order should exist");
+        
+        assert!(wo.reject_form_id.is_some(), "Expected reject form to be linked to work order");
+
+        let reject_form = zent_be::entities::work_order_reject_forms::Entity::find_by_id(wo.reject_form_id.unwrap())
+            .one(&db)
+            .await
+            .unwrap()
+            .expect("Reject form should exist");
+
+        assert_eq!(reject_form.approved, true, "Refusal should be approved=true");
+        // In a real app we would assert approver_id is set to the token's user id
     }
 
     #[tokio::test]
     async fn test_admin_refusal_deny() {
-        let app = setup_test_app(mock_db().await).await;
+        let db = mock_db().await;
+        let app = setup_test_app(db.clone()).await;
         let wo_id = Uuid::new_v4();
 
         let uri = format!("/api/v1/work_orders/{}/refusal/deny", wo_id);
@@ -157,12 +192,29 @@ mod field_execution_tests {
         );
 
         let r = app.oneshot(req).await.unwrap();
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r.status(), StatusCode::OK);
+
+        let wo = zent_be::entities::work_orders::Entity::find_by_id(wo_id)
+            .one(&db)
+            .await
+            .unwrap()
+            .expect("Work order should exist");
+        
+        assert!(wo.reject_form_id.is_some(), "Expected reject form to be linked to work order");
+
+        let reject_form = zent_be::entities::work_order_reject_forms::Entity::find_by_id(wo.reject_form_id.unwrap())
+            .one(&db)
+            .await
+            .unwrap()
+            .expect("Reject form should exist");
+
+        assert_eq!(reject_form.approved, false, "Refusal should be approved=false");
     }
 
     #[tokio::test]
     async fn test_upload_service_photos() {
-        let app = setup_test_app(mock_db().await).await;
+        let db = mock_db().await;
+        let app = setup_test_app(db.clone()).await;
         let wo_id = Uuid::new_v4();
 
         let uri = format!("/api/v1/photos/work_orders/{}/upload", wo_id);
@@ -171,7 +223,15 @@ mod field_execution_tests {
         let req = create_empty_request(http::Method::POST, &uri);
 
         let r = app.oneshot(req).await.unwrap();
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r.status(), StatusCode::OK);
+
+        let links = zent_be::entities::work_order_image_links::Entity::find()
+            .filter(zent_be::entities::work_order_image_links::Column::WorkOrderId.eq(wo_id))
+            .all(&db)
+            .await
+            .unwrap();
+
+        assert!(!links.is_empty(), "Expected a linkage in work_order_image_links");
     }
 
     #[tokio::test]

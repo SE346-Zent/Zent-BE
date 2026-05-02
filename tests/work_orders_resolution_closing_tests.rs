@@ -4,8 +4,7 @@ use axum::{
     routing::post,
     Router,
 };
-use sea_orm::ActiveModelTrait;
-use sea_orm::Set;
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use migration::{Migrator, MigratorTrait};
 use zent_be::entities::{roles, account_status};
 use sea_orm::{Database, DatabaseConnection};
@@ -113,14 +112,25 @@ mod resolution_closing_tests {
 
     #[tokio::test]
     async fn test_upload_customer_signature() {
-        let app = setup_test_app(mock_db().await).await;
+        let db = mock_db().await;
+        let app = setup_test_app(db.clone()).await;
         let wo_id = Uuid::new_v4();
 
         let uri = format!("/api/v1/signatures/work_orders/{}/upload", wo_id);
         let req = create_empty_request(http::Method::POST, &uri);
 
         let r = app.oneshot(req).await.unwrap();
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r.status(), StatusCode::OK);
+
+        // Assert linkage: signature_url is updated in WorkOrderClosingForms
+        let form = zent_be::entities::work_order_closing_forms::Entity::find()
+            .filter(zent_be::entities::work_order_closing_forms::Column::WorkOrderId.eq(wo_id))
+            .one(&db)
+            .await
+            .unwrap();
+
+        assert!(form.is_some(), "Expected a closing form for the work order");
+        assert!(!form.unwrap().signature_url.is_empty(), "Expected a signature URL linkage to be made");
     }
 
     #[tokio::test]
@@ -143,7 +153,8 @@ mod resolution_closing_tests {
 
     #[tokio::test]
     async fn test_finalize_work_order_success() {
-        let app = setup_test_app(mock_db().await).await;
+        let db = mock_db().await;
+        let app = setup_test_app(db.clone()).await;
         let wo_id = Uuid::new_v4();
 
         let uri = format!("/api/v1/work_orders/{}/complete", wo_id);
@@ -152,7 +163,7 @@ mod resolution_closing_tests {
             http::Method::POST,
             &uri,
             &json!({
-                "evidence_image_ids": ["img_1"],
+                "evidence_image_ids": ["img_1", "img_2"],
                 "signature_id": "sig_1",
                 "diagnosis": "Repaired screen. System passed tests.",
                 "serial_number_verified": true
@@ -160,6 +171,22 @@ mod resolution_closing_tests {
         );
 
         let r = app.oneshot(req).await.unwrap();
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(r.status(), StatusCode::OK);
+
+        let form = zent_be::entities::work_order_closing_forms::Entity::find()
+            .filter(zent_be::entities::work_order_closing_forms::Column::WorkOrderId.eq(wo_id))
+            .one(&db)
+            .await
+            .unwrap();
+
+        assert!(form.is_some(), "WorkOrderClosingForm must be created");
+        
+        let links = zent_be::entities::closing_form_image_links::Entity::find()
+            .filter(zent_be::entities::closing_form_image_links::Column::WorkOrderClosingFormId.eq(form.unwrap().id))
+            .all(&db)
+            .await
+            .unwrap();
+            
+        assert_eq!(links.len(), 2, "Expected 2 evidence images linked to the closing form");
     }
 }
