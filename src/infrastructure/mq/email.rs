@@ -4,7 +4,6 @@ use lapin::{
     BasicProperties, ExchangeKind,
 };
 use std::sync::Arc;
-use crate::infrastructure::mq::RabbitMQClient;
 
 pub const EMAIL_EXCHANGE: &str = "email_exchange";
 pub const EMAIL_QUEUE: &str = "email_queue";
@@ -67,12 +66,12 @@ pub async fn setup_email_topology(channel: &lapin::Channel) -> Result<(), lapin:
 }
 
 pub struct EmailProducer {
-    manager: Arc<RabbitMQClient>,
+    connection: Option<Arc<lapin::Connection>>,
 }
 
 impl EmailProducer {
-    pub fn new(manager: Arc<RabbitMQClient>) -> Self {
-        Self { manager }
+    pub fn new(connection: Option<Arc<lapin::Connection>>) -> Self {
+        Self { connection }
     }
 
     pub async fn publish(&self, payload: &[u8]) -> Result<(), anyhow::Error> {
@@ -80,11 +79,11 @@ impl EmailProducer {
         let publish_count = meter.u64_counter("messaging.publish.count").build();
         let publish_errors = meter.u64_counter("messaging.publish.errors").build();
 
-        if self.manager.is_stub() {
-            return Ok(());
-        }
+        let conn = match &self.connection {
+            Some(c) => c,
+            None => return Ok(()), // Stub mode
+        };
 
-        let conn = self.manager.get_connection().await?;
         let channel = conn.create_channel().await?;
         
         // Ensure topology is set up (Idempotent)
