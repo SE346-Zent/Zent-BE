@@ -10,21 +10,17 @@ use lettre::transport::smtp::authentication::Credentials;
 use tokio::time::{sleep, Duration};
 
 use crate::core::config::AppConfig;
-use crate::infrastructure::mq::{RabbitMQClient, email::{EMAIL_QUEUE, setup_email_topology}};
+use crate::infrastructure::mq::email::{EMAIL_QUEUE, setup_email_topology};
 
-pub async fn start_email_consumer(manager: Arc<RabbitMQClient>) {
+pub async fn start_email_consumer(connection: Option<Arc<lapin::Connection>>) {
+    let conn_opt = match connection {
+        Some(c) => c,
+        None => return, // Stub mode
+    };
+
     tokio::spawn(async move {
         loop {
-            let conn = match manager.get_connection().await {
-                Ok(c) => c,
-                Err(e) => {
-                    error!("Failed to get RabbitMQ connection for consumer: {:?}. Retrying in 5s...", e);
-                    sleep(Duration::from_secs(5)).await;
-                    continue;
-                }
-            };
-
-            let channel = match conn.create_channel().await {
+            let channel = match conn_opt.create_channel().await {
                 Ok(c) => c,
                 Err(e) => {
                     error!("Failed to create MQ channel for consumer: {:?}. Retrying in 5s...", e);
