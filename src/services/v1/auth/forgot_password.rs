@@ -8,32 +8,29 @@ use crate::{
     utils::otp,
 };
 
-/// Describes the side effects required after the forgot password decision logic.
-pub enum ForgotPasswordIntent {
-    SendOtp {
-        email: String,
-        full_name: String,
-        otp_code: String,
-    },
-    Error(AppError),
+/// Plain struct representing the side-effects that need to be persisted
+pub struct ForgotPasswordEffect {
+    pub email: String,
+    pub full_name: String,
+    pub otp_code: String,
 }
 
 /// Pure logic for the forgot password flow.
-/// Takes raw data and returns an Intent describing what to do next.
+/// Takes raw data and returns an Effect describing what to do next.
 pub fn decide_forgot_password(
-    user: Option<users::Model>,
+    user: Option<&users::Model>,
     req: ForgotPasswordRequest,
-) -> ForgotPasswordIntent {
+) -> Result<ForgotPasswordEffect, AppError> {
     match user {
         Some(user) => {
             let otp_code = otp::generate_6digit_otp();
-            ForgotPasswordIntent::SendOtp {
+            Ok(ForgotPasswordEffect {
                 email: req.email,
-                full_name: user.full_name,
+                full_name: user.full_name.clone(),
                 otp_code,
-            }
+            })
         }
-        None => ForgotPasswordIntent::Error(AppError::NotFound("User not found".to_string())),
+        None => Err(AppError::NotFound("User not found".to_string())),
     }
 }
 
@@ -62,23 +59,18 @@ pub async fn handle_forgot_password(
         .await?;
 
     // 2. Decision Logic (Pure)
-    let intent = decide_forgot_password(user, req);
+    let effect = decide_forgot_password(user.as_ref(), req)?;
 
     // 3. Execution (I/O)
-    match intent {
-        ForgotPasswordIntent::SendOtp { email, full_name, otp_code } => {
-            if let Some(mut conn) = valkey {
-                let valkey_key = format!("forgot_password_verification:{}", email);
-                let valkey_data = serde_json::json!({ "code": otp_code, "attempts": 5 }).to_string();
-                conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await?;
-            }
-
-            if let Some(rmq) = rabbitmq {
-                email_service::send_forgot_password_email(&rmq, templates, &email, &full_name, &otp_code).await?;
-            }
-
-            Ok(ApiResponse::message_only(200, "OTP sent"))
-        }
-        ForgotPasswordIntent::Error(err) => Err(err),
+    if let Some(mut conn) = valkey {
+        let valkey_key = format!("forgot_password_verification:{}", effect.email);
+        let valkey_data = serde_json::json!({ "code": effect.otp_code, "attempts": 5 }).to_string();
+        conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await?;
     }
+
+    if let Some(rmq) = rabbitmq {
+        email_service::send_forgot_password_email(&rmq, templates, &effect.email, &effect.full_name, &effect.otp_code).await?;
+    }
+
+    Ok(ApiResponse::message_only(200, "OTP sent"))
 }

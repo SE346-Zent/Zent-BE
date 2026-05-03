@@ -12,41 +12,38 @@ use crate::{
 };
 use lapin::Connection;
 
-/// Describes the outcome of an OTP verification attempt.
-pub enum VerifyOtpIntent {
-    ActivateUser {
-        user_active: users::ActiveModel,
-        email: String,
-        full_name: String,
-    },
-    Error(AppError),
+/// Plain struct representing the side-effects that need to be persisted
+pub struct VerifyOtpEffect {
+    pub user_id: uuid::Uuid,
+    pub active_status_id: i32,
+    pub email: String,
+    pub full_name: String,
 }
 
 /// Pure logic to decide the outcome of an OTP verification attempt.
 pub fn decide_verify_otp(
     lua_result: i32,
-    user_model: Option<users::Model>,
+    user_model: Option<&users::Model>,
     active_status_id: i32,
-) -> VerifyOtpIntent {
+) -> Result<VerifyOtpEffect, AppError> {
     match lua_result {
         1 => {
             match user_model {
                 Some(user) => {
-                    let mut user_active: users::ActiveModel = user.clone().into();
-                    user_active.account_status = Set(active_status_id);
-                    VerifyOtpIntent::ActivateUser {
-                        user_active,
-                        email: user.email,
-                        full_name: user.full_name,
-                    }
+                    Ok(VerifyOtpEffect {
+                        user_id: user.id,
+                        active_status_id,
+                        email: user.email.clone(),
+                        full_name: user.full_name.clone(),
+                    })
                 }
-                None => VerifyOtpIntent::Error(AppError::NotFound("User not found".to_string())),
+                None => Err(AppError::NotFound("User not found".to_string())),
             }
         }
-        -1 => VerifyOtpIntent::Error(AppError::BadRequest("OTP expired or invalid".to_string())),
-        -2 => VerifyOtpIntent::Error(AppError::BadRequest("Invalid OTP".to_string())),
-        -3 => VerifyOtpIntent::Error(AppError::Forbidden("Too many attempts".to_string())),
-        _ => VerifyOtpIntent::Error(AppError::Internal(anyhow::anyhow!("Unexpected result: {}", lua_result))),
+        -1 => Err(AppError::BadRequest("OTP expired or invalid".to_string())),
+        -2 => Err(AppError::BadRequest("Invalid OTP".to_string())),
+        -3 => Err(AppError::Forbidden("Too many attempts".to_string())),
+        _ => Err(AppError::Internal(anyhow::anyhow!("Unexpected result: {}", lua_result))),
     }
 }
 
@@ -85,19 +82,19 @@ pub async fn handle_verify_otp(
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Active status missing")))?;
 
     // 3. Decision Logic (Pure)
-    let intent = decide_verify_otp(result, user, active_status.id);
+    let effect = decide_verify_otp(result, user.as_ref(), active_status.id)?;
 
     // 4. Execution (I/O)
-    match intent {
-        VerifyOtpIntent::ActivateUser { user_active, email, full_name } => {
-            user_active.update(&db).await?;
+    let user_active = users::ActiveModel {
+        id: Set(effect.user_id),
+        account_status: Set(effect.active_status_id),
+        ..Default::default()
+    };
+    user_active.update(&db).await?;
 
-            if let Some(rmq) = rabbitmq {
-                email_service::send_welcome_email(&rmq, templates, &email, &full_name).await?;
-            }
-
-            Ok(ApiResponse::message_only(200, "Verified successfully"))
-        }
-        VerifyOtpIntent::Error(err) => Err(err),
+    if let Some(rmq) = rabbitmq {
+        email_service::send_welcome_email(&rmq, templates, &effect.email, &effect.full_name).await?;
     }
+
+    Ok(ApiResponse::message_only(200, "Verified successfully"))
 }

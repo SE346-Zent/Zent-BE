@@ -16,34 +16,35 @@ use uuid::Uuid;
 use chrono::Utc;
 use redis::AsyncCommands;
 
-/// Describes the side effects required after the registration decision logic.
-pub enum RegisterIntent {
-    CreateOrUpdateUser {
-        user_active: users::ActiveModel,
-        is_new: bool,
-        otp_code: String,
-        email: String,
-        full_name: String,
-    },
-    Error(AppError),
+/// Plain struct representing the side-effects that need to be persisted
+pub struct RegisterEffect {
+    pub user_id: Uuid,
+    pub full_name: String,
+    pub email: String,
+    pub phone_number: String,
+    pub role_id: i32,
+    pub account_status: i32,
+    pub hashed_password: String,
+    pub is_new: bool,
+    pub otp_code: String,
 }
 
 /// Pure logic to decide the outcome of a registration attempt.
 pub fn decide_register(
     req: UserRegistrationRequest,
-    existing_user: Option<users::Model>,
+    existing_user: Option<&users::Model>,
     pending_status_id: i32,
     customer_role_id: i32,
     hashed_password: String,
-) -> RegisterIntent {
+) -> Result<RegisterEffect, AppError> {
     // 1. Check existing user
-    if let Some(user) = existing_user.as_ref() {
+    if let Some(user) = existing_user {
         if user.account_status != pending_status_id { 
-            return RegisterIntent::Error(AppError::Conflict("Email already registered and active".to_string()));
+            return Err(AppError::Conflict("Email already registered and active".to_string()));
         }
     }
 
-    // 2. Prepare user ID and active model
+    // 2. Prepare user ID
     let is_new = existing_user.is_none();
     let user_id = if let Some(u) = existing_user {
         u.id
@@ -51,30 +52,20 @@ pub fn decide_register(
         Uuid::new_v4()
     };
     
-    let now = Utc::now();
-    let user_active = users::ActiveModel {
-        id: Set(user_id),
-        full_name: Set(req.full_name.clone()),
-        email: Set(req.email.clone()),
-        password_hash: Set(hashed_password),
-        phone_number: Set(req.phone_number.clone()),
-        role_id: Set(customer_role_id),
-        account_status: Set(pending_status_id),
-        created_at: Set(now),
-        updated_at: Set(now),
-        ..Default::default()
-    };
-
     // 3. OTP
     let otp_code = otp::generate_6digit_otp();
 
-    RegisterIntent::CreateOrUpdateUser {
-        user_active,
+    Ok(RegisterEffect {
+        user_id,
+        full_name: req.full_name,
+        email: req.email,
+        phone_number: req.phone_number,
+        role_id: customer_role_id,
+        account_status: pending_status_id,
+        hashed_password,
         is_new,
         otp_code,
-        email: req.email,
-        full_name: req.full_name,
-    }
+    })
 }
 
 pub async fn handle_register(
@@ -106,29 +97,38 @@ pub async fn handle_register(
     let hashed_password = hasher::hash_password(req.password.clone()).await?;
 
     // 3. Decision Logic (Pure)
-    let intent = decide_register(req, existing, pending_status.id, customer_role.id, hashed_password);
+    let effect = decide_register(req, existing.as_ref(), pending_status.id, customer_role.id, hashed_password)?;
 
     // 4. Execution (I/O)
-    match intent {
-        RegisterIntent::CreateOrUpdateUser { user_active, is_new, otp_code, email, full_name } => {
-            if is_new {
-                user_active.insert(&db).await?;
-            } else {
-                user_active.update(&db).await?;
-            }
+    let now = Utc::now();
+    let user_active = users::ActiveModel {
+        id: Set(effect.user_id),
+        full_name: Set(effect.full_name.clone()),
+        email: Set(effect.email.clone()),
+        password_hash: Set(effect.hashed_password),
+        phone_number: Set(effect.phone_number),
+        role_id: Set(effect.role_id),
+        account_status: Set(effect.account_status),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    };
 
-            if let Some(mut conn) = valkey {
-                let valkey_key = format!("register_verification:{}", email);
-                let valkey_data = serde_json::json!({ "code": otp_code, "attempts": 5 }).to_string();
-                conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await?;
-            }
-
-            if let Some(rmq) = rabbitmq {
-                email_service::send_verification_email(&rmq, templates, &email, &full_name, &otp_code).await?;
-            }
-
-            Ok(ApiResponse::message_only(201, "Registration successful"))
-        }
-        RegisterIntent::Error(err) => Err(err),
+    if effect.is_new {
+        user_active.insert(&db).await?;
+    } else {
+        user_active.update(&db).await?;
     }
+
+    if let Some(mut conn) = valkey {
+        let valkey_key = format!("register_verification:{}", effect.email);
+        let valkey_data = serde_json::json!({ "code": effect.otp_code, "attempts": 5 }).to_string();
+        conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await?;
+    }
+
+    if let Some(rmq) = rabbitmq {
+        email_service::send_verification_email(&rmq, templates, &effect.email, &effect.full_name, &effect.otp_code).await?;
+    }
+
+    Ok(ApiResponse::message_only(201, "Registration successful"))
 }

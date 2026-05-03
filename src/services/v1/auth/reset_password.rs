@@ -12,37 +12,29 @@ use crate::utils::hasher;
 use redis::AsyncCommands;
 use chrono::Utc;
 
-/// Describes the outcome of a password reset attempt.
-pub enum ResetPasswordIntent {
-    Success {
-        user_active: users::ActiveModel,
-        user_id: uuid::Uuid,
-        reset_token_key: String,
-    },
-    Error(AppError),
+/// Plain struct representing the side-effects that need to be persisted
+pub struct ResetPasswordEffect {
+    pub user_id: uuid::Uuid,
+    pub new_hash: String,
+    pub reset_token_key: String,
 }
 
 /// Pure logic to decide the outcome of a password reset attempt.
 pub fn decide_reset_password(
-    user_model: users::Model,
+    user_model: &users::Model,
     is_same_password: bool,
     new_hash: String,
     reset_token_key: String,
-) -> ResetPasswordIntent {
+) -> Result<ResetPasswordEffect, AppError> {
     if is_same_password {
-        return ResetPasswordIntent::Error(AppError::BadRequest("New password cannot be the same as current".to_string()));
+        return Err(AppError::BadRequest("New password cannot be the same as current".to_string()));
     }
 
-    let user_id = user_model.id;
-    let mut user_active: users::ActiveModel = user_model.into();
-    user_active.password_hash = Set(new_hash);
-    user_active.updated_at = Set(Utc::now());
-
-    ResetPasswordIntent::Success {
-        user_active,
-        user_id,
+    Ok(ResetPasswordEffect {
+        user_id: user_model.id,
+        new_hash,
         reset_token_key,
-    }
+    })
 }
 
 pub async fn handle_reset_password(
@@ -67,35 +59,33 @@ pub async fn handle_reset_password(
     let new_hash = hasher::hash_password(req.new_password).await?;
 
     // 3. Decision Logic (Pure)
-    let intent = decide_reset_password(user, is_same, new_hash, reset_token_key);
+    let effect = decide_reset_password(&user, is_same, new_hash, reset_token_key)?;
 
     // 4. Execution (I/O)
-    match intent {
-        ResetPasswordIntent::Success { user_active, user_id, reset_token_key } => {
-            user_active.update(&db).await?;
+    let mut user_active: users::ActiveModel = user.into();
+    user_active.password_hash = Set(effect.new_hash);
+    user_active.updated_at = Set(Utc::now());
+    user_active.update(&db).await?;
 
-            // Revoke sessions (I/O)
-            let active_sessions = sessions::Entity::find()
-                .filter(sessions::Column::UserId.eq(user_id))
-                .filter(sessions::Column::RevokedAt.is_null())
-                .all(&db).await?;
+    // Revoke sessions (I/O)
+    let active_sessions = sessions::Entity::find()
+        .filter(sessions::Column::UserId.eq(effect.user_id))
+        .filter(sessions::Column::RevokedAt.is_null())
+        .all(&db).await?;
 
-            let _ = sessions::Entity::update_many()
-                .col_expr(sessions::Column::RevokedAt, Expr::value(chrono::Utc::now()))
-                .filter(sessions::Column::UserId.eq(user_id))
-                .filter(sessions::Column::RevokedAt.is_null())
-                .exec(&db)
-                .await;
+    let _ = sessions::Entity::update_many()
+        .col_expr(sessions::Column::RevokedAt, Expr::value(chrono::Utc::now()))
+        .filter(sessions::Column::UserId.eq(effect.user_id))
+        .filter(sessions::Column::RevokedAt.is_null())
+        .exec(&db)
+        .await;
 
-            for session in active_sessions {
-                let whitelist_key = format!("whitelist:session:{}", session.id);
-                let _: () = conn.del(&whitelist_key).await.unwrap_or_default();
-            }
-
-            let _: () = conn.del(&reset_token_key).await?;
-
-            Ok(ApiResponse::message_only(200, "Password reset successful"))
-        }
-        ResetPasswordIntent::Error(err) => Err(err),
+    for session in active_sessions {
+        let whitelist_key = format!("whitelist:session:{}", session.id);
+        let _: () = conn.del(&whitelist_key).await.unwrap_or_default();
     }
+
+    let _: () = conn.del(&effect.reset_token_key).await?;
+
+    Ok(ApiResponse::message_only(200, "Password reset successful"))
 }

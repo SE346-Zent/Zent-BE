@@ -14,38 +14,35 @@ use lapin::Connection;
 use crate::utils::otp;
 use redis::AsyncCommands;
 
-/// Describes the outcome of a resend OTP request.
-pub enum ResendOtpIntent {
-    SendOtp {
-        email: String,
-        full_name: String,
-        otp_code: String,
-    },
-    Error(AppError),
+/// Plain struct representing the side-effects that need to be persisted
+pub struct ResendOtpEffect {
+    pub email: String,
+    pub full_name: String,
+    pub otp_code: String,
 }
 
 /// Pure logic to decide the outcome of a resend OTP request.
 pub fn decide_resend_otp(
-    user_model: Option<users::Model>,
+    user_model: Option<&users::Model>,
     pending_status_id: i32,
     req: ResendOtpRequest,
-) -> ResendOtpIntent {
+) -> Result<ResendOtpEffect, AppError> {
     let user = match user_model {
         Some(u) => u,
-        None => return ResendOtpIntent::Error(AppError::NotFound("User not found".to_string())),
+        None => return Err(AppError::NotFound("User not found".to_string())),
     };
 
     if user.account_status != pending_status_id {
-        return ResendOtpIntent::Error(AppError::BadRequest("Account is not pending".to_string()));
+        return Err(AppError::BadRequest("Account is not pending".to_string()));
     }
 
     let verification_code = otp::generate_6digit_otp();
 
-    ResendOtpIntent::SendOtp {
+    Ok(ResendOtpEffect {
         email: req.email,
-        full_name: user.full_name,
+        full_name: user.full_name.clone(),
         otp_code: verification_code,
-    }
+    })
 }
 
 pub async fn handle_resend_otp(
@@ -68,23 +65,18 @@ pub async fn handle_resend_otp(
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing")))?;
 
     // 2. Decision Logic (Pure)
-    let intent = decide_resend_otp(user, pending_status.id, req);
+    let effect = decide_resend_otp(user.as_ref(), pending_status.id, req)?;
 
     // 3. Execution (I/O)
-    match intent {
-        ResendOtpIntent::SendOtp { email, full_name, otp_code } => {
-            if let Some(mut conn) = valkey {
-                let valkey_key = format!("register_verification:{}", email);
-                let valkey_data = serde_json::json!({ "code": otp_code, "attempts": 5 }).to_string();
-                conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await?;
-            }
-
-            if let Some(rmq) = rabbitmq {
-                email_service::send_verification_email(&rmq, templates, &email, &full_name, &otp_code).await?;
-            }
-
-            Ok(ApiResponse::message_only(200, "OTP resent"))
-        }
-        ResendOtpIntent::Error(err) => Err(err),
+    if let Some(mut conn) = valkey {
+        let valkey_key = format!("register_verification:{}", effect.email);
+        let valkey_data = serde_json::json!({ "code": effect.otp_code, "attempts": 5 }).to_string();
+        conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await?;
     }
+
+    if let Some(rmq) = rabbitmq {
+        email_service::send_verification_email(&rmq, templates, &effect.email, &effect.full_name, &effect.otp_code).await?;
+    }
+
+    Ok(ApiResponse::message_only(200, "OTP resent"))
 }

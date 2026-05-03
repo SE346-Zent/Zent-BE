@@ -20,45 +20,40 @@ use chrono::Utc;
 use jsonwebtoken::EncodingKey;
 
 /// Describes the outcome of a refresh token attempt.
-pub enum RefreshTokenIntent {
+pub enum RefreshTokenEffect {
     Success {
         user_info: UserInfo,
         token_bundle: token_service::TokenBundle,
         session_id: uuid::Uuid,
-        whitelist_key: String,
         remaining_ttl: u64,
     },
     ReuseAttack {
         session_id: uuid::Uuid,
     },
-    Error(AppError),
 }
 
 /// Pure logic to decide the outcome of a refresh token attempt.
 pub fn decide_refresh_token(
-    session: sessions::Model,
-    user: users::Model,
+    session: &sessions::Model,
+    user: &users::Model,
     whitelisted_hash: Option<String>,
-    current_hash: String,
+    current_hash: &str,
     access_token_ttl: AccessTokenDefaultTTLSeconds,
     encoding_key: &EncodingKey,
-) -> RefreshTokenIntent {
+) -> Result<RefreshTokenEffect, AppError> {
     if session.revoked_at.is_some() || session.expires_at < Utc::now() {
-        return RefreshTokenIntent::Error(AppError::Unauthorized("Session invalid or expired".to_string()));
+        return Err(AppError::Unauthorized("Session invalid or expired".to_string()));
     }
 
-    if whitelisted_hash.as_deref() != Some(&current_hash) {
-        return RefreshTokenIntent::ReuseAttack { session_id: session.id };
+    if whitelisted_hash.as_deref() != Some(current_hash) {
+        return Ok(RefreshTokenEffect::ReuseAttack { session_id: session.id });
     }
 
-    let token_bundle = match token_service::generate_token_bundle(&user.id.to_string(), access_token_ttl.0, encoding_key) {
-        Ok(t) => t,
-        Err(e) => return RefreshTokenIntent::Error(e),
-    };
+    let token_bundle = token_service::generate_token_bundle(&user.id.to_string(), access_token_ttl.0, encoding_key)?;
 
     let remaining = (session.expires_at.timestamp() - Utc::now().timestamp()).max(0) as u64;
 
-    RefreshTokenIntent::Success {
+    Ok(RefreshTokenEffect::Success {
         user_info: UserInfo {
             full_name: user.full_name.clone(),
             account_status: AccountStatusEnum::from(user.account_status),
@@ -68,9 +63,8 @@ pub fn decide_refresh_token(
         },
         token_bundle,
         session_id: session.id,
-        whitelist_key: format!("whitelist:session:{}", session.id),
         remaining_ttl: remaining,
-    }
+    })
 }
 
 pub async fn handle_refresh_token(
@@ -98,11 +92,11 @@ pub async fn handle_refresh_token(
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("User missing")))?;
 
     // 2. Decision Logic (Pure)
-    let intent = decide_refresh_token(session, user, whitelisted, refresh_token_hash.clone(), access_token_ttl, &encoding_key);
+    let effect = decide_refresh_token(&session, &user, whitelisted, &refresh_token_hash, access_token_ttl, &encoding_key)?;
 
     // 3. Execution (I/O)
-    match intent {
-        RefreshTokenIntent::Success { user_info, token_bundle, session_id, whitelist_key, remaining_ttl } => {
+    match effect {
+        RefreshTokenEffect::Success { user_info, token_bundle, session_id, remaining_ttl } => {
             let rotation_result = sessions::Entity::update_many()
                 .col_expr(sessions::Column::RefreshTokenHash, Expr::value(token_bundle.refresh_token_hash.clone()))
                 .filter(sessions::Column::Id.eq(session_id))
@@ -122,7 +116,7 @@ pub async fn handle_refresh_token(
                 refresh_token: token_bundle.refresh_token,
             }))
         }
-        RefreshTokenIntent::ReuseAttack { session_id } => {
+        RefreshTokenEffect::ReuseAttack { session_id } => {
             let _ = sessions::Entity::update_many()
                 .col_expr(sessions::Column::RevokedAt, Expr::value(chrono::Utc::now()))
                 .filter(sessions::Column::Id.eq(session_id))
@@ -130,6 +124,5 @@ pub async fn handle_refresh_token(
                 .await;
             Err(AppError::Unauthorized("Suspected reuse attack".to_string()))
         }
-        RefreshTokenIntent::Error(err) => Err(err),
     }
 }
