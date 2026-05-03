@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod core;
+pub mod work_orders;
 
 use std::sync::Arc;
 use std::collections::HashMap;
