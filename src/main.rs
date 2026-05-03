@@ -52,7 +52,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Pre-load email templates into memory cache
     let templates: HashMap<String, String> = infrastructure::templates::load_templates().await;
 
-    // Initialize AppState with directly injected infrastructure
+    // Initialize stateless services (centralizers)
+    let auth_service = zent_be::services::v1::auth::AuthService::new();
+    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new();
+    let media_service = zent_be::services::v1::core::media::MediaService::new();
+
+    // Initialize AppState with directly injected infrastructure and stateless services
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
         lookup_tables.clone(),
@@ -62,6 +67,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         templates.clone(),
         core::state::AccessTokenDefaultTTLSeconds(cfg.access_token_ttl_seconds),
         core::state::SessionDefaultTTLSeconds(cfg.session_ttl_seconds),
+        auth_service,
+        work_order_service,
+        media_service,
     );
 
     // Start background cron scheduler for maintenance tasks using pre-loaded LUT
