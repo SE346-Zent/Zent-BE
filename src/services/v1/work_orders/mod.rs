@@ -1,22 +1,13 @@
-mod create;
-mod list;
-mod get_details;
-mod assign;
-mod schedule;
-mod start;
-mod refuse;
-mod cancel;
-mod complete;
-mod history;
-mod add_parts;
-mod approve_refusal;
-mod deny_refusal;
-
-#[derive(Clone)]
-pub struct WorkOrderService;
-
-impl WorkOrderService {
-    pub fn new() -> Self {
-        Self
-    }
-}
+pub mod create;
+pub mod list;
+pub mod get_details;
+pub mod assign;
+pub mod schedule;
+pub mod start;
+pub mod refuse;
+pub mod cancel;
+pub mod complete;
+pub mod history;
+pub mod add_parts;
+pub mod approve_refusal;
+pub mod deny_refusal;

@@ -29,8 +29,7 @@ pub fn init_tracing() {
 
     // 2. Build Resource
     let resource = Resource::new_with_defaults(vec![
-        KeyValue::new("service.name", cfg.otel_service_name.clone().unwrap_or_else(|| "zent-be".to_string())),
-        KeyValue::new("deployment.environment", cfg.app_stage.clone()),
+        KeyValue::new("environment", "production"),
     ]);
 
     let agent_endpoint = cfg.otel_exporter_otlp_endpoint.clone()

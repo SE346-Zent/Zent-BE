@@ -52,12 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Pre-load email templates into memory cache
     let templates: HashMap<String, String> = infrastructure::templates::load_templates().await;
 
-    // Initialize stateless services (centralizers)
-    let auth_service = zent_be::services::v1::auth::AuthService::new();
-    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new();
-    let media_service = zent_be::services::v1::core::media::MediaService::new();
-
-    // Initialize AppState with directly injected infrastructure and stateless services
+    // Initialize AppState with directly injected infrastructure
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
         lookup_tables.clone(),
@@ -67,9 +62,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         templates.clone(),
         core::state::AccessTokenDefaultTTLSeconds(cfg.access_token_ttl_seconds),
         core::state::SessionDefaultTTLSeconds(cfg.session_ttl_seconds),
-        auth_service,
-        work_order_service,
-        media_service,
     );
 
     // Start background cron scheduler for maintenance tasks using pre-loaded LUT
@@ -101,31 +93,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Apply strict nested modular Router mapping with dynamic dispatch boundaries safely inside axum
     let meter = infrastructure::observability::meter();
     let requests_counter = meter
-        .u64_counter("http.server.request.count")
+        .u64_counter("http_req_total")
         .with_description("Total number of HTTP requests")
         .build();
 
     let request_duration = meter
-        .f64_histogram("http.server.request.duration")
+        .f64_histogram("http_req_duration")
         .with_description("Time taken to process HTTP requests")
         .with_unit("s")
         .build();
 
     let active_requests = meter
-        .i64_up_down_counter("http.server.active_requests")
+        .i64_up_down_counter("http_active_req")
         .with_description("Number of active HTTP requests")
-        .build();
-
-    let request_size = meter
-        .u64_histogram("http.server.request.size")
-        .with_description("Size of HTTP request bodies")
-        .with_unit("By")
-        .build();
-
-    let response_size = meter
-        .u64_histogram("http.server.response.size")
-        .with_description("Size of HTTP response bodies")
-        .with_unit("By")
         .build();
 
     let app = Router::new()
@@ -134,48 +114,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let requests_counter = requests_counter.clone();
             let request_duration = request_duration.clone();
             let active_requests = active_requests.clone();
-            let request_size = request_size.clone();
-            let response_size = response_size.clone();
             
             let start = std::time::Instant::now();
             let path = req
                 .extensions()
                 .get::<axum::extract::MatchedPath>()
-                .map_or_else(|| req.uri().path().to_string(), |mp| mp.as_str().to_string());
+                .map_or_else(|| "unmatched".to_string(), |mp| mp.as_str().to_string());
             let method = req.method().to_string();
-            
-            // Capture request size
-            let req_content_length = req.headers()
-                .get(http::header::CONTENT_LENGTH)
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(0);
 
             async move {
                 active_requests.add(1, &[]);
-                request_size.record(req_content_length, &[opentelemetry::KeyValue::new("http.method", method.clone())]);
 
                 let response = next.run(req).await;
                 
                 let latency = start.elapsed().as_secs_f64();
                 let status = response.status().as_u16().to_string();
-                
-                // Capture response size
-                let res_content_length = response.headers()
-                    .get(http::header::CONTENT_LENGTH)
-                    .and_then(|v| v.to_str().ok())
-                    .and_then(|s| s.parse::<u64>().ok())
-                    .unwrap_or(0);
 
                 let labels = [
-                    opentelemetry::KeyValue::new("http.method", method),
-                    opentelemetry::KeyValue::new("http.route", path),
-                    opentelemetry::KeyValue::new("http.status_code", status),
+                    opentelemetry::KeyValue::new("method", method),
+                    opentelemetry::KeyValue::new("route", path),
+                    opentelemetry::KeyValue::new("status", status),
                 ];
 
                 requests_counter.add(1, &labels);
                 request_duration.record(latency, &labels);
-                response_size.record(res_content_length, &labels);
                 active_requests.add(-1, &[]);
 
                 response
