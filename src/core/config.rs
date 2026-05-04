@@ -47,6 +47,22 @@ pub struct AppConfig {
     pub otel_exporter_otlp_endpoint: Option<String>,
     pub otel_exporter_otlp_headers: Option<String>,
     pub otel_service_name: Option<String>,
+
+    /// TTL (seconds) for the short-lived idempotency claim while the DB write is in-flight.
+    #[serde(default = "default_idempotency_claim_ttl")]
+    pub idempotency_claim_ttl_seconds: u64,
+
+    /// TTL (seconds) for the finalised idempotency response cache.
+    #[serde(default = "default_idempotency_final_ttl")]
+    pub idempotency_final_ttl_seconds: u64,
+
+    /// Max number of poll retries when a concurrent request holds the claim.
+    #[serde(default = "default_idempotency_poll_retries")]
+    pub idempotency_poll_retries: u32,
+
+    /// Delay (milliseconds) between poll retries.
+    #[serde(default = "default_idempotency_poll_delay")]
+    pub idempotency_poll_delay_ms: u64,
 }
 
 fn default_access_token_ttl() -> i64 { 3600 }
@@ -59,6 +75,11 @@ fn default_db_connect_timeout() -> u64 { 30 }
 fn default_db_acquire_timeout() -> u64 { 30 }
 fn default_db_idle_timeout() -> u64 { 600 }
 fn default_db_max_lifetime() -> u64 { 1800 }
+
+fn default_idempotency_claim_ttl() -> u64 { 30 }
+fn default_idempotency_final_ttl() -> u64 { 3600 }
+fn default_idempotency_poll_retries() -> u32 { 6 }
+fn default_idempotency_poll_delay() -> u64 { 500 }
 
 static CONFIG: OnceLock<AppConfig> = OnceLock::new();
 
