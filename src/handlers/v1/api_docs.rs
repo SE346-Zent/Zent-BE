@@ -25,11 +25,13 @@ use crate::model::{
             reset_password_request::ResetPasswordRequest,
             logout_request::LogoutRequest,
         },
+        work_orders::create_work_order_request::CreateWorkOrderRequest,
         pagination::PaginationRequest,
     },
     responses::{
         auth::login_response::LoginResponseData,
         auth::verify_forgot_password_otp_response::VerifyForgotPasswordOtpResponseData,
+        work_orders::work_order_response::WorkOrderResponseData,
         base::MessageOnlyResponse,
         pagination::PaginationResponse,
     },
@@ -37,7 +39,7 @@ use crate::model::{
 
 use crate::core::errors::ErrorResponse;
 
-use crate::handlers::v1::auth;
+use crate::handlers::v1::{auth, work_orders};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -51,6 +53,7 @@ use crate::handlers::v1::auth;
         auth::forgot_password_handler,
         auth::verify_forgot_password_otp_handler,
         auth::reset_password_handler,
+        work_orders::create,
     ),
     components(
         schemas(
@@ -63,8 +66,10 @@ use crate::handlers::v1::auth;
             VerifyForgotPasswordOtpRequest,
             ResetPasswordRequest,
             LogoutRequest,
+            CreateWorkOrderRequest,
             LoginResponseData,
             VerifyForgotPasswordOtpResponseData,
+            WorkOrderResponseData,
             MessageOnlyResponse,
             PaginationRequest,
             PaginationResponse,

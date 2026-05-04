@@ -10,6 +10,10 @@ pub async fn seed_policies(db: &DatabaseConnection) -> Result<HashMap<String, St
     let policies = vec![
         ("pending_customer_cleanup_hours", "1"),
         ("pending_staff_cleanup_days", "3"),
+        ("buffer", "5"),
+        ("baseline", "2"),
+        ("workday_start", "7"),
+        ("workday_end", "17"),
     ];
 
     for (name, value) in policies {
