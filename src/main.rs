@@ -118,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build();
 
     let app = Router::new()
-        .nest("/api/v1", handlers::v1::router())
+        .nest("/api/v1", handlers::v1::router(state.clone()))
         .route_layer(axum::middleware::from_fn(move |req: axum::extract::Request, next: axum::middleware::Next| {
             let requests_counter = requests_counter.clone();
             let request_duration = request_duration.clone();

@@ -5,6 +5,9 @@ use crate::core::config::AppConfig;
 /// Atomic OTP verification script loaded at compile time.
 pub const VERIFY_OTP_LUA: &str = include_str!("lua_script/verify_otp.lua");
 
+/// Atomic idempotency check script loaded at compile time.
+pub const CHECK_IDEMPOTENCY_LUA: &str = include_str!("lua_script/check_idempotency.lua");
+
 /// Thin wrapper around the redis `Client`.
 /// The redis crate's `MultiplexedConnection` handles multiplexing and
 /// internal reconnection, so we cache a single connection created at
@@ -52,6 +55,14 @@ pub async fn init_cache(cfg: &AppConfig) -> Result<ValkeyClient, redis::RedisErr
         .await?;
 
     script_hashes.insert("verify_otp".to_string(), verify_otp_sha);
+
+    let check_idempotency_sha: String = redis::cmd("SCRIPT")
+        .arg("LOAD")
+        .arg(CHECK_IDEMPOTENCY_LUA)
+        .query_async(&mut conn)
+        .await?;
+
+    script_hashes.insert("check_idempotency".to_string(), check_idempotency_sha);
 
     Ok(ValkeyClient {
         connection: conn,

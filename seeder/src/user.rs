@@ -4,7 +4,7 @@ use argon2::{
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
 };
 use chrono::Utc;
-use rand::{rngs::StdRng, SeedableRng, seq::IndexedRandom};
+use rand::{rngs::StdRng, SeedableRng, seq::IndexedRandom, Rng};
 use fake::{
     Fake,
     faker::{
@@ -118,7 +118,13 @@ pub async fn seed_users(
             let (status_name, status_id) = if role_name == "Admin" || role_name == "SuperAdmin" || role_name == "Technician" {
                 status_entries.iter().find(|(name, _)| name == "Active").unwrap_or(&status_entries[0])
             } else {
-                status_entries.choose(&mut rng).unwrap()
+                // For Customers, make them 'Active' 80% of the time to ensure they can be used for downstream seeding (products, WOs)
+                let r: u8 = rng.random_range(0..10);
+                if r < 8 {
+                    status_entries.iter().find(|(name, _)| name == "Active").unwrap_or(&status_entries[0])
+                } else {
+                    status_entries.choose(&mut rng).unwrap()
+                }
             };
 
             UserInput {

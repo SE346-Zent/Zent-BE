@@ -130,20 +130,20 @@ async fn main() -> Result<()> {
     )
     .await?;
 
-    // Collect user IDs for downstream seeders - only use non-pending users to avoid FK issues during cleanup
+    // Collect user IDs for downstream seeders
     let customer_ids: Vec<uuid::Uuid> = records
         .iter()
-        .filter(|r| r.role == "Customer" && r.account_status != "Pending")
+        .filter(|r| r.role == "Customer")
         .map(|r| r.id)
         .collect();
     let technician_ids: Vec<uuid::Uuid> = records
         .iter()
-        .filter(|r| r.role == "Technician" && r.account_status != "Pending")
+        .filter(|r| r.role == "Technician")
         .map(|r| r.id)
         .collect();
     let admin_ids: Vec<uuid::Uuid> = records
         .iter()
-        .filter(|r| (r.role == "Admin" || r.role == "SuperAdmin") && r.account_status != "Pending")
+        .filter(|r| r.role == "Admin" || r.role == "SuperAdmin")
         .map(|r| r.id)
         .collect();
 
