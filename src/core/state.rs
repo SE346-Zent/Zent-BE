@@ -1,11 +1,12 @@
 use axum::extract::FromRef;
 use std::sync::Arc;
+use std::collections::HashMap;
 use jsonwebtoken::{DecodingKey, EncodingKey};
+use sea_orm::DatabaseConnection;
+use lapin::Connection;
 
 use crate::core::lookup_tables::LookupTables;
-use crate::services::v1::auth::AuthService;
-use crate::services::v1::work_orders::WorkOrderService;
-use crate::services::v1::core::media::MediaService;
+use crate::infrastructure::cache::ValkeyClient;
 
 #[derive(Clone, Copy)]
 pub struct AccessTokenDefaultTTLSeconds(pub i64);
@@ -13,37 +14,43 @@ pub struct AccessTokenDefaultTTLSeconds(pub i64);
 #[derive(Clone, Copy)]
 pub struct SessionDefaultTTLSeconds(pub i64);
 
-/// AppState acts as a **ServiceRegistry**: it only holds JWT keys,
-/// lookup tables, and service instances. Infrastructure concerns
-/// (database, cache, message queue) are owned by the individual
-/// services that need them.
+/// AppState holds infrastructure resources (db, cache, mq) directly.
+/// This enables Handlers to act as Actors by extracting infrastructure
+/// directly using FromRef and executing side-effects.
 #[derive(Clone)]
 pub struct AppState {
+    pub db: Arc<DatabaseConnection>,
+    pub valkey: Option<Arc<ValkeyClient>>,
+    pub rabbitmq: Option<Arc<Connection>>,
+    pub templates: Arc<HashMap<String, String>>,
+    pub access_token_ttl: AccessTokenDefaultTTLSeconds,
+    pub session_ttl: SessionDefaultTTLSeconds,
     pub decoding_key: DecodingKey,
     pub encoding_key: EncodingKey,
     pub lookup_tables: Arc<LookupTables>,
-    pub auth_service: Arc<AuthService>,
-    pub work_order_service: Arc<WorkOrderService>,
-    pub media_service: Arc<MediaService>,
 }
 
 impl AppState {
-    /// AppState now strictly acts as a ServiceRegistry.
-    /// It only requires the JWT secret, lookup tables, and service instances.
     pub fn new(
         secret: &[u8],
         lookup_tables: LookupTables,
-        auth_service: AuthService,
-        work_order_service: WorkOrderService,
-        media_service: MediaService,
+        db: DatabaseConnection,
+        valkey: Option<Arc<ValkeyClient>>,
+        rabbitmq: Option<Arc<Connection>>,
+        templates: HashMap<String, String>,
+        access_token_ttl: AccessTokenDefaultTTLSeconds,
+        session_ttl: SessionDefaultTTLSeconds,
     ) -> Self {
         Self {
+            db: Arc::new(db),
+            valkey,
+            rabbitmq,
+            templates: Arc::new(templates),
+            access_token_ttl,
+            session_ttl,
             decoding_key: DecodingKey::from_secret(secret),
             encoding_key: EncodingKey::from_secret(secret),
             lookup_tables: Arc::new(lookup_tables),
-            auth_service: Arc::new(auth_service),
-            work_order_service: Arc::new(work_order_service),
-            media_service: Arc::new(media_service),
         }
     }
 }
@@ -66,20 +73,38 @@ impl FromRef<AppState> for Arc<LookupTables> {
     }
 }
 
-impl FromRef<AppState> for Arc<AuthService> {
+impl FromRef<AppState> for Arc<DatabaseConnection> {
     fn from_ref(state: &AppState) -> Self {
-        state.auth_service.clone()
+        state.db.clone()
     }
 }
 
-impl FromRef<AppState> for Arc<WorkOrderService> {
+impl FromRef<AppState> for Option<Arc<ValkeyClient>> {
     fn from_ref(state: &AppState) -> Self {
-        state.work_order_service.clone()
+        state.valkey.clone()
     }
 }
 
-impl FromRef<AppState> for Arc<MediaService> {
+impl FromRef<AppState> for Option<Arc<Connection>> {
     fn from_ref(state: &AppState) -> Self {
-        state.media_service.clone()
+        state.rabbitmq.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<HashMap<String, String>> {
+    fn from_ref(state: &AppState) -> Self {
+        state.templates.clone()
+    }
+}
+
+impl FromRef<AppState> for AccessTokenDefaultTTLSeconds {
+    fn from_ref(state: &AppState) -> Self {
+        state.access_token_ttl
+    }
+}
+
+impl FromRef<AppState> for SessionDefaultTTLSeconds {
+    fn from_ref(state: &AppState) -> Self {
+        state.session_ttl
     }
 }

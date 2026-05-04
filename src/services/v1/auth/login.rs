@@ -1,53 +1,45 @@
-use sea_orm::*;
 use crate::{
     core::{
         errors::AppError,
         state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds},
     },
-    entities::{sessions, users},
-    model::{
-        requests::auth::user_login_request::UserLoginRequest,
-        responses::{
-            base::ApiResponse,
-            auth::login_response::{LoginResponseData, UserInfo, AccountStatusEnum},
-        },
-    },
+    entities::users,
+    model::responses::auth::login_response::{LoginResponseData, UserInfo, AccountStatusEnum},
     services::v1::core::token_service,
-    utils::hasher,
 };
 
 use uuid::Uuid;
 use chrono::Utc;
 use jsonwebtoken::EncodingKey;
 
-pub async fn handle_login(
-    db: DatabaseConnection,
-    valkey: Option<redis::aio::MultiplexedConnection>,
+/// Plain struct representing the side-effects that need to be persisted
+pub struct LoginEffect {
+    pub session_id: Uuid,
+    pub user_id: Uuid,
+    pub refresh_token_hash: String,
+    pub expires_at: chrono::DateTime<Utc>,
+    pub response_data: LoginResponseData,
+}
+
+/// Pure logic to decide the outcome of a login attempt.
+pub fn decide_login(
+    user_model: &users::Model,
+    is_password_valid: bool,
     access_token_ttl: AccessTokenDefaultTTLSeconds,
     session_ttl: SessionDefaultTTLSeconds,
-    encoding_key: EncodingKey,
-    req: UserLoginRequest,
-    ip_address: String,
-) -> Result<ApiResponse<LoginResponseData>, AppError> {
-    // 1. Find user by email
-    let user_model = users::Entity::find()
-        .filter(users::Column::Email.eq(&req.email))
-        .one(&db)
-        .await?
-        .ok_or_else(|| AppError::Unauthorized("Invalid credentials".to_string()))?;
-
-    // 2. Check if user is deleted
+    encoding_key: &EncodingKey,
+) -> Result<LoginEffect, AppError> {
+    // 1. Check if user is deleted
     if user_model.deleted_at.is_some() {
         return Err(AppError::Unauthorized("Invalid credentials".to_string()));
     }
 
-    // 3. Verify password
-    let is_valid = hasher::verify_password(req.password, user_model.password_hash.clone()).await?;
-    if !is_valid {
+    // 2. Verify password (passed in)
+    if !is_password_valid {
         return Err(AppError::Unauthorized("Invalid credentials".to_string()));
     }
 
-    // 4. Verify account status
+    // 3. Verify account status
     let status = AccountStatusEnum::from(user_model.account_status);
     match status {
         AccountStatusEnum::Active => {} 
@@ -59,43 +51,24 @@ pub async fn handle_login(
         }
     }
 
-    // 5. Generate tokens
+    // 4. Generate tokens
     let token_bundle = token_service::generate_token_bundle(
         &user_model.id.to_string(),
         access_token_ttl.0,
-        &encoding_key,
+        encoding_key,
     )?;
 
-    // 6. Create session in DB
+    // 5. Prepare session data
     let session_id = Uuid::new_v4();
     let session_ttl_seconds = session_ttl.0;
-    let now = Utc::now();
-    let expires_at = now + chrono::Duration::seconds(session_ttl_seconds);
+    let expires_at = Utc::now() + chrono::Duration::seconds(session_ttl_seconds as i64);
 
-    let active_session = sessions::ActiveModel {
-        id: Set(session_id),
-        user_id: Set(user_model.id),
-        refresh_token_hash: Set(token_bundle.refresh_token_hash.clone()),
-        ip_address: Set(ip_address),
-        device_fingerprint: Set(user_model.id.to_string()),
-        created_at: Set(now),
-        expires_at: Set(expires_at),
-        ..Default::default()
-    };
-
-    active_session.insert(&db).await?;
-
-    // 7. Whitelist in Valkey if provided
-    if let Some(mut conn) = valkey {
-        let whitelist_key = format!("whitelist:session:{}", session_id);
-        let _: () = redis::AsyncCommands::set_ex(&mut conn, &whitelist_key, &token_bundle.refresh_token_hash, session_ttl_seconds as u64)
-            .await?;
-    }
-
-    Ok(ApiResponse::success(
-        200,
-        "Login successful",
-        LoginResponseData {
+    Ok(LoginEffect {
+        session_id,
+        user_id: user_model.id,
+        refresh_token_hash: token_bundle.refresh_token_hash,
+        expires_at,
+        response_data: LoginResponseData {
             user: UserInfo {
                 full_name: user_model.full_name.clone(),
                 account_status: status,
@@ -106,5 +79,5 @@ pub async fn handle_login(
             access_token: token_bundle.access_token,
             refresh_token: token_bundle.refresh_token,
         },
-    ))
+    })
 }
