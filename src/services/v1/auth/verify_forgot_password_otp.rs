@@ -1,5 +1,4 @@
 use crate::core::errors::AppError;
-use uuid::Uuid;
 
 /// Plain struct representing the side-effects that need to be persisted
 pub struct VerifyForgotPasswordOtpEffect {
@@ -13,10 +12,10 @@ pub struct VerifyForgotPasswordOtpEffect {
 pub fn decide_verify_forgot_password_otp(
     lua_result: i32,
     email: String,
+    reset_token: String,
 ) -> Result<VerifyForgotPasswordOtpEffect, AppError> {
     match lua_result {
         1 => {
-            let reset_token = Uuid::new_v4().to_string();
             Ok(VerifyForgotPasswordOtpEffect {
                 reset_token: reset_token.clone(),
                 reset_token_key: format!("password_reset_token:{}", reset_token),

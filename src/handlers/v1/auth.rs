@@ -73,15 +73,17 @@ pub async fn forgot_password_handler(
     let effect = forgot_password::decide_forgot_password(user.as_ref(), payload)?;
 
     // 3. Execution (I/O)
-    if let Some(client) = valkey_client {
-        let mut conn = client.get_connection();
-        let valkey_key = format!("forgot_password_verification:{}", effect.email);
-        let valkey_data = serde_json::json!({ "code": effect.otp_code, "attempts": 5 }).to_string();
-        conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await?;
-    }
+    if let Some(effect) = effect {
+        if let Some(client) = valkey_client {
+            let mut conn = client.get_connection();
+            let valkey_key = format!("forgot_password_verification:{}", effect.email);
+            let valkey_data = serde_json::json!({ "code": effect.otp_code, "attempts": 5 }).to_string();
+            conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await?;
+        }
 
-    if let Some(rmq) = rabbitmq {
-        email_service::send_forgot_password_email(&rmq, &templates, &effect.email, &effect.full_name, &effect.otp_code).await?;
+        if let Some(rmq) = rabbitmq {
+            email_service::send_forgot_password_email(&rmq, &templates, &effect.email, &effect.full_name, &effect.otp_code).await?;
+        }
     }
 
     Ok(Json(ApiResponse::message_only(200, "OTP sent")))
@@ -121,7 +123,8 @@ pub async fn verify_forgot_password_otp_handler(
         .await?;
 
     // 2. Decision Logic (Pure)
-    let effect = verify_forgot_password_otp::decide_verify_forgot_password_otp(result, payload.email)?;
+    let reset_token = uuid::Uuid::new_v4().to_string();
+    let effect = verify_forgot_password_otp::decide_verify_forgot_password_otp(result, payload.email, reset_token)?;
 
     // 3. Execution (I/O)
     conn.set_ex::<_, _, ()>(&effect.reset_token_key, &effect.email, effect.ttl_seconds).await?;
@@ -178,19 +181,19 @@ pub async fn reset_password_handler(
         .filter(sessions::Column::RevokedAt.is_null())
         .all(db.as_ref()).await?;
 
-    let _ = sessions::Entity::update_many()
+    sessions::Entity::update_many()
         .col_expr(sessions::Column::RevokedAt, Expr::value(chrono::Utc::now()))
         .filter(sessions::Column::UserId.eq(effect.user_id))
         .filter(sessions::Column::RevokedAt.is_null())
         .exec(db.as_ref())
-        .await;
+        .await?;
 
     for session in active_sessions {
         let whitelist_key = format!("whitelist:session:{}", session.id);
-        let _: () = conn.del(&whitelist_key).await.unwrap_or_default();
+        conn.del::<_, ()>(&whitelist_key).await?;
     }
 
-    let _: () = conn.del(&effect.reset_token_key).await?;
+    conn.del::<_, ()>(&effect.reset_token_key).await?;
 
     Ok(Json(ApiResponse::message_only(200, "Password reset successful")))
 }
@@ -259,11 +262,11 @@ pub async fn refresh_token_handler(
             })))
         }
         refresh_token::RefreshTokenEffect::ReuseAttack { session_id } => {
-            let _ = sessions::Entity::update_many()
+            sessions::Entity::update_many()
                 .col_expr(sessions::Column::RevokedAt, Expr::value(chrono::Utc::now()))
                 .filter(sessions::Column::Id.eq(session_id))
                 .exec(db.as_ref())
-                .await;
+                .await?;
             Err(AppError::Unauthorized("Suspected reuse attack".to_string()))
         }
     }
@@ -380,7 +383,7 @@ pub async fn register_handler(
 
     // 4. Execution (I/O)
     let now = Utc::now();
-    let user_active = users::ActiveModel {
+    let mut user_active = users::ActiveModel {
         id: Set(effect.user_id),
         full_name: Set(effect.full_name.clone()),
         email: Set(effect.email.clone()),
@@ -388,12 +391,12 @@ pub async fn register_handler(
         phone_number: Set(effect.phone_number),
         role_id: Set(effect.role_id),
         account_status: Set(effect.account_status),
-        created_at: Set(now),
         updated_at: Set(now),
         ..Default::default()
     };
 
     if effect.is_new {
+        user_active.created_at = Set(now);
         user_active.insert(db.as_ref()).await?;
     } else {
         user_active.update(db.as_ref()).await?;
@@ -449,7 +452,13 @@ pub async fn verify_otp_handler(
         .query_async(&mut conn)
         .await?;
 
-    // 2. I/O: Fetch user and status info
+    if result != 1 {
+        // 2. Decision Logic (Pure) for failure cases
+        verify_otp::decide_verify_otp(result, None, 0)?;
+        return Err(AppError::Internal(anyhow::anyhow!("Logic error"))); // Should be unreachable
+    }
+
+    // 3. I/O: Fetch user and status info (Only on success)
     let user = users::Entity::find()
         .filter(users::Column::Email.eq(&payload.email))
         .one(db.as_ref())
@@ -461,10 +470,10 @@ pub async fn verify_otp_handler(
         .await?
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Active status missing")))?;
 
-    // 3. Decision Logic (Pure)
+    // 4. Decision Logic (Pure)
     let effect = verify_otp::decide_verify_otp(result, user.as_ref(), active_status.id)?;
 
-    // 4. Execution (I/O)
+    // 5. Execution (I/O)
     let user_active = users::ActiveModel {
         id: Set(effect.user_id),
         account_status: Set(effect.active_status_id),

@@ -16,7 +16,7 @@ pub struct ResendOtpEffect {
 pub fn decide_resend_otp(
     user_model: Option<&users::Model>,
     pending_status_id: i32,
-    req: ResendOtpRequest,
+    _req: ResendOtpRequest,
 ) -> Result<ResendOtpEffect, AppError> {
     let user = match user_model {
         Some(u) => u,
@@ -30,7 +30,7 @@ pub fn decide_resend_otp(
     let verification_code = otp::generate_6digit_otp();
 
     Ok(ResendOtpEffect {
-        email: req.email,
+        email: user.email.clone(),
         full_name: user.full_name.clone(),
         otp_code: verification_code,
     })
