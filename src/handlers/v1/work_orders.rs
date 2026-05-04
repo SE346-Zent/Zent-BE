@@ -19,6 +19,8 @@ use crate::services::v1::work_orders::create;
 use redis::AsyncCommands;
 use serde_json::json;
 
+use crate::entities::{products, work_orders as work_orders_ent};
+
 #[utoipa::path(
     post,
     path = "/api/v1/work_orders",
@@ -27,6 +29,7 @@ use serde_json::json;
         (status = 201, description = "Work order created successfully", body = WorkOrderResponseData),
         (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Not Found", body = ErrorResponse),
         (status = 409, description = "Conflict", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
@@ -67,15 +70,36 @@ pub async fn create(
         conn_opt = Some(conn);
     }
 
-    // 2. Prepare Data
+    // 2. Data Integrity Checks (Verify Foreign Keys to avoid 500s)
+    // Check if Product exists
+    let product_exists = products::Entity::find_by_id(payload.product_id)
+        .one(db.as_ref())
+        .await?
+        .is_some();
+    if !product_exists {
+        return Err(AppError::NotFound(format!("Product with ID {} not found", payload.product_id)));
+    }
+
+    // Check if Reference Ticket exists (if provided)
+    if let Some(ref_id) = payload.reference_ticket_id {
+        let ref_exists = work_orders_ent::Entity::find_by_id(ref_id)
+            .one(db.as_ref())
+            .await?
+            .is_some();
+        if !ref_exists {
+            return Err(AppError::BadRequest(format!("Reference Work Order with ID {} not found", ref_id)));
+        }
+    }
+
+    // 3. Prepare Data
     let pending_status_id = luts.work_order_statuses_by_name.get("Pending")
         .copied()
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Pending' status missing")))?;
 
-    // 3. Decision Logic (Pure)
+    // 4. Decision Logic (Pure)
     let effect = create::decide_create_work_order(payload.clone(), auth.user.id, pending_status_id)?;
 
-    // 4. Execution (I/O)
+    // 5. Execution (I/O)
     let wo_model = effect.work_order.insert(db.as_ref()).await?;
 
     let response = WorkOrderResponseData {
