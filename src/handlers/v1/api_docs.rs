@@ -23,6 +23,7 @@ use crate::model::{
             forgot_password_request::ForgotPasswordRequest,
             verify_forgot_password_otp_request::VerifyForgotPasswordOtpRequest,
             reset_password_request::ResetPasswordRequest,
+            logout_request::LogoutRequest,
         },
         pagination::PaginationRequest,
     },
@@ -42,6 +43,7 @@ use crate::handlers::v1::auth;
 #[openapi(
     paths(
         auth::login_handler,
+        auth::logout_handler,
         auth::register_handler,
         auth::verify_otp_handler,
         auth::resend_otp_handler,
@@ -60,6 +62,7 @@ use crate::handlers::v1::auth;
             ForgotPasswordRequest,
             VerifyForgotPasswordOtpRequest,
             ResetPasswordRequest,
+            LogoutRequest,
             LoginResponseData,
             VerifyForgotPasswordOtpResponseData,
             MessageOnlyResponse,

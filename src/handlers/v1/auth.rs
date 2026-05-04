@@ -21,9 +21,10 @@ use crate::{
     utils::hasher,
     services::v1::auth::{
         forgot_password, verify_forgot_password_otp, reset_password, 
-        refresh_token, login, register, verify_otp, resend_otp,
+        refresh_token, login, register, verify_otp, resend_otp, logout,
     },
     services::v1::core::{email_service, token_service},
+    extractor::auth_user::AuthUser,
     model::{
         requests::auth::{
             user_login_request::UserLoginRequest,
@@ -34,6 +35,7 @@ use crate::{
             verify_forgot_password_otp_request::VerifyForgotPasswordOtpRequest,
             reset_password_request::ResetPasswordRequest,
             refresh_token_request::RefreshTokenRequest,
+            logout_request::LogoutRequest,
         },
         responses::{
             auth::login_response::LoginResponseData,
@@ -537,9 +539,55 @@ pub async fn resend_otp_handler(
     Ok(Json(ApiResponse::message_only(200, "OTP resent")))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    request_body = LogoutRequest,
+    responses(
+        (status = 200, description = "Logout successful", body = MessageOnlyResponse),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn logout_handler(
+    auth: AuthUser,
+    State(db): State<Arc<DatabaseConnection>>,
+    State(valkey_client): State<Option<Arc<ValkeyClient>>>,
+    Json(payload): Json<LogoutRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    // 1. Fetch data (I/O)
+    let refresh_token_hash = token_service::hash_refresh_token(&payload.refresh_token);
+    let session = sessions::Entity::find()
+        .filter(sessions::Column::RefreshTokenHash.eq(&refresh_token_hash))
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::Unauthorized("Invalid token".to_string()))?;
+
+    // 2. Decision Logic (Pure)
+    let effect = logout::decide_logout(&session, auth.user.id)?;
+
+    // 3. Execution (I/O)
+    let mut session_active: sessions::ActiveModel = session.into();
+    session_active.revoked_at = Set(Some(Utc::now()));
+    session_active.update(db.as_ref()).await?;
+
+    if let Some(client) = valkey_client {
+        let mut conn = client.get_connection();
+        let whitelist_key = format!("whitelist:session:{}", effect.session_id);
+        let _: () = conn.del(&whitelist_key).await.unwrap_or_default();
+    }
+
+    Ok(Json(ApiResponse::message_only(200, "Logout successful")))
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login_handler))
+        .route("/logout", post(logout_handler))
         .route("/register", post(register_handler))
         .route("/verify-otp", post(verify_otp_handler))
         .route("/resend-otp", post(resend_otp_handler))
