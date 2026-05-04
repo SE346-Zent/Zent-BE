@@ -19,7 +19,7 @@ pub fn require_role<S>(role: Role) -> impl Fn(State<S>, Request, Next) -> std::p
 where
     S: Send + Sync + 'static,
     DecodingKey: FromRef<S>,
-    DatabaseConnection: FromRef<S>,
+    Arc<DatabaseConnection>: FromRef<S>,
     Arc<LookupTables>: FromRef<S>,
 {
     move |State(state), mut req, next| {

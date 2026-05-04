@@ -7,3 +7,4 @@ pub mod refresh_token;
 pub mod forgot_password;
 pub mod verify_forgot_password_otp;
 pub mod reset_password;
+pub mod logout;

@@ -3,6 +3,7 @@ use axum::{
     http::request::Parts,
 };
 
+use std::sync::Arc;
 use jsonwebtoken::{DecodingKey};
 use sea_orm::{DatabaseConnection, EntityTrait};
 use tracing::{error, info};
@@ -24,14 +25,14 @@ impl<S> FromRequestParts<S> for AuthUser
 where
     S: Send + Sync,
     DecodingKey: FromRef<S>,
-    DatabaseConnection: FromRef<S>,
+    Arc<DatabaseConnection>: FromRef<S>,
 {
     type Rejection = AuthError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let claims = Claims::from_request_parts(parts, state).await?;
         
-        let db = DatabaseConnection::from_ref(state);
+        let db = Arc::<DatabaseConnection>::from_ref(state);
         let user_id = Uuid::parse_str(&claims.sub).map_err(|_| {
             error!("Invalid UUID subject");
             AuthError::InvalidTokenError
@@ -39,16 +40,19 @@ where
         
         let user_with_role = users::Entity::find_by_id(user_id)
             .find_with_related(roles::Entity)
-            .all(&db)
+            .all(db.as_ref())
             .await
-            .map_err(|_| AuthError::InternalServerError)?;
+            .map_err(|e| {
+                error!("Database error: {:?}", e);
+                AuthError::InternalServerError
+            })?;
     
         if user_with_role.is_empty() {
             return Err(AuthError::InvalidTokenError);
         }
         
-        let (user, roles) = user_with_role.into_iter().next().unwrap();
-        let role = roles.into_iter().next().ok_or(AuthError::InvalidTokenError)?;
+        let (user, user_roles) = user_with_role.into_iter().next().unwrap();
+        let role = user_roles.into_iter().next().ok_or(AuthError::InvalidTokenError)?;
         
         info!("The user is valid...");
         Ok(AuthUser { user, role })

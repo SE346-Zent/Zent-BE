@@ -70,10 +70,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to initialize scheduler");
 
     let user_cleanup_job = infrastructure::cron_tasks::cleanup_pending_users::build_cleanup_job(
-        db,
+        db.clone(),
         state.lookup_tables.clone(),
     )
     .expect("Failed to build cleanup job");
+
+    let session_cleanup_job = infrastructure::cron_tasks::cleanup_sessions::build_cleanup_job(
+        db.clone(),
+    )
+    .expect("Failed to build session cleanup job");
 
     let metrics_job = infrastructure::cron_tasks::observability_metrics::build_metrics_job()
         .expect("Failed to build metrics collection job");
@@ -81,6 +86,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     app_scheduler.register_job(user_cleanup_job)
         .await
         .expect("Failed to register cleanup job");
+
+    app_scheduler.register_job(session_cleanup_job)
+        .await
+        .expect("Failed to register session cleanup job");
 
     app_scheduler.register_job(metrics_job)
         .await
