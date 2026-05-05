@@ -17,9 +17,10 @@ use crate::model::{
     },
     requests::pagination::PaginationRequest,
     responses::{
+        pagination::PaginationResponse,
         work_orders::{
             create_response::WorkOrderResponseData,
-            list_response::WorkOrderListResponse,
+            list_response::WorkOrderListItem,
             details_response::WorkOrderDetails,
         },
     },
@@ -200,7 +201,7 @@ pub async fn create(
     path = "/api/v1/work_orders",
     params(WorkOrderQuery),
     responses(
-        (status = 200, description = "List of work orders based on user role", body = ApiResponse<WorkOrderListResponse>),
+        (status = 200, description = "List of work orders based on user role", body = ApiResponse<Vec<WorkOrderListItem>>),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
@@ -212,7 +213,7 @@ pub async fn list(
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     State(lookup_tables): State<Arc<LookupTables>>,
     Query(query): Query<WorkOrderQuery>,
-) -> Result<Json<ApiResponse<WorkOrderListResponse>>, AppError> {
+) -> Result<Json<ApiResponse<Vec<WorkOrderListItem>>>, AppError> {
     
     // 1. Compare role in parameter with role in Access Token
     if let Some(requested_role) = &query.role {
@@ -279,7 +280,7 @@ async fn fetch_paginated_work_orders(
     technician_id: Option<Uuid>,
     province_filter: Option<String>,
     customer_id: Option<Uuid>,
-) -> Result<Json<ApiResponse<WorkOrderListResponse>>, AppError> {
+) -> Result<Json<ApiResponse<Vec<WorkOrderListItem>>>, AppError> {
     let mut conn_opt = None;
     let mut full_cache_key = String::new();
 
@@ -292,8 +293,8 @@ async fn fetch_paginated_work_orders(
         );
 
         if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&full_cache_key).await {
-            if let Ok(response) = serde_json::from_str::<WorkOrderListResponse>(&cached_json) {
-                return Ok(Json(ApiResponse::success(200, "Work orders retrieved successfully", response)));
+            if let Ok((data, meta)) = serde_json::from_str::<(Vec<WorkOrderListItem>, PaginationResponse)>(&cached_json) {
+                return Ok(Json(ApiResponse::success_with_meta(200, "Work orders retrieved successfully", data, meta)));
             }
         }
         conn_opt = Some(conn);
@@ -328,15 +329,15 @@ async fn fetch_paginated_work_orders(
         .all(db.as_ref())
         .await?;
 
-    let response = list_svc::decide_list(models_with_related, &lookup_tables, &pagination, total_records);
+    let (data, meta) = list_svc::decide_list(models_with_related, &lookup_tables, &pagination, total_records);
 
     if let Some(mut conn) = conn_opt {
-        if let Ok(cached_val) = serde_json::to_string(&response) {
+        if let Ok(cached_val) = serde_json::to_string(&(&data, &meta)) {
             let _: () = conn.set_ex(&full_cache_key, cached_val, 300).await.unwrap_or_default();
         }
     }
 
-    Ok(Json(ApiResponse::success(200, "Work orders retrieved successfully", response)))
+    Ok(Json(ApiResponse::success_with_meta(200, "Work orders retrieved successfully", data, meta)))
 }
 
 #[utoipa::path(
