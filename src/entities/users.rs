@@ -48,6 +48,8 @@ pub enum Relation {
     WorkOrderRejectForms,
     #[sea_orm(has_many = "super::work_order_state_history::Entity")]
     WorkOrderStateHistory,
+    #[sea_orm(has_many = "super::overtimes::Entity")]
+    Overtimes,
 }
 
 impl Related<super::account_status::Entity> for Entity {

@@ -1,4 +1,4 @@
-use crate::model::responses::work_orders::list_response::{WorkOrderListItem, WorkOrderListResponse};
+use crate::model::responses::work_orders::list_response::WorkOrderListItem;
 use crate::model::responses::pagination::PaginationResponse;
 use crate::model::requests::pagination::PaginationRequest;
 use crate::entities::{work_orders, products, work_order_symptoms, work_order_statuses};

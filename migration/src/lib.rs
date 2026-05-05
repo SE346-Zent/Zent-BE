@@ -9,6 +9,7 @@ mod m20260426_050036_policy;
 mod m20260504_100000_add_wo_number_index;
 mod m20260504_110000_add_user_state;
 mod m20260505_035658_update_field;
+mod m20260505_215000_overtimes_and_phases;
 
 
 pub struct Migrator;
@@ -26,6 +27,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260504_100000_add_wo_number_index::Migration),
             Box::new(m20260504_110000_add_user_state::Migration),
             Box::new(m20260505_035658_update_field::Migration),
+            Box::new(m20260505_215000_overtimes_and_phases::Migration),
         ]
     }
 }

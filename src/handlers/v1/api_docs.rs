@@ -36,7 +36,7 @@ use crate::model::{
         auth::verify_forgot_password_otp_response::VerifyForgotPasswordOtpResponseData,
         work_orders::{
             create_response::WorkOrderResponseData,
-            list_response::{WorkOrderListItem, WorkOrderListResponse},
+            list_response::WorkOrderListItem,
             details_response::WorkOrderDetails,
         },
         base::MessageOnlyResponse,
@@ -63,6 +63,8 @@ use crate::handlers::v1::{auth, work_orders};
         work_orders::create,
         work_orders::list,
         work_orders::get_details,
+        work_orders::assign,
+        work_orders::complete,
     ),
     components(
         schemas(
@@ -77,11 +79,14 @@ use crate::handlers::v1::{auth, work_orders};
             LogoutRequest,
             CreateWorkOrderRequest,
             WorkOrderQuery,
+            crate::model::requests::work_orders::assign_request::AssignWorkOrderRequest,
+            crate::model::requests::work_orders::complete_request::CompleteWorkOrderRequest,
+            crate::model::requests::work_orders::complete_request::PhaseImage,
+            crate::model::requests::work_orders::complete_request::PartChangeInput,
             LoginResponseData,
             VerifyForgotPasswordOtpResponseData,
             WorkOrderResponseData,
             WorkOrderListItem,
-            WorkOrderListResponse,
             WorkOrderDetails,
             MessageOnlyResponse,
             PaginationRequest,

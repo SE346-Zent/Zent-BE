@@ -39,8 +39,13 @@ where
                 .get(role.as_str())
                 .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Role ID not found for role: {}", role.as_str())))?;
 
-            // 3. Check if the user has the required role
-            if auth_user.user.role_id != *required_role_id {
+            let super_admin_role_id = lookup_tables
+                .roles_by_name
+                .get("SuperAdmin")
+                .ok_or_else(|| AppError::Internal(anyhow::anyhow!("SuperAdmin role ID not found")))?;
+
+            // 3. Check if the user has the required role (or is SuperAdmin)
+            if auth_user.user.role_id != *required_role_id && auth_user.user.role_id != *super_admin_role_id {
                 return Err(AppError::Forbidden("You do not have the required role to access this resource".to_string()));
             }
 

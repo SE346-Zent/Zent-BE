@@ -69,8 +69,10 @@ pub enum Relation {
     Users1,
     #[sea_orm(has_one = "super::work_order_closing_forms::Entity")]
     WorkOrderClosingForms,
-    #[sea_orm(has_many = "super::work_order_image_links::Entity")]
-    WorkOrderImageLinks,
+    #[sea_orm(has_many = "super::work_order_closing_image_links::Entity")]
+    WorkOrderClosingImageLinks,
+    #[sea_orm(has_many = "super::overtimes::Entity")]
+    Overtimes,
     #[sea_orm(
         belongs_to = "super::work_order_reject_forms::Entity",
         from = "Column::RejectFormId",
@@ -119,9 +121,15 @@ impl Related<super::work_order_closing_forms::Entity> for Entity {
     }
 }
 
-impl Related<super::work_order_image_links::Entity> for Entity {
+impl Related<super::work_order_closing_image_links::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::WorkOrderImageLinks.def()
+        Relation::WorkOrderClosingImageLinks.def()
+    }
+}
+
+impl Related<super::overtimes::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Overtimes.def()
     }
 }
 
@@ -151,11 +159,11 @@ impl Related<super::work_order_symptoms::Entity> for Entity {
 
 impl Related<super::images::Entity> for Entity {
     fn to() -> RelationDef {
-        super::work_order_image_links::Relation::Images.def()
+        super::work_order_closing_image_links::Relation::Images.def()
     }
     fn via() -> Option<RelationDef> {
         Some(
-            super::work_order_image_links::Relation::WorkOrders
+            super::work_order_closing_image_links::Relation::WorkOrders
                 .def()
                 .rev(),
         )

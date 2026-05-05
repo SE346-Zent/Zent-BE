@@ -27,8 +27,8 @@ pub enum Relation {
     ProductImageLinks,
     #[sea_orm(has_many = "super::product_model_image_links::Entity")]
     ProductModelImageLinks,
-    #[sea_orm(has_many = "super::work_order_image_links::Entity")]
-    WorkOrderImageLinks,
+    #[sea_orm(has_many = "super::work_order_closing_image_links::Entity")]
+    WorkOrderClosingImageLinks,
 }
 
 impl Related<super::closing_form_image_links::Entity> for Entity {
@@ -67,9 +67,9 @@ impl Related<super::product_model_image_links::Entity> for Entity {
     }
 }
 
-impl Related<super::work_order_image_links::Entity> for Entity {
+impl Related<super::work_order_closing_image_links::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::WorkOrderImageLinks.def()
+        Relation::WorkOrderClosingImageLinks.def()
     }
 }
 
@@ -145,10 +145,10 @@ impl Related<super::work_order_closing_forms::Entity> for Entity {
 
 impl Related<super::work_orders::Entity> for Entity {
     fn to() -> RelationDef {
-        super::work_order_image_links::Relation::WorkOrders.def()
+        super::work_order_closing_image_links::Relation::WorkOrders.def()
     }
     fn via() -> Option<RelationDef> {
-        Some(super::work_order_image_links::Relation::Images.def().rev())
+        Some(super::work_order_closing_image_links::Relation::Images.def().rev())
     }
 }
 

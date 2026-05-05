@@ -14,6 +14,8 @@ use crate::model::{
     requests::work_orders::{
         create_work_order_request::CreateWorkOrderRequest,
         list_query::WorkOrderQuery,
+        assign_request::AssignWorkOrderRequest,
+        complete_request::CompleteWorkOrderRequest,
     },
     requests::pagination::PaginationRequest,
     responses::{
@@ -30,6 +32,7 @@ use redis::AsyncCommands;
 use serde_json::json;
 
 use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms};
+use sea_orm::TransactionTrait;
 use crate::core::config::AppConfig;
 
 use crate::model::responses::base::ApiResponse;
@@ -407,9 +410,68 @@ fn has_access_to_work_order(auth: &AuthUser, details: &WorkOrderDetails) -> bool
     false
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/work_orders/{id}/assign",
+    request_body = AssignWorkOrderRequest,
+    responses(
+        (status = 200, description = "Work order assigned successfully"),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Not Found", body = ErrorResponse),
+        (status = 409, description = "Conflict", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn assign(
-    State(_db): State<Arc<DatabaseConnection>>,
-) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
+    Extension(auth): Extension<AuthUser>,
+    State(db): State<Arc<DatabaseConnection>>,
+    State(luts): State<Arc<LookupTables>>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<AssignWorkOrderRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+    let work_order = work_orders_ent::Entity::find_by_id(id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+
+    if auth.role.name == "Admin" {
+        let admin_province = auth.user.province.as_ref()
+            .ok_or_else(|| AppError::Forbidden("Admin has no province assigned".to_string()))?;
+        let wo_province = &work_order.province;
+        if admin_province != wo_province {
+            return Err(AppError::Forbidden("Admin province does not match work order province".to_string()));
+        }
+    }
+
+    let technician_work_orders = work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::TechnicianId.eq(payload.technician_id))
+        .all(db.as_ref())
+        .await?;
+
+    // Just use "Assigned" status from seeder
+    let assigned_status_id = *luts.work_order_statuses_by_name.get("Assigned")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Assigned' status missing")))?;
+    
+    let done_status_id = *luts.work_order_statuses_by_name.get("Closed")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
+
+    let effect = crate::services::v1::work_orders::assign::decide_assign_work_order(
+        payload,
+        work_order,
+        technician_work_orders,
+        &luts.policies,
+        assigned_status_id,
+        done_status_id,
+    )?;
+
+    effect.work_order.update(db.as_ref()).await?;
+
+    Ok(Json(ApiResponse::success(200, "Work order assigned successfully", ())))
+}
 
 pub async fn schedule(
     State(_db): State<Arc<DatabaseConnection>>,
@@ -427,9 +489,76 @@ pub async fn cancel(
     State(_db): State<Arc<DatabaseConnection>>,
 ) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/work_orders/{id}/complete",
+    request_body = CompleteWorkOrderRequest,
+    responses(
+        (status = 200, description = "Work order completed successfully"),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Not Found", body = ErrorResponse),
+        (status = 409, description = "Conflict", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn complete(
-    State(_db): State<Arc<DatabaseConnection>>,
-) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
+    Extension(auth): Extension<AuthUser>,
+    State(db): State<Arc<DatabaseConnection>>,
+    State(luts): State<Arc<LookupTables>>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<CompleteWorkOrderRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+    let work_order = work_orders_ent::Entity::find_by_id(id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+
+    if work_order.technician_id != Some(auth.user.id) {
+        return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
+    }
+
+    let completed_status_id = *luts.work_order_statuses_by_name.get("Closed")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
+
+    let effect = crate::services::v1::work_orders::complete::decide_complete_work_order(
+        payload,
+        work_order,
+        &luts.policies,
+        completed_status_id,
+    )?;
+
+    db.transaction::<_, (), AppError>(|txn| {
+        Box::pin(async move {
+            effect.closing_form.insert(txn).await?;
+            for img in effect.images {
+                img.insert(txn).await?;
+            }
+            for link in effect.image_links {
+                link.insert(txn).await?;
+            }
+            for pc in effect.part_changes {
+                pc.insert(txn).await?;
+            }
+            for pu in effect.part_updates {
+                pu.update(txn).await?;
+            }
+            if let Some(ot) = effect.overtime {
+                ot.insert(txn).await?;
+            }
+            effect.work_order.update(txn).await?;
+            Ok(())
+        })
+    }).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
+
+    Ok(Json(ApiResponse::success(200, "Work order completed successfully", ())))
+}
 
 pub async fn history(
     State(_db): State<Arc<DatabaseConnection>>,
