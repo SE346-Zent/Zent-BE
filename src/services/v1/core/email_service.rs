@@ -105,3 +105,50 @@ pub async fn send_welcome_email(
 
     Ok(())
 }
+
+pub async fn send_work_order_created_email(
+    rabbitmq: &Arc<Connection>,
+    templates: &HashMap<String, String>,
+    to: &str,
+    name: &str,
+    work_order_number: &str,
+    service_type: &str,
+    appointment: &str,
+    address: &str,
+) -> Result<(), AppError> {
+    let escaped_name = v_htmlescape::escape(name).to_string();
+    let escaped_wo_number = v_htmlescape::escape(work_order_number).to_string();
+    let escaped_service = v_htmlescape::escape(service_type).to_string();
+    let escaped_appointment = v_htmlescape::escape(appointment).to_string();
+    let escaped_address = v_htmlescape::escape(address).to_string();
+
+    let email_body = if let Some(template_content) = templates.get("work_order_created_email.html") {
+        template_content
+            .replace("{{name}}", &escaped_name)
+            .replace("{{work_order_number}}", &escaped_wo_number)
+            .replace("{{service_type}}", &escaped_service)
+            .replace("{{appointment}}", &escaped_appointment)
+            .replace("{{address}}", &escaped_address)
+    } else {
+        tracing::warn!("Template 'work_order_created_email.html' not found in cache! Using minimal HTML fallback.");
+        format!(
+            "<html><body><h2>Work Order Created, {}!</h2><p>Your work order number is: <strong>{}</strong></p><p>Service: {}</p><p>Appointment: {}</p><p>Address: {}</p></body></html>",
+            escaped_name, escaped_wo_number, escaped_service, escaped_appointment, escaped_address
+        )
+    };
+
+    let email_payload = serde_json::json!({
+        "to": to,
+        "subject": format!("Work Order Created: {}", work_order_number),
+        "body": email_body
+    });
+    
+    let producer = EmailProducer::new(Some(rabbitmq.clone()));
+    producer.publish(email_payload.to_string().as_bytes()).await
+        .map_err(|e| {
+            tracing::error!("Failed to enqueue work order creation email task into RabbitMQ: {}", e);
+            AppError::Internal(anyhow::anyhow!("Failed to send work order creation email"))
+        })?;
+
+    Ok(())
+}

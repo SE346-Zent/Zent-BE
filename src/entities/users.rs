@@ -14,6 +14,7 @@ pub struct Model {
     pub full_name: String,
     pub password_hash: String,
     pub phone_number: String,
+    pub state: Option<String>,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,

@@ -29,7 +29,8 @@ pub fn init_tracing() {
 
     // 2. Build Resource
     let resource = Resource::new_with_defaults(vec![
-        KeyValue::new("environment", "production"),
+        KeyValue::new("service.name", cfg.otel_service_name.clone().unwrap_or_else(|| "zent-be".to_string())),
+        KeyValue::new("environment", cfg.app_stage.clone()),
     ]);
 
     let agent_endpoint = cfg.otel_exporter_otlp_endpoint.clone()
@@ -39,7 +40,7 @@ pub fn init_tracing() {
 
     // 3. Build OTLP tracer provider
     let otel_trace_layer = if let Some(provider) = build_otlp_tracer_provider(&agent_endpoint, resource.clone()) {
-        let tracer = provider.tracer("zent-be");
+        let tracer = provider.tracer(cfg.otel_service_name.clone().unwrap_or_else(|| "zent-be".to_string()));
         global::set_tracer_provider(provider);
         Some(tracing_opentelemetry::layer().with_tracer(tracer))
     } else {
@@ -219,5 +220,6 @@ pub fn shutdown_tracing() {
 
 /// Returns the application-global meter.
 pub fn meter() -> opentelemetry::metrics::Meter {
-    global::meter("zent-be")
+    let name = AppConfig::get().otel_service_name.as_deref().unwrap_or("zent-be");
+    global::meter(name)
 }

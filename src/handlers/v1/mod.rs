@@ -27,6 +27,7 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
 
     // 2. Technician Routes
     let tech_routes = Router::new()
+        .route("/technician", axum::routing::get(work_orders::list_technician))
         .route("/{id}/schedule", axum::routing::post(work_orders::schedule))
         .route("/{id}/start", axum::routing::post(work_orders::start))
         .route("/{id}/refuse", axum::routing::post(work_orders::refuse))
@@ -37,8 +38,9 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
             require_role::<AppState>(Role::Technician),
         ));
 
-    // 3. Admin/Management Routes
+    // 3. Admin Routes
     let admin_routes = Router::new()
+        .route("/admin/geography", axum::routing::get(work_orders::list_admin_geography))
         .route("/{id}/assign", axum::routing::post(work_orders::assign))
         .route("/{id}/cancel", axum::routing::post(work_orders::cancel))
         .route("/{id}/refusal/approve", axum::routing::post(work_orders::approve_refusal))
@@ -48,14 +50,22 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
             require_role::<AppState>(Role::Admin),
         ));
 
-    // 4. Shared/Open Routes (Optional authentication can be added via different middleware)
-    Router::new()
+    // 4. Super Admin Routes
+    let super_admin_routes = Router::new()
         .route("/", axum::routing::get(work_orders::list))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_role::<AppState>(Role::SuperAdmin),
+        ));
+
+    // 5. Shared/Open Routes
+    Router::new()
         .route("/{id}", axum::routing::get(work_orders::get_details))
         .route("/{id}/history", axum::routing::get(work_orders::history))
         .merge(customer_routes)
         .merge(tech_routes)
         .merge(admin_routes)
+        .merge(super_admin_routes)
 }
 
 fn media_router() -> Router<AppState> {
