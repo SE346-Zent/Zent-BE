@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zent Work Order Created</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f9f9f9; color: #333333;">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+        <tr>
+            <td align="center" style="padding: 40px 0;">
+                <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #e0e0e0;">
+                    <!-- Header -->
+                    <tr>
+                        <td align="center" style="padding: 30px 40px; background-color: #28a745;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">Zent</h1>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px 40px 30px 40px;">
+                            <h2 style="margin: 0 0 20px 0; font-size: 22px; font-weight: 600; color: #111111;">Work Order Created, {{name}}!</h2>
+                            <p style="margin: 0 0 20px 0; font-size: 16px; line-height: 1.6; color: #555555;">
+                                Your work order has been successfully created. Our team will review it and assign a technician shortly.
+                            </p>
+                            
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef; margin-bottom: 30px;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <p style="margin: 0 0 10px 0; font-size: 14px; color: #6c757d; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;">Work Order Number</p>
+                                        <p style="margin: 0 0 20px 0; font-size: 24px; color: #28a745; font-weight: 700;">{{work_order_number}}</p>
+                                        
+                                        <p style="margin: 0 0 5px 0; font-size: 14px; color: #6c757d;"><strong>Service:</strong> {{service_type}}</p>
+                                        <p style="margin: 0 0 5px 0; font-size: 14px; color: #6c757d;"><strong>Appointment:</strong> {{appointment}}</p>
+                                        <p style="margin: 0; font-size: 14px; color: #6c757d;"><strong>Address:</strong> {{address}}</p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 0 0 10px 0; font-size: 14px; line-height: 1.6; color: #777777;">
+                                You can track the status of your work order in the Zent application.
+                            </p>
+                            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #777777;">
+                                If you have any questions, please contact our support team.
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 30px 40px; background-color: #fcfcfc; border-top: 1px solid #eeeeee; text-align: center;">
+                            <p style="margin: 0; font-size: 12px; color: #999999;">
+                                &copy; 2026 Zent Project. All rights reserved.<br>
+                                This is an automated notification regarding your service request.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

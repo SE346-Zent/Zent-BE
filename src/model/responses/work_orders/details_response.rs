@@ -1,21 +1,22 @@
 use serde::{Deserialize, Serialize};
-use validator::Validate;
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
-#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema, Validate, Clone)]
-pub struct CreateWorkOrderRequest {
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkOrderDetails {
+    pub id: Uuid,
+    pub work_order_number: String,
+    pub status: String,
+    pub customer_id: Uuid,
+    pub customer_name: String,
     pub product_id: Uuid,
-    pub work_order_symptom_id: i32,
+    pub product_name: String,
     pub reference_ticket_id: Option<Uuid>,
-    #[validate(length(min = 1, max = 1000))]
+    pub symptom_name: String,
     pub description: String,
-    pub appointment: DateTime<Utc>,
-    #[validate(length(min = 1, max = 255))]
     pub first_name: String,
-    #[validate(length(min = 1, max = 255))]
     pub last_name: String,
-    #[validate(email)]
     pub email: Option<String>,
     pub phone_number: Option<String>,
     pub country: String,
@@ -23,4 +24,7 @@ pub struct CreateWorkOrderRequest {
     pub city: String,
     pub address: String,
     pub building: Option<String>,
+    pub appointment: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }

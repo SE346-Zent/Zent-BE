@@ -37,7 +37,7 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
             require_role::<AppState>(Role::Technician),
         ));
 
-    // 3. Admin/Management Routes
+    // 3. Admin Routes
     let admin_routes = Router::new()
         .route("/{id}/assign", axum::routing::post(work_orders::assign))
         .route("/{id}/cancel", axum::routing::post(work_orders::cancel))
@@ -48,11 +48,15 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
             require_role::<AppState>(Role::Admin),
         ));
 
-    // 4. Shared/Open Routes (Optional authentication can be added via different middleware)
+    // 4. Unified List Route (Shared by all roles - Auth checked inside handler)
+    let list_route = Router::new()
+        .route("/", axum::routing::get(work_orders::list));
+
+    // 5. Shared/Open Routes
     Router::new()
-        .route("/", axum::routing::get(work_orders::list))
         .route("/{id}", axum::routing::get(work_orders::get_details))
         .route("/{id}/history", axum::routing::get(work_orders::history))
+        .merge(list_route)
         .merge(customer_routes)
         .merge(tech_routes)
         .merge(admin_routes)

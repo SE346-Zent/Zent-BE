@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::infrastructure::mq::email::EmailProducer;
 use crate::core::errors::AppError;
 use lapin::Connection;
+use crate::services::v1::core::helpers::mq::publish_email_task;
 
 pub async fn send_verification_email(
     rabbitmq: &Arc<Connection>,
@@ -35,14 +35,7 @@ pub async fn send_verification_email(
         "body": email_body
     });
     
-    let producer = EmailProducer::new(Some(rabbitmq.clone()));
-    producer.publish(email_payload.to_string().as_bytes()).await
-        .map_err(|e| {
-            tracing::error!("Failed to enqueue verification email task into RabbitMQ: {}", e);
-            AppError::Internal(anyhow::anyhow!("Failed to send verification email"))
-        })?;
-
-    Ok(())
+    publish_email_task(rabbitmq, email_payload, "verification email").await
 }
 
 pub async fn send_forgot_password_email(
@@ -73,14 +66,7 @@ pub async fn send_forgot_password_email(
         "body": email_body
     });
     
-    let producer = EmailProducer::new(Some(rabbitmq.clone()));
-    producer.publish(email_payload.to_string().as_bytes()).await
-        .map_err(|e| {
-            tracing::error!("Failed to enqueue forgot password email task into RabbitMQ: {}", e);
-            AppError::Internal(anyhow::anyhow!("Failed to send reset email"))
-        })?;
-
-    Ok(())
+    publish_email_task(rabbitmq, email_payload, "reset email").await
 }
 
 pub async fn send_welcome_email(
@@ -96,12 +82,45 @@ pub async fn send_welcome_email(
         "body": format!("Welcome to Zent, {}! Your account has been successfully created.", escaped_name)
     });
     
-    let producer = EmailProducer::new(Some(rabbitmq.clone()));
-    producer.publish(email_payload.to_string().as_bytes()).await
-        .map_err(|e| {
-            tracing::error!("Failed to enqueue welcome email task into RabbitMQ: {}", e);
-            AppError::Internal(anyhow::anyhow!("Failed to send welcome email"))
-        })?;
+    publish_email_task(rabbitmq, email_payload, "welcome email").await
+}
 
-    Ok(())
+pub async fn send_work_order_created_email(
+    rabbitmq: &Arc<Connection>,
+    templates: &HashMap<String, String>,
+    to: &str,
+    name: &str,
+    work_order_number: &str,
+    service_type: &str,
+    appointment: &str,
+    address: &str,
+) -> Result<(), AppError> {
+    let escaped_name = v_htmlescape::escape(name).to_string();
+    let escaped_wo_number = v_htmlescape::escape(work_order_number).to_string();
+    let escaped_service = v_htmlescape::escape(service_type).to_string();
+    let escaped_appointment = v_htmlescape::escape(appointment).to_string();
+    let escaped_address = v_htmlescape::escape(address).to_string();
+
+    let email_body = if let Some(template_content) = templates.get("work_order_created_email.html") {
+        template_content
+            .replace("{{name}}", &escaped_name)
+            .replace("{{work_order_number}}", &escaped_wo_number)
+            .replace("{{service_type}}", &escaped_service)
+            .replace("{{appointment}}", &escaped_appointment)
+            .replace("{{address}}", &escaped_address)
+    } else {
+        tracing::warn!("Template 'work_order_created_email.html' not found in cache! Using minimal HTML fallback.");
+        format!(
+            "<html><body><h2>Work Order Created, {}!</h2><p>Your work order number is: <strong>{}</strong></p><p>Service: {}</p><p>Appointment: {}</p><p>Address: {}</p></body></html>",
+            escaped_name, escaped_wo_number, escaped_service, escaped_appointment, escaped_address
+        )
+    };
+
+    let email_payload = serde_json::json!({
+        "to": to,
+        "subject": format!("Work Order Created: {}", work_order_number),
+        "body": email_body
+    });
+    
+    publish_email_task(rabbitmq, email_payload, "work order creation email").await
 }

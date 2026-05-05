@@ -1,1 +1,3 @@
-pub mod work_order_response;
+pub mod create_response;
+pub mod list_response;
+pub mod details_response;
