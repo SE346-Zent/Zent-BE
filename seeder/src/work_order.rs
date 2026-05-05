@@ -72,7 +72,7 @@ pub async fn seed_random_work_orders(
                 phone_number: Set(Some(PhoneNumber().fake_with_rng(&mut rng))),
                 work_order_status_id: Set(status.id),
                 country: Set(CountryName().fake_with_rng(&mut rng)),
-                state: Set(StateName().fake_with_rng(&mut rng)),
+                province: Set(StateName().fake_with_rng(&mut rng)),
                 city: Set(CityName().fake_with_rng(&mut rng)),
                 address: Set(format!(
                     "{} {}",

@@ -180,7 +180,7 @@ pub async fn seed_users(
                 phone_number: Set(h.phone_number),
                 account_status: Set(h.account_status_id),
                 role_id: Set(h.role_id),
-                state: Set(None),
+                province: Set(None),
                 created_at: Set(now),
                 updated_at: Set(now),
                 deleted_at: Set(None),

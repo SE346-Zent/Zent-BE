@@ -18,7 +18,7 @@ pub struct Model {
     pub email: Option<String>,
     pub phone_number: Option<String>,
     pub country: String,
-    pub state: String,
+    pub province: String,
     pub city: String,
     pub address: String,
     pub building: Option<String>,

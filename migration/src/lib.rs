@@ -8,6 +8,8 @@ mod m20260408_113539_parts_update;
 mod m20260426_050036_policy;
 mod m20260504_100000_add_wo_number_index;
 mod m20260504_110000_add_user_state;
+mod m20260505_035658_update_field;
+
 
 pub struct Migrator;
 
@@ -23,6 +25,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260426_050036_policy::Migration),
             Box::new(m20260504_100000_add_wo_number_index::Migration),
             Box::new(m20260504_110000_add_user_state::Migration),
+            Box::new(m20260505_035658_update_field::Migration),
         ]
     }
 }

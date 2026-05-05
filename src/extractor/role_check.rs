@@ -11,11 +11,11 @@ use crate::{
     core::lookup_tables::LookupTables,
     entities::roles::Role,
     extractor::auth_user::AuthUser,
-    extractor::jwt_claims::AuthError,
+    core::errors::AppError,
 };
 
 /// Middleware factory to require a specific role.
-pub fn require_role<S>(role: Role) -> impl Fn(State<S>, Request, Next) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, AuthError>> + Send>> + Clone
+pub fn require_role<S>(role: Role) -> impl Fn(State<S>, Request, Next) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, AppError>> + Send>> + Clone
 where
     S: Send + Sync + 'static,
     DecodingKey: FromRef<S>,
@@ -37,11 +37,11 @@ where
             let required_role_id = lookup_tables
                 .roles_by_name
                 .get(role.as_str())
-                .ok_or(AuthError::InternalServerError)?;
+                .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Role ID not found for role: {}", role.as_str())))?;
 
             // 3. Check if the user has the required role
             if auth_user.user.role_id != *required_role_id {
-                return Err(AuthError::Forbidden);
+                return Err(AppError::Forbidden("You do not have the required role to access this resource".to_string()));
             }
 
             // 4. Inject AuthUser into extensions so handlers don't have to re-extract it

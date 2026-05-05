@@ -25,7 +25,10 @@ use crate::model::{
             reset_password_request::ResetPasswordRequest,
             logout_request::LogoutRequest,
         },
-        work_orders::create_work_order_request::CreateWorkOrderRequest,
+        work_orders::{
+            create_work_order_request::CreateWorkOrderRequest,
+            list_query::WorkOrderQuery,
+        },
         pagination::PaginationRequest,
     },
     responses::{
@@ -59,8 +62,6 @@ use crate::handlers::v1::{auth, work_orders};
         auth::reset_password_handler,
         work_orders::create,
         work_orders::list,
-        work_orders::list_admin_geography,
-        work_orders::list_technician,
         work_orders::get_details,
     ),
     components(
@@ -75,6 +76,7 @@ use crate::handlers::v1::{auth, work_orders};
             ResetPasswordRequest,
             LogoutRequest,
             CreateWorkOrderRequest,
+            WorkOrderQuery,
             LoginResponseData,
             VerifyForgotPasswordOtpResponseData,
             WorkOrderResponseData,

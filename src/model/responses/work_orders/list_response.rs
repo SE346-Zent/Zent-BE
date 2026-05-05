@@ -13,7 +13,7 @@ pub struct WorkOrderListItem {
     pub product_name: String,
     pub symptom_name: String,
     pub city: String,
-    pub state: String,
+    pub province: String,
     pub created_at: DateTime<Utc>,
 }
 

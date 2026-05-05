@@ -11,7 +11,10 @@ use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
 use crate::infrastructure::cache::ValkeyClient;
 use crate::model::{
-    requests::work_orders::create_work_order_request::CreateWorkOrderRequest,
+    requests::work_orders::{
+        create_work_order_request::CreateWorkOrderRequest,
+        list_query::WorkOrderQuery,
+    },
     requests::pagination::PaginationRequest,
     responses::{
         work_orders::{
@@ -28,6 +31,8 @@ use serde_json::json;
 use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms};
 use crate::core::config::AppConfig;
 
+use crate::model::responses::base::ApiResponse;
+
 /// Sentinel value stored during the idempotency claim window.
 /// If a concurrent reader sees this, the original request is still in-flight.
 const IDEMPOTENCY_PENDING: &str = "__PENDING__";
@@ -37,7 +42,7 @@ const IDEMPOTENCY_PENDING: &str = "__PENDING__";
     path = "/api/v1/work_orders",
     request_body = CreateWorkOrderRequest,
     responses(
-        (status = 201, description = "Work order created successfully", body = WorkOrderResponseData),
+        (status = 201, description = "Work order created successfully", body = ApiResponse<WorkOrderResponseData>),
         (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Not Found", body = ErrorResponse),
@@ -55,7 +60,7 @@ pub async fn create(
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     headers: HeaderMap,
     Json(payload): Json<CreateWorkOrderRequest>,
-) -> Result<(StatusCode, Json<WorkOrderResponseData>), AppError> {
+) -> Result<Json<ApiResponse<WorkOrderResponseData>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
     let cfg = AppConfig::get();
@@ -110,7 +115,7 @@ pub async fn create(
                     let response: WorkOrderResponseData =
                         serde_json::from_value(cached_val["response"].clone())
                             .map_err(|e| AppError::Internal(e.into()))?;
-                    return Ok((StatusCode::CREATED, Json(response)));
+                    return Ok(Json(ApiResponse::success(201, "Work order created successfully", response)));
                 }
             }
         }
@@ -187,77 +192,82 @@ pub async fn create(
         let _: () = conn.set_ex(&cache_key, cache_val, cfg.idempotency_final_ttl_seconds).await?;
     }
 
-    Ok((StatusCode::CREATED, Json(response)))
+    Ok(Json(ApiResponse::success(201, "Work order created successfully", response)))
 }
 
 #[utoipa::path(
     get,
     path = "/api/v1/work_orders",
-    params(PaginationRequest),
+    params(WorkOrderQuery),
     responses(
-        (status = 200, description = "List of all work orders", body = WorkOrderListResponse),
+        (status = 200, description = "List of work orders based on user role", body = ApiResponse<WorkOrderListResponse>),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
     security(("bearer_auth" = []))
 )]
 pub async fn list(
-    Extension(_auth): Extension<AuthUser>,
+    auth: AuthUser,
     State(db): State<Arc<DatabaseConnection>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     State(lookup_tables): State<Arc<LookupTables>>,
-    Query(pagination): Query<PaginationRequest>,
-) -> Result<Json<WorkOrderListResponse>, AppError> {
-    let cache_key_prefix = "all";
-    fetch_paginated_work_orders(db, valkey_client, lookup_tables, pagination, cache_key_prefix, None, None).await
-}
+    Query(query): Query<WorkOrderQuery>,
+) -> Result<Json<ApiResponse<WorkOrderListResponse>>, AppError> {
+    
+    // 1. Compare role in parameter with role in Access Token
+    if let Some(requested_role) = &query.role {
+        if requested_role != &auth.role.name {
+            return Err(AppError::Forbidden(format!(
+                "Requested context '{}' does not match your assigned role '{}'",
+                requested_role, auth.role.name
+            )));
+        }
+    }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/work_orders/admin/geography",
-    params(PaginationRequest),
-    responses(
-        (status = 200, description = "List of work orders in admin's geography", body = WorkOrderListResponse),
-        (status = 403, description = "Forbidden", body = ErrorResponse),
-        (status = 500, description = "Internal Server Error", body = ErrorResponse)
-    ),
-    security(("bearer_auth" = []))
-)]
-pub async fn list_admin_geography(
-    Extension(auth): Extension<AuthUser>,
-    State(db): State<Arc<DatabaseConnection>>,
-    State(valkey_client): State<Option<Arc<ValkeyClient>>>,
-    State(lookup_tables): State<Arc<LookupTables>>,
-    Query(pagination): Query<PaginationRequest>,
-) -> Result<Json<WorkOrderListResponse>, AppError> {
-    let admin_state = auth.user.state.clone().ok_or_else(|| {
-        AppError::BadRequest("Admin profile is missing assigned state geography".to_string())
-    })?;
+    // 2. Resolve the security filters based on the role in the Access Token
+    let mut resolved_province = query.province.clone();
+    let mut resolved_tech_id = query.technician_id;
+    let mut resolved_customer_id = None;
+    let cache_key_prefix;
 
-    let cache_key_prefix = format!("admin_geo:{}", admin_state);
-    fetch_paginated_work_orders(db, valkey_client, lookup_tables, pagination, &cache_key_prefix, None, Some(admin_state)).await
-}
+    match auth.role.name.as_str() {
+        "SuperAdmin" => {
+            // SuperAdmins can see everything and use any explicit query parameter
+            cache_key_prefix = format!("superadmin:p:{:?}:t:{:?}", resolved_province, resolved_tech_id);
+        }
+        "Admin" => {
+            // Admins are locked to their own province. Override any requested province.
+            let admin_province = auth.user.province.clone().ok_or_else(|| {
+                AppError::Forbidden("Admin profile is missing assigned province".to_string())
+            })?;
+            resolved_province = Some(admin_province.clone());
+            cache_key_prefix = format!("admin_geo:{}:t:{:?}", admin_province, resolved_tech_id);
+        }
+        "Technician" => {
+            // Technicians can only see their own assigned work orders. Override requested tech_id.
+            resolved_tech_id = Some(auth.user.id);
+            cache_key_prefix = format!("tech:{}:p:{:?}", auth.user.id, resolved_province);
+        }
+        "Customer" => {
+            // Customers can only see their own created work orders.
+            resolved_customer_id = Some(auth.user.id);
+            resolved_tech_id = None;
+            resolved_province = None;
+            cache_key_prefix = format!("customer:{}", auth.user.id);
+        }
+        _ => return Err(AppError::Forbidden("Role not recognized in unified handler".to_string())),
+    }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/work_orders/technician",
-    params(PaginationRequest),
-    responses(
-        (status = 200, description = "List of work orders assigned to technician", body = WorkOrderListResponse),
-        (status = 403, description = "Forbidden", body = ErrorResponse),
-        (status = 500, description = "Internal Server Error", body = ErrorResponse)
-    ),
-    security(("bearer_auth" = []))
-)]
-pub async fn list_technician(
-    Extension(auth): Extension<AuthUser>,
-    State(db): State<Arc<DatabaseConnection>>,
-    State(valkey_client): State<Option<Arc<ValkeyClient>>>,
-    State(lookup_tables): State<Arc<LookupTables>>,
-    Query(pagination): Query<PaginationRequest>,
-) -> Result<Json<WorkOrderListResponse>, AppError> {
-    let cache_key_prefix = format!("tech:{}", auth.user.id);
-    fetch_paginated_work_orders(db, valkey_client, lookup_tables, pagination, &cache_key_prefix, Some(auth.user.id), None).await
+    fetch_paginated_work_orders(
+        db, 
+        valkey_client, 
+        lookup_tables, 
+        query.pagination, 
+        &cache_key_prefix, 
+        resolved_tech_id, 
+        resolved_province,
+        resolved_customer_id
+    ).await
 }
 
 async fn fetch_paginated_work_orders(
@@ -267,8 +277,9 @@ async fn fetch_paginated_work_orders(
     pagination: PaginationRequest,
     cache_key_prefix: &str,
     technician_id: Option<Uuid>,
-    state_filter: Option<String>,
-) -> Result<Json<WorkOrderListResponse>, AppError> {
+    province_filter: Option<String>,
+    customer_id: Option<Uuid>,
+) -> Result<Json<ApiResponse<WorkOrderListResponse>>, AppError> {
     let mut conn_opt = None;
     let mut full_cache_key = String::new();
 
@@ -281,8 +292,8 @@ async fn fetch_paginated_work_orders(
         );
 
         if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&full_cache_key).await {
-            if let Ok(response) = serde_json::from_str(&cached_json) {
-                return Ok(Json(response));
+            if let Ok(response) = serde_json::from_str::<WorkOrderListResponse>(&cached_json) {
+                return Ok(Json(ApiResponse::success(200, "Work orders retrieved successfully", response)));
             }
         }
         conn_opt = Some(conn);
@@ -294,8 +305,12 @@ async fn fetch_paginated_work_orders(
         query = query.filter(work_orders_ent::Column::TechnicianId.eq(tech_id));
     }
 
-    if let Some(state) = state_filter {
-        query = query.filter(work_orders_ent::Column::State.eq(state));
+    if let Some(province) = province_filter {
+        query = query.filter(work_orders_ent::Column::Province.eq(province));
+    }
+
+    if let Some(cust_id) = customer_id {
+        query = query.filter(work_orders_ent::Column::CustomerId.eq(cust_id));
     }
 
     let paginator = query.clone()
@@ -321,14 +336,14 @@ async fn fetch_paginated_work_orders(
         }
     }
 
-    Ok(Json(response))
+    Ok(Json(ApiResponse::success(200, "Work orders retrieved successfully", response)))
 }
 
 #[utoipa::path(
     get,
     path = "/api/v1/work_orders/{id}",
     responses(
-        (status = 200, description = "Work order details", body = WorkOrderDetails),
+        (status = 200, description = "Work order details", body = ApiResponse<WorkOrderDetails>),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Not Found", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
@@ -336,12 +351,12 @@ async fn fetch_paginated_work_orders(
     security(("bearer_auth" = []))
 )]
 pub async fn get_details(
-    Extension(auth): Extension<AuthUser>,
+    auth: AuthUser,
     State(db): State<Arc<DatabaseConnection>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     State(lookup_tables): State<Arc<LookupTables>>,
     Path(id): Path<Uuid>,
-) -> Result<Json<WorkOrderDetails>, AppError> {
+) -> Result<Json<ApiResponse<WorkOrderDetails>>, AppError> {
     let mut conn_opt = None;
     let cache_key = format!("cache:work_order:{}", id);
 
@@ -350,7 +365,7 @@ pub async fn get_details(
         if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&cache_key).await {
             if let Ok(details) = serde_json::from_str::<WorkOrderDetails>(&cached_json) {
                 if has_access_to_work_order(&auth, &details) {
-                    return Ok(Json(details));
+                    return Ok(Json(ApiResponse::success(200, "Work order details retrieved successfully", details)));
                 }
             }
         }
@@ -377,17 +392,14 @@ pub async fn get_details(
         }
     }
 
-    Ok(Json(details))
+    Ok(Json(ApiResponse::success(200, "Work order details retrieved successfully", details)))
 }
 
 fn has_access_to_work_order(auth: &AuthUser, details: &WorkOrderDetails) -> bool {
-    if auth.role.name == "Manager" || auth.role.name == "Admin" {
+    if auth.role.name == "SuperAdmin" || auth.role.name == "Admin" {
         return true;
     }
-    // Technicians can see if they are assigned (idempotent with list view)
-    // We would need technician_id in WorkOrderDetails to be sure.
-    // Assuming for now if they have the ID they can see it if we implemented it in list.
-    // In a real system, we'd check details.technician_id == auth.user.id
+    
     if auth.user.id == details.customer_id {
         return true;
     }

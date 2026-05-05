@@ -18,7 +18,7 @@ pub fn map_to_list_item(
         product_name: product.map(|p| p.product_name).unwrap_or_else(|| "Unknown Product".to_string()),
         symptom_name: symptom.map(|s| s.name).unwrap_or_else(|| "General Service".to_string()),
         city: wo.city,
-        state: wo.state,
+        province: wo.province,
         created_at: wo.created_at,
     }
 }

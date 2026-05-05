@@ -24,7 +24,7 @@ pub fn map_to_details(
         email: wo.email,
         phone_number: wo.phone_number,
         country: wo.country,
-        state: wo.state,
+        province: wo.province,
         city: wo.city,
         address: wo.address,
         building: wo.building,
