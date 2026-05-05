@@ -403,7 +403,7 @@ fn has_access_to_work_order(auth: &AuthUser, details: &WorkOrderDetails) -> bool
     if auth.user.id == details.customer_id {
         return true;
     }
-    true // Fallback for now
+    false
 }
 
 pub async fn assign(

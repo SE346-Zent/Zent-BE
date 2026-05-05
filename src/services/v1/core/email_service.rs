@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::infrastructure::mq::email::EmailProducer;
 use crate::core::errors::AppError;
 use lapin::Connection;
+use crate::services::v1::core::helpers::mq::publish_email_task;
 
 pub async fn send_verification_email(
     rabbitmq: &Arc<Connection>,
@@ -35,14 +35,7 @@ pub async fn send_verification_email(
         "body": email_body
     });
     
-    let producer = EmailProducer::new(Some(rabbitmq.clone()));
-    producer.publish(email_payload.to_string().as_bytes()).await
-        .map_err(|e| {
-            tracing::error!("Failed to enqueue verification email task into RabbitMQ: {}", e);
-            AppError::Internal(anyhow::anyhow!("Failed to send verification email"))
-        })?;
-
-    Ok(())
+    publish_email_task(rabbitmq, email_payload, "verification email").await
 }
 
 pub async fn send_forgot_password_email(
@@ -73,14 +66,7 @@ pub async fn send_forgot_password_email(
         "body": email_body
     });
     
-    let producer = EmailProducer::new(Some(rabbitmq.clone()));
-    producer.publish(email_payload.to_string().as_bytes()).await
-        .map_err(|e| {
-            tracing::error!("Failed to enqueue forgot password email task into RabbitMQ: {}", e);
-            AppError::Internal(anyhow::anyhow!("Failed to send reset email"))
-        })?;
-
-    Ok(())
+    publish_email_task(rabbitmq, email_payload, "reset email").await
 }
 
 pub async fn send_welcome_email(
@@ -96,14 +82,7 @@ pub async fn send_welcome_email(
         "body": format!("Welcome to Zent, {}! Your account has been successfully created.", escaped_name)
     });
     
-    let producer = EmailProducer::new(Some(rabbitmq.clone()));
-    producer.publish(email_payload.to_string().as_bytes()).await
-        .map_err(|e| {
-            tracing::error!("Failed to enqueue welcome email task into RabbitMQ: {}", e);
-            AppError::Internal(anyhow::anyhow!("Failed to send welcome email"))
-        })?;
-
-    Ok(())
+    publish_email_task(rabbitmq, email_payload, "welcome email").await
 }
 
 pub async fn send_work_order_created_email(
@@ -143,12 +122,5 @@ pub async fn send_work_order_created_email(
         "body": email_body
     });
     
-    let producer = EmailProducer::new(Some(rabbitmq.clone()));
-    producer.publish(email_payload.to_string().as_bytes()).await
-        .map_err(|e| {
-            tracing::error!("Failed to enqueue work order creation email task into RabbitMQ: {}", e);
-            AppError::Internal(anyhow::anyhow!("Failed to send work order creation email"))
-        })?;
-
-    Ok(())
+    publish_email_task(rabbitmq, email_payload, "work order creation email").await
 }
