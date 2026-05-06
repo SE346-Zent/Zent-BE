@@ -11,6 +11,12 @@ pub struct AppConfig {
     pub rabbitmq_url: String,
     pub valkey_url: String,
 
+    #[serde(rename = "google_maps_api_key")]
+    pub google_maps_api_key: String,
+
+    pub par_write_work_orders: String,
+    pub par_read_work_orders: String,
+
     #[serde(rename = "docs_username")]
     pub docs_username: String,
 
@@ -87,7 +93,7 @@ impl AppConfig {
     /// Initializes the application configuration reading natively from the environment using Envy structurally.
     pub fn init() {
         dotenvy::dotenv().ok();
-        
+
         CONFIG.get_or_init(|| {
             envy::from_env::<AppConfig>()
                 .expect("Failed to parse configuration variables from environment!")

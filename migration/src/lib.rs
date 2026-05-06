@@ -10,6 +10,8 @@ mod m20260504_100000_add_wo_number_index;
 mod m20260504_110000_add_user_state;
 mod m20260505_035658_update_field;
 mod m20260505_215000_overtimes_and_phases;
+mod m20260506_090000_update_reject_form;
+mod m20260506_100000_geofencing;
 
 
 pub struct Migrator;
@@ -28,6 +30,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20260504_110000_add_user_state::Migration),
             Box::new(m20260505_035658_update_field::Migration),
             Box::new(m20260505_215000_overtimes_and_phases::Migration),
+            Box::new(m20260506_090000_update_reject_form::Migration),
+            Box::new(m20260506_100000_geofencing::Migration),
         ]
     }
 }

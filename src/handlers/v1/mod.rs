@@ -12,8 +12,8 @@ pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .nest("/auth", auth::router())
         .nest("/docs", api_docs::router())
-        .nest("/work_orders", work_orders_router(state))
-        .nest("/media", media_router())
+        .nest("/work_orders", work_orders_router(state.clone()))
+        .nest("/media", media_router(state))
 }
 
 fn work_orders_router(state: AppState) -> Router<AppState> {
@@ -62,10 +62,18 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .merge(admin_routes)
 }
 
-fn media_router() -> Router<AppState> {
+fn media_router(state: AppState) -> Router<AppState> {
+    let closing_form_routes = Router::new()
+        .route("/photos", axum::routing::post(media::upload_closing_form_photo))
+        .route("/photos/{image_id}", axum::routing::patch(media::update_closing_form_photo))
+        .route("/signature", axum::routing::post(media::upload_closing_form_signature))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_role::<AppState>(Role::Technician),
+        ));
+
     Router::new()
-        .route("/photos/work_orders/{id}/upload", axum::routing::post(media::upload_work_order_photo))
+        .nest("/work_orders/{id}/closing_form", closing_form_routes)
         .route("/photos/work_orders/{id}", axum::routing::get(media::get_work_order_photo))
         .route("/photos/work_orders", axum::routing::get(media::list_work_order_photos))
-        .route("/signatures/work_orders/{id}/upload", axum::routing::post(media::upload_work_order_signature))
 }

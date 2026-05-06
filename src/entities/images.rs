@@ -29,6 +29,8 @@ pub enum Relation {
     ProductModelImageLinks,
     #[sea_orm(has_many = "super::work_order_closing_image_links::Entity")]
     WorkOrderClosingImageLinks,
+    #[sea_orm(has_many = "super::work_order_reject_form_image_links::Entity")]
+    WorkOrderRejectFormImageLinks,
 }
 
 impl Related<super::closing_form_image_links::Entity> for Entity {
@@ -137,6 +139,19 @@ impl Related<super::work_order_closing_forms::Entity> for Entity {
     fn via() -> Option<RelationDef> {
         Some(
             super::closing_form_image_links::Relation::Images
+                .def()
+                .rev(),
+        )
+    }
+}
+
+impl Related<super::work_order_reject_forms::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::work_order_reject_form_image_links::Relation::WorkOrderRejectForms.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::work_order_reject_form_image_links::Relation::Images
                 .def()
                 .rev(),
         )

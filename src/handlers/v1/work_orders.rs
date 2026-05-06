@@ -16,6 +16,7 @@ use crate::model::{
         list_query::WorkOrderQuery,
         assign_request::AssignWorkOrderRequest,
         complete_request::CompleteWorkOrderRequest,
+        refuse_request::RefuseWorkOrderRequest,
     },
     requests::pagination::PaginationRequest,
     responses::{
@@ -31,7 +32,7 @@ use crate::services::v1::work_orders::{create, list as list_svc, get_details as 
 use redis::AsyncCommands;
 use serde_json::json;
 
-use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms};
+use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms, work_order_closing_image_links};
 use sea_orm::TransactionTrait;
 use crate::core::config::AppConfig;
 
@@ -481,9 +482,62 @@ pub async fn start(
     State(_db): State<Arc<DatabaseConnection>>,
 ) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/work_orders/{id}/refuse",
+    request_body = RefuseWorkOrderRequest,
+    responses(
+        (status = 200, description = "Work order refusal submitted successfully"),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Not Found", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn refuse(
-    State(_db): State<Arc<DatabaseConnection>>,
-) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
+    Extension(auth): Extension<AuthUser>,
+    State(db): State<Arc<DatabaseConnection>>,
+    State(luts): State<Arc<LookupTables>>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<RefuseWorkOrderRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+    let work_order = work_orders_ent::Entity::find_by_id(id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+
+    let refuse_in_review_status_id = *luts.work_order_statuses_by_name.get("Reject_InReview")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Reject_InReview' status missing")))?;
+
+    let effect = crate::services::v1::work_orders::refuse::decide_refuse_work_order(
+        payload,
+        work_order,
+        refuse_in_review_status_id,
+        auth.user.id,
+    )?;
+
+    db.transaction::<_, (), AppError>(|txn| {
+        Box::pin(async move {
+            effect.reject_form.insert(txn).await?;
+            for img in effect.images {
+                img.insert(txn).await?;
+            }
+            for link in effect.image_links {
+                link.insert(txn).await?;
+            }
+            effect.work_order.update(txn).await?;
+            Ok(())
+        })
+    }).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
+
+    Ok(Json(ApiResponse::success(200, "Work order refusal submitted successfully", ())))
+}
 
 pub async fn cancel(
     State(_db): State<Arc<DatabaseConnection>>,
@@ -524,9 +578,16 @@ pub async fn complete(
     let completed_status_id = *luts.work_order_statuses_by_name.get("Closed")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
 
+    // Fetch existing image links to validate required photos
+    let existing_image_links = work_order_closing_image_links::Entity::find()
+        .filter(work_order_closing_image_links::Column::WorkOrderId.eq(id))
+        .all(db.as_ref())
+        .await?;
+
     let effect = crate::services::v1::work_orders::complete::decide_complete_work_order(
         payload,
         work_order,
+        existing_image_links,
         &luts.policies,
         completed_status_id,
     )?;

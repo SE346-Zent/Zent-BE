@@ -26,8 +26,6 @@ pub struct CompleteWorkOrderRequest {
     pub mtm: String,
     #[validate(length(min = 1))]
     pub serial_number: String,
-    #[validate(length(min = 3, max = 15))] // At least 3 images total, up to 15 (5 per phase)
-    pub images: Vec<PhaseImage>,
     pub part_changes: Vec<PartChangeInput>,
     #[validate(length(min = 1))]
     pub diagnosis: String,

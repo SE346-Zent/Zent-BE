@@ -46,7 +46,7 @@ use crate::model::{
 
 use crate::core::errors::ErrorResponse;
 
-use crate::handlers::v1::{auth, work_orders};
+use crate::handlers::v1::{auth, work_orders, media};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -65,6 +65,10 @@ use crate::handlers::v1::{auth, work_orders};
         work_orders::get_details,
         work_orders::assign,
         work_orders::complete,
+        work_orders::refuse,
+        media::upload_closing_form_photo,
+        media::update_closing_form_photo,
+        media::upload_closing_form_signature,
     ),
     components(
         schemas(
@@ -92,6 +96,7 @@ use crate::handlers::v1::{auth, work_orders};
             PaginationRequest,
             PaginationResponse,
             ErrorResponse,
+            crate::model::requests::work_orders::refuse_request::RefuseWorkOrderRequest,
         )
     ),
     modifiers(&SecurityAddon),

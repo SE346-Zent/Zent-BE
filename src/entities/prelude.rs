@@ -25,6 +25,7 @@ pub use super::warranties::Entity as Warranties;
 pub use super::work_order_closing_forms::Entity as WorkOrderClosingForms;
 pub use super::work_order_closing_image_links::Entity as WorkOrderClosingImageLinks;
 pub use super::overtimes::Entity as Overtimes;
+pub use super::work_order_reject_form_image_links::Entity as WorkOrderRejectFormImageLinks;
 pub use super::work_order_reject_forms::Entity as WorkOrderRejectForms;
 pub use super::work_order_state_history::Entity as WorkOrderStateHistory;
 pub use super::work_order_statuses::Entity as WorkOrderStatuses;

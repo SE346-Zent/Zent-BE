@@ -28,25 +28,26 @@ pub struct CompleteWorkOrderEffect {
 pub fn decide_complete_work_order(
     req: CompleteWorkOrderRequest,
     work_order: work_orders::Model,
+    existing_image_links: Vec<work_order_closing_image_links::Model>,
     policies: &HashMap<String, String>,
     completed_status_id: i32,
 ) -> Result<CompleteWorkOrderEffect, AppError> {
-    // Validate image phases
+    // Validate image phases from database records
     let mut phase_counts = HashMap::new();
     phase_counts.insert("pre-disassembly", 0);
     phase_counts.insert("disassembled", 0);
     phase_counts.insert("post-assembly", 0);
 
-    for img in &req.images {
-        let count = phase_counts.get_mut(img.phase.as_str())
-            .ok_or_else(|| AppError::BadRequest(format!("Invalid phase: {}", img.phase)))?;
-        *count += 1;
+    for link in &existing_image_links {
+        if let Some(count) = phase_counts.get_mut(link.phase.as_str()) {
+            *count += 1;
+        }
     }
 
     for (phase, count) in phase_counts {
         if count < 1 || count > 5 {
             return Err(AppError::BadRequest(format!(
-                "Phase '{}' must have between 1 and 5 images (found {})",
+                "Phase '{}' must have between 1 and 5 images (found {} in database). Please upload them before completing.",
                 phase, count
             )));
         }
@@ -73,24 +74,8 @@ pub fn decide_complete_work_order(
         ..Default::default()
     };
 
-    let mut images_models = Vec::new();
-    let mut image_links = Vec::new();
-
-    for img in req.images {
-        let image_id = Uuid::new_v4();
-        images_models.push(images::ActiveModel {
-            id: Set(image_id),
-            image_url: Set(img.image_url),
-            created_at: Set(now),
-            updated_at: Set(now),
-            deleted_at: Set(None),
-        });
-        image_links.push(work_order_closing_image_links::ActiveModel {
-            image_id: Set(image_id),
-            work_order_id: Set(work_order.id),
-            phase: Set(img.phase),
-        });
-    }
+    let images_models = Vec::new();
+    let image_links = Vec::new();
 
     let mut part_changes_models = Vec::new();
     let mut part_updates = Vec::new();

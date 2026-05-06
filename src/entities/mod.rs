@@ -27,6 +27,7 @@ pub mod warranties;
 pub mod work_order_closing_forms;
 pub mod work_order_closing_image_links;
 pub mod overtimes;
+pub mod work_order_reject_form_image_links;
 pub mod work_order_reject_forms;
 pub mod work_order_state_history;
 pub mod work_order_statuses;
