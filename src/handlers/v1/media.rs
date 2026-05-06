@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::core::errors::AppError;
 use crate::core::lookup_tables::LookupTables;
 use crate::extractor::auth_user::AuthUser;
-use crate::utils::{oci, google_maps};
+use crate::utils::{oci, geocoding};
 use crate::entities::{work_orders, work_order_closing_image_links, images};
 use crate::services::v1::media::{confirm_upload, confirm_update};
 use crate::model::responses::base::ApiResponse;
@@ -82,7 +82,7 @@ pub async fn upload_closing_form_photo(
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
 
-    let target_location = google_maps::geocode_address(
+    let target_location = geocoding::geocode_address(
         &work_order.address,
         &work_order.city,
         &work_order.province,
@@ -99,7 +99,7 @@ pub async fn upload_closing_form_photo(
         extension
     );
 
-    let image_url = oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
+    let object_name = oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
 
     // 3. Decision Logic (Pure)
     let payload = ConfirmUploadRequest {
@@ -115,7 +115,7 @@ pub async fn upload_closing_form_photo(
         auth.user.id,
         target_location.lat,
         target_location.lng,
-        image_url,
+        object_name,
         &luts.policies,
     )?;
 
@@ -195,7 +195,7 @@ pub async fn update_closing_form_photo(
         .await?
         .ok_or_else(|| AppError::NotFound("Image link not found".to_string()))?;
 
-    let target_location = google_maps::geocode_address(
+    let target_location = geocoding::geocode_address(
         &work_order.address,
         &work_order.city,
         &work_order.province,
@@ -212,7 +212,7 @@ pub async fn update_closing_form_photo(
         extension
     );
 
-    let image_url = oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
+    let object_name = oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
 
     // 3. Decision Logic (Pure)
     let payload = ConfirmUpdateRequest {
@@ -229,14 +229,14 @@ pub async fn update_closing_form_photo(
         auth.user.id,
         target_location.lat,
         target_location.lng,
-        image_url,
+        object_name,
         &luts.policies,
     )?;
 
     // 4. Execution (I/O)
     db.transaction::<_, (), AppError>(|txn| {
         let image_id = effect.image_id;
-        let image_url = effect.image_url;
+        let object_name = effect.object_name;
         let updated_at = effect.updated_at;
         let link_update = effect.link_update;
 
@@ -246,7 +246,7 @@ pub async fn update_closing_form_photo(
                 id: Set(image_id),
                 ..Default::default()
             };
-            img_active.image_url = Set(image_url);
+            img_active.object_name = Set(object_name);
             img_active.updated_at = Set(updated_at);
             img_active.update(txn).await?;
 
@@ -315,9 +315,13 @@ pub async fn upload_closing_form_signature(
         extension
     );
 
-    let image_url = oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
+    oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
 
-    Ok(Json(ApiResponse::success(200, "Signature uploaded successfully", image_url)))
+    // Generate full URL for the signature since it's returned directly
+    let cfg = crate::core::config::AppConfig::get();
+    let access_url = format!("{}{}", cfg.par_read_work_orders, unique_file_name);
+
+    Ok(Json(ApiResponse::success(200, "Signature uploaded successfully", access_url)))
 }
 
 pub async fn get_work_order_photo(

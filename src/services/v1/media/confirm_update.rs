@@ -9,7 +9,7 @@ use crate::utils::geo::is_within_geofence;
 
 pub struct ConfirmUpdateEffect {
     pub image_id: Uuid,
-    pub image_url: String,
+    pub object_name: String,
     pub updated_at: chrono::DateTime<Utc>,
     pub link_update: work_order_closing_image_links::ActiveModel,
 }
@@ -22,7 +22,7 @@ pub fn decide_confirm_update(
     technician_id: Uuid,
     target_lat: f64,
     target_lng: f64,
-    image_url: String,
+    object_name: String,
     policies: &HashMap<String, String>,
 ) -> Result<ConfirmUpdateEffect, AppError> {
     // 1. Security Check
@@ -56,7 +56,7 @@ pub fn decide_confirm_update(
 
     Ok(ConfirmUpdateEffect {
         image_id,
-        image_url,
+        object_name,
         updated_at: now,
         link_update: link_active,
     })

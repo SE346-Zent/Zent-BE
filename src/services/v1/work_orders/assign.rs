@@ -1,14 +1,16 @@
 use std::collections::HashMap;
-use chrono::{Duration, FixedOffset, Utc, Timelike};
+use chrono::{FixedOffset, Utc, Timelike};
 use sea_orm::Set;
+use uuid::Uuid;
 use crate::{
     core::errors::AppError,
-    entities::work_orders,
+    entities::{work_orders, work_order_state_history},
     model::requests::work_orders::assign_request::AssignWorkOrderRequest,
 };
 
 pub struct AssignWorkOrderEffect {
     pub work_order: work_orders::ActiveModel,
+    pub state_history: work_order_state_history::ActiveModel,
 }
 
 pub fn decide_assign_work_order(
@@ -18,6 +20,7 @@ pub fn decide_assign_work_order(
     policies: &HashMap<String, String>,
     assigned_status_id: i32,
     done_status_id: i32,
+    changed_by_id: Uuid,
 ) -> Result<AssignWorkOrderEffect, AppError> {
     let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap(); // GMT+7
     let appointment_local = work_order.appointment.with_timezone(&tz_offset);
@@ -32,7 +35,7 @@ pub fn decide_assign_work_order(
         .parse()
         .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid workday_end policy")))?;
 
-    let buffer_hours: i64 = policies.get("buffer")
+    let _buffer_hours: i64 = policies.get("buffer")
         .and_then(|v| v.parse().ok())
         .unwrap_or(5); // Default to 5 as per policy
 
@@ -49,8 +52,6 @@ pub fn decide_assign_work_order(
         return Err(AppError::BadRequest("Cannot assign a completed work order".into()));
     }
 
-    let buffer_duration = Duration::hours(buffer_hours);
-
     for other_wo in technician_work_orders {
         if other_wo.id == work_order.id {
             continue;
@@ -60,19 +61,23 @@ pub fn decide_assign_work_order(
             continue;
         }
 
-        let diff = (other_wo.appointment - work_order.appointment).num_milliseconds();
-        if diff.abs() < buffer_duration.num_milliseconds() {
-            return Err(AppError::Conflict(format!(
-                "Technician has an overlapping appointment (ID: {}) within the {}-hour buffer time",
-                other_wo.work_order_number, buffer_hours
-            )));
+        if other_wo.appointment == work_order.appointment {
+            return Err(AppError::Conflict("Technician already has an appointment at this exact time".into()));
         }
     }
 
-    let mut active_wo: work_orders::ActiveModel = work_order.into();
+    let mut active_wo: work_orders::ActiveModel = work_order.clone().into();
     active_wo.technician_id = Set(Some(req.technician_id));
     active_wo.work_order_status_id = Set(assigned_status_id);
     active_wo.updated_at = Set(Utc::now());
 
-    Ok(AssignWorkOrderEffect { work_order: active_wo })
+    let state_history = work_order_state_history::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        work_order_id: Set(work_order.id),
+        work_order_status_id: Set(assigned_status_id),
+        changed_by_id: Set(changed_by_id),
+        changed_at: Set(Utc::now()),
+    };
+
+    Ok(AssignWorkOrderEffect { work_order: active_wo, state_history })
 }

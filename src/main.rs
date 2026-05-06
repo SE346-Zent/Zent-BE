@@ -82,6 +82,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let metrics_job = infrastructure::cron_tasks::observability_metrics::build_metrics_job()
         .expect("Failed to build metrics collection job");
+        
+    let auto_assign_job = infrastructure::cron_tasks::auto_assign::build_auto_assign_job(
+        db.clone(),
+        state.lookup_tables.clone(),
+    ).expect("Failed to build auto assign job");
     
     app_scheduler.register_job(user_cleanup_job)
         .await
@@ -94,6 +99,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     app_scheduler.register_job(metrics_job)
         .await
         .expect("Failed to register metrics job");
+        
+    app_scheduler.register_job(auto_assign_job)
+        .await
+        .expect("Failed to register auto assign job");
         
     app_scheduler.start()
         .await

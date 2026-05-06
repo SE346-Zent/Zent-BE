@@ -26,8 +26,5 @@ pub async fn upload_object(
         return Err(AppError::Internal(anyhow::anyhow!("OCI PAR upload error: {}", err_text)));
     }
 
-    // The access URL should use the READ PAR
-    let access_url = format!("{}{}", cfg.par_read_work_orders, object_name);
-
-    Ok(access_url)
+    Ok(object_name.to_string())
 }

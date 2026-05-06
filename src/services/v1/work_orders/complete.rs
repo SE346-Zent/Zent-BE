@@ -11,6 +11,7 @@ use crate::{
         work_order_closing_image_links,
         part_changes,
         overtimes,
+        work_order_state_history,
     },
     model::requests::work_orders::complete_request::CompleteWorkOrderRequest,
 };
@@ -23,6 +24,7 @@ pub struct CompleteWorkOrderEffect {
     pub part_updates: Vec<crate::entities::parts::ActiveModel>,
     pub overtime: Option<overtimes::ActiveModel>,
     pub work_order: work_orders::ActiveModel,
+    pub state_history: work_order_state_history::ActiveModel,
 }
 
 pub fn decide_complete_work_order(
@@ -31,6 +33,7 @@ pub fn decide_complete_work_order(
     existing_image_links: Vec<work_order_closing_image_links::Model>,
     policies: &HashMap<String, String>,
     completed_status_id: i32,
+    changed_by_id: Uuid,
 ) -> Result<CompleteWorkOrderEffect, AppError> {
     // Validate image phases from database records
     let mut phase_counts = HashMap::new();
@@ -135,9 +138,17 @@ pub fn decide_complete_work_order(
         }
     }
 
-    let mut active_wo: work_orders::ActiveModel = work_order.into();
+    let mut active_wo: work_orders::ActiveModel = work_order.clone().into();
     active_wo.work_order_status_id = Set(completed_status_id);
     active_wo.updated_at = Set(now);
+
+    let state_history = work_order_state_history::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        work_order_id: Set(work_order.id),
+        work_order_status_id: Set(completed_status_id),
+        changed_by_id: Set(changed_by_id),
+        changed_at: Set(now),
+    };
 
     Ok(CompleteWorkOrderEffect {
         closing_form,
@@ -147,5 +158,6 @@ pub fn decide_complete_work_order(
         part_updates,
         overtime,
         work_order: active_wo,
+        state_history,
     })
 }

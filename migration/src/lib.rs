@@ -12,6 +12,7 @@ mod m20260505_035658_update_field;
 mod m20260505_215000_overtimes_and_phases;
 mod m20260506_090000_update_reject_form;
 mod m20260506_100000_geofencing;
+mod m20260507_012900_rename_image_url;
 
 
 pub struct Migrator;
@@ -32,6 +33,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260505_215000_overtimes_and_phases::Migration),
             Box::new(m20260506_090000_update_reject_form::Migration),
             Box::new(m20260506_100000_geofencing::Migration),
+            Box::new(m20260507_012900_rename_image_url::Migration),
         ]
     }
 }

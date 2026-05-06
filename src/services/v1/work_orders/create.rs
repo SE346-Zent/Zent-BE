@@ -1,7 +1,7 @@
 use sea_orm::Set;
 use crate::{
     core::errors::AppError,
-    entities::work_orders,
+    entities::{work_orders, work_order_state_history},
     model::requests::work_orders::create_work_order_request::CreateWorkOrderRequest,
 };
 use uuid::Uuid;
@@ -9,6 +9,7 @@ use chrono::Utc;
 
 pub struct CreateWorkOrderEffect {
     pub work_order: work_orders::ActiveModel,
+    pub state_history: work_order_state_history::ActiveModel,
 }
 
 pub fn decide_create_work_order(
@@ -51,5 +52,13 @@ pub fn decide_create_work_order(
         ..Default::default()
     };
 
-    Ok(CreateWorkOrderEffect { work_order })
+    let state_history = work_order_state_history::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        work_order_id: Set(wo_id),
+        work_order_status_id: Set(pending_status_id),
+        changed_by_id: Set(customer_id),
+        changed_at: Set(now),
+    };
+
+    Ok(CreateWorkOrderEffect { work_order, state_history })
 }

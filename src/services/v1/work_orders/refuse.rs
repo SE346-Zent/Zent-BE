@@ -32,7 +32,7 @@ pub fn decide_refuse_work_order(
         let image_id = Uuid::new_v4();
         images_to_insert.push(images::ActiveModel {
             id: Set(image_id),
-            image_url: Set(url),
+            object_name: Set(url),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()

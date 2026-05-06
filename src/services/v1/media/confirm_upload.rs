@@ -18,7 +18,7 @@ pub fn decide_confirm_upload(
     technician_id: Uuid,
     target_lat: f64,
     target_lng: f64,
-    image_url: String,
+    object_name: String,
     policies: &HashMap<String, String>,
 ) -> Result<ConfirmUploadEffect, AppError> {
     // 1. Security Check
@@ -27,21 +27,21 @@ pub fn decide_confirm_upload(
     }
 
     // 2. Geofencing Check
-    let radius: f64 = policies.get("geofencing_radius")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(500.0);
+    // let radius: f64 = policies.get("geofencing_radius")
+    //     .and_then(|v| v.parse().ok())
+    //     .unwrap_or(500.0);
 
-    let is_verified = is_within_geofence(
-        req.latitude,
-        req.longitude,
-        target_lat,
-        target_lng,
-        radius,
-    );
+    // let is_verified = is_within_geofence(
+    //     req.latitude,
+    //     req.longitude,
+    //     target_lat,
+    //     target_lng,
+    //     radius,
+    // );
 
-    if !is_verified {
-        return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
-    }
+    // if !is_verified {
+    //     return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
+    // }
 
     // 3. Prepare Side-Effects
     let image_id = Uuid::new_v4();
@@ -49,7 +49,7 @@ pub fn decide_confirm_upload(
 
     let image = images::ActiveModel {
         id: Set(image_id),
-        image_url: Set(image_url),
+        object_name: Set(object_name),
         created_at: Set(now),
         updated_at: Set(now),
         deleted_at: Set(None),

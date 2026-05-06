@@ -173,7 +173,16 @@ pub async fn create(
         create::decide_create_work_order(payload.clone(), auth.user.id, pending_status_id)?;
 
     // ── 5. Execution (I/O) ──────────────────────────────────────────────
-    let wo_model = effect.work_order.insert(db.as_ref()).await?;
+    let wo_model = db.transaction::<_, work_orders_ent::Model, AppError>(|txn| {
+        Box::pin(async move {
+            let wo = effect.work_order.insert(txn).await?;
+            effect.state_history.insert(txn).await?;
+            Ok(wo)
+        })
+    }).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
 
     // ── 5.1 Invalidate List Caches (Namespace/Generation Invalidation) ──
     if let Some(client) = valkey_client.as_ref() {
@@ -467,9 +476,19 @@ pub async fn assign(
         &luts.policies,
         assigned_status_id,
         done_status_id,
+        auth.user.id,
     )?;
 
-    effect.work_order.update(db.as_ref()).await?;
+    db.transaction::<_, (), AppError>(|txn| {
+        Box::pin(async move {
+            effect.work_order.update(txn).await?;
+            effect.state_history.insert(txn).await?;
+            Ok(())
+        })
+    }).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
 
     Ok(Json(ApiResponse::success(200, "Work order assigned successfully", ())))
 }
@@ -590,6 +609,7 @@ pub async fn complete(
         existing_image_links,
         &luts.policies,
         completed_status_id,
+        auth.user.id,
     )?;
 
     db.transaction::<_, (), AppError>(|txn| {
@@ -611,6 +631,7 @@ pub async fn complete(
                 ot.insert(txn).await?;
             }
             effect.work_order.update(txn).await?;
+            effect.state_history.insert(txn).await?;
             Ok(())
         })
     }).await.map_err(|e| match e {

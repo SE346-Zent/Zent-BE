@@ -1,3 +1,4 @@
+pub mod auto_assign;
 pub mod create;
 pub mod list;
 pub mod get_details;
