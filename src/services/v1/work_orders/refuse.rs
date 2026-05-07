@@ -1,7 +1,7 @@
 use sea_orm::Set;
 use uuid::Uuid;
 use chrono::Utc;
-use crate::entities::{work_orders, work_order_reject_forms, images, work_order_reject_form_image_links};
+use crate::entities::{work_orders, work_order_reject_forms, images, work_order_reject_form_image_links, work_order_state_history};
 use crate::model::requests::work_orders::refuse_request::RefuseWorkOrderRequest;
 use crate::core::errors::AppError;
 
@@ -10,6 +10,7 @@ pub struct RefuseEffect {
     pub reject_form: work_order_reject_forms::ActiveModel,
     pub images: Vec<images::ActiveModel>,
     pub image_links: Vec<work_order_reject_form_image_links::ActiveModel>,
+    pub state_history: work_order_state_history::ActiveModel,
 }
 
 pub fn decide_refuse_work_order(
@@ -54,15 +55,27 @@ pub fn decide_refuse_work_order(
         updated_at: Set(Some(now)),
     };
 
+    let old_status_id = work_order.work_order_status_id;
+
     let mut work_order_active: work_orders::ActiveModel = work_order.into();
     work_order_active.work_order_status_id = Set(refuse_in_review_status_id);
     work_order_active.reject_form_id = Set(Some(reject_form_id));
     work_order_active.updated_at = Set(now);
+
+    let state_history = work_order_state_history::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        work_order_id: Set(work_order_active.id.clone().unwrap()),
+        from_status_id: Set(Some(old_status_id)),
+        to_status_id: Set(refuse_in_review_status_id),
+        changed_by_id: Set(technician_id),
+        changed_at: Set(now),
+    };
 
     Ok(RefuseEffect {
         work_order: work_order_active,
         reject_form,
         images: images_to_insert,
         image_links: image_links_to_insert,
+        state_history,
     })
 }

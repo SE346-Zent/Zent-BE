@@ -29,6 +29,7 @@ use crate::model::{
             create_response::WorkOrderResponseData,
             list_response::WorkOrderListItem,
             details_response::WorkOrderDetails,
+            history_response::WorkOrderStateHistoryEntry,
         },
     },
 };
@@ -951,6 +952,7 @@ pub async fn refuse(
                 link.insert(txn).await?;
             }
             effect.work_order.update(txn).await?;
+            effect.state_history.insert(txn).await?;
             Ok(())
         })
     }).await.map_err(|e| match e {
@@ -1062,9 +1064,45 @@ pub async fn complete(
     Ok(Json(ApiResponse::success(200, "Work order completed successfully", ())))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/work_orders/{id}/history",
+    responses(
+        (status = 200, description = "Work order state history", body = ApiResponse<Vec<WorkOrderStateHistoryEntry>>),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Work order not found", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn history(
-    State(_db): State<Arc<DatabaseConnection>>,
-) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
+    auth: AuthUser,
+    State(db): State<Arc<DatabaseConnection>>,
+    State(luts): State<Arc<LookupTables>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<ApiResponse<Vec<WorkOrderStateHistoryEntry>>>, AppError> {
+    // 1. Fetch the work order to verify it exists and check access
+    let work_order = work_orders_ent::Entity::find_by_id(id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+
+    // 2. Access control — same visibility rules as get_details
+    if auth.role.name != "SuperAdmin" && auth.role.name != "Admin" {
+        if auth.user.id != work_order.customer_id {
+            return Err(AppError::Forbidden("You do not have permission to view this work order's history".to_string()));
+        }
+    }
+
+    // 3. Fetch and transform history
+    let entries = crate::services::v1::work_orders::history::decide_get_history(
+        db.as_ref(),
+        id,
+        &luts,
+    ).await?;
+
+    Ok(Json(ApiResponse::success(200, "Work order state history retrieved successfully", entries)))
+}
 
 #[utoipa::path(
     post,

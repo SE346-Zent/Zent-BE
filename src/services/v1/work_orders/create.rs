@@ -55,7 +55,8 @@ pub fn decide_create_work_order(
     let state_history = work_order_state_history::ActiveModel {
         id: Set(Uuid::new_v4()),
         work_order_id: Set(wo_id),
-        work_order_status_id: Set(pending_status_id),
+        from_status_id: Set(None), // Initial creation — no previous status
+        to_status_id: Set(pending_status_id),
         changed_by_id: Set(customer_id),
         changed_at: Set(now),
     };

@@ -32,6 +32,7 @@ use crate::model::{
             approve_refusal_request::ApproveRefusalRequest,
             add_parts_request::AddPartsRequest,
             refuse_request::{RefuseWorkOrderRequest, RefuseWorkOrderMultipart},
+
         },
         pagination::PaginationRequest,
     },
@@ -42,6 +43,7 @@ use crate::model::{
             create_response::WorkOrderResponseData,
             list_response::WorkOrderListItem,
             details_response::WorkOrderDetails,
+            history_response::WorkOrderStateHistoryEntry,
         },
         base::MessageOnlyResponse,
         pagination::PaginationResponse,
@@ -74,6 +76,7 @@ use crate::handlers::v1::{auth, work_orders, media};
         work_orders::add_parts,
         work_orders::approve_refusal,
         work_orders::deny_refusal,
+        work_orders::history,
         media::upload_new_part_photo,
         media::upload_closing_form_photo,
         media::update_closing_form_photo,
@@ -109,6 +112,7 @@ use crate::handlers::v1::{auth, work_orders, media};
             StartWorkOrderRequest,
             ApproveRefusalRequest,
             AddPartsRequest,
+            WorkOrderStateHistoryEntry,
         )
     ),
     modifiers(&SecurityAddon),

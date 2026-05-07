@@ -58,7 +58,8 @@ pub async fn decide_start(
     let state_history = work_order_state_history::ActiveModel {
         id: Set(Uuid::new_v4()),
         work_order_id: Set(work_order.id),
-        work_order_status_id: Set(in_progress_status_id),
+        from_status_id: Set(Some(work_order.work_order_status_id)),
+        to_status_id: Set(in_progress_status_id),
         changed_by_id: Set(technician_id),
         changed_at: Set(now),
     };

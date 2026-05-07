@@ -17,6 +17,7 @@ mod m20260507_102900_update_new_part_forms_and_reject_forms;
 mod m20260508_090000_refactor_image_links;
 mod m20260508_100000_make_approver_nullable;
 mod m20260507_122648_rename_signature_field;
+mod m20260509_100000_refactor_state_history;
 
 
 pub struct Migrator;
@@ -42,6 +43,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260508_090000_refactor_image_links::Migration),
             Box::new(m20260508_100000_make_approver_nullable::Migration),
             Box::new(m20260507_122648_rename_signature_field::Migration),
+            Box::new(m20260509_100000_refactor_state_history::Migration),
         ]
     }
 }
