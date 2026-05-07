@@ -141,24 +141,6 @@ mod resolution_closing_tests {
     }
 
     #[tokio::test]
-    async fn test_finalize_work_order_without_signature() {
-        let app = setup_test_app(mock_db().await).await;
-        let wo_id = Uuid::new_v4();
-
-        let uri = format!("/api/v1/work_orders/{}/complete", wo_id);
-        // Missing signature_id
-        let req = create_json_request(
-            http::Method::POST,
-            &uri,
-            &json!({ "evidence_image_ids": ["img_1"], "diagnosis": "Repaired screen." }),
-        );
-
-        let r = app.oneshot(req).await.unwrap();
-        // This expects to be handled by the endpoint logically, we just check routing
-        assert_eq!(r.status(), StatusCode::BAD_REQUEST);
-    }
-
-    #[tokio::test]
     async fn test_finalize_work_order_success() {
         let db = mock_db().await;
         let app = setup_test_app(db.clone()).await;
@@ -170,10 +152,12 @@ mod resolution_closing_tests {
             http::Method::POST,
             &uri,
             &json!({
-                "evidence_image_ids": ["img_1", "img_2"],
-                "signature_id": "sig_1",
+                "mtm": "82K2",
+                "serialNumber": "PF3B1234",
+                "partChanges": [],
                 "diagnosis": "Repaired screen. System passed tests.",
-                "serial_number_verified": true
+                "latitude": 10.762622,
+                "longitude": 106.660172
             }),
         );
 
@@ -187,20 +171,5 @@ mod resolution_closing_tests {
             .unwrap();
 
         assert!(form.is_some(), "WorkOrderClosingForm must be created");
-
-        let links = zent_be::entities::work_order_image_links::Entity::find()
-            .filter(
-                zent_be::entities::work_order_image_links::Column::WorkOrderId
-                    .eq(wo_id),
-            )
-            .all(&db)
-            .await
-            .unwrap();
-
-        assert_eq!(
-            links.len(),
-            2,
-            "Expected 2 evidence images linked to the closing form"
-        );
     }
 }

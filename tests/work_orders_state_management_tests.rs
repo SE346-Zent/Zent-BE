@@ -155,7 +155,14 @@ mod state_management_tests {
         let req_complete = create_json_request(
             http::Method::POST,
             &uri_complete,
-            &json!({ "evidence_image_ids": ["img_1"], "signature_id": "sig_1" }),
+            &json!({
+                "mtm": "82K2",
+                "serialNumber": "PF3B1234",
+                "partChanges": [],
+                "diagnosis": "Repaired screen.",
+                "latitude": 10.762622,
+                "longitude": 106.660172
+            }),
         );
         let r_complete = app.clone().oneshot(req_complete).await.unwrap();
         assert_eq!(r_complete.status(), StatusCode::OK);
@@ -171,7 +178,14 @@ mod state_management_tests {
         let req_complete = create_json_request(
             http::Method::POST,
             &uri_complete,
-            &json!({ "evidence_image_ids": ["img_1"], "signature_id": "sig_1" }),
+            &json!({
+                "mtm": "82K2",
+                "serialNumber": "PF3B1234",
+                "partChanges": [],
+                "diagnosis": "Repaired screen.",
+                "latitude": 10.762622,
+                "longitude": 106.660172
+            }),
         );
         let r_complete = app.clone().oneshot(req_complete).await.unwrap();
         // This expects to be handled by the endpoint logically, we just check routing

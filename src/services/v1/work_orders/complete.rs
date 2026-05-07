@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use chrono::{FixedOffset, Utc, Timelike};
+use chrono::{FixedOffset, Utc, Timelike, Duration};
 use sea_orm::Set;
 use uuid::Uuid;
 use crate::{
@@ -31,28 +31,14 @@ pub struct CompleteWorkOrderEffect {
 pub fn decide_complete_work_order(
     req: CompleteWorkOrderRequest,
     work_order: work_orders::Model,
-    existing_image_links: Vec<work_order_image_links::Model>,
     policies: &HashMap<String, String>,
     completed_status_id: i32,
     technician_id: Uuid,
 ) -> Result<CompleteWorkOrderEffect, AppError> {
-    // 1. Photo Requirements Check
-    let phases = ["Pre-check", "Execution", "Completion"];
-    for phase in phases {
-        let count = existing_image_links.iter().filter(|l| l.phase == phase).count();
-        let min_required: usize = policies.get(&format!("min_photos_{}", phase.to_lowercase().replace("-", "_")))
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0);
-        
-        if count < min_required {
-            return Err(AppError::BadRequest(format!("Minimum {} photos required for phase {}", min_required, phase)));
-        }
-    }
-
     let now = Utc::now();
     let closing_form_id = Uuid::new_v4();
 
-    // 2. Prepare Closing Form
+    // 1. Prepare Closing Form
     let closing_form = work_order_closing_forms::ActiveModel {
         id: Set(closing_form_id),
         product_id: Set(work_order.product_id),
@@ -60,7 +46,7 @@ pub fn decide_complete_work_order(
         mtm: Set(req.mtm),
         serial_number: Set(req.serial_number),
         diagnosis: Set(req.diagnosis),
-        signature_url: Set(req.signature_file_name),
+        signature_url: Set(String::new()),
         created_at: Set(now),
         updated_at: Set(now),
     };
@@ -79,15 +65,40 @@ pub fn decide_complete_work_order(
         });
     }
 
-    // 4. Overtime Logic
+    // 4. Overtime Logic (Calculated from workday_end policy)
     let mut overtime = None;
     let local_now = now.with_timezone(&FixedOffset::east_opt(7 * 3600).unwrap()); // ICT
-    if local_now.hour() >= 18 || local_now.hour() < 8 {
+    
+    let workday_start: u32 = policies.get("workday_start")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8);
+    let workday_end: u32 = policies.get("workday_end")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(18);
+
+    let hour = local_now.hour();
+    let mut overtime_minutes = 0;
+
+    if hour >= workday_end {
+        // Case A: Finished after workday end on the same day
+        let day_end_time = local_now.date_naive()
+            .and_hms_opt(workday_end, 0, 0).unwrap()
+            .and_local_timezone(FixedOffset::east_opt(7 * 3600).unwrap()).unwrap();
+        overtime_minutes = local_now.signed_duration_since(day_end_time).num_minutes();
+    } else if hour < workday_start {
+        // Case B: Finished after midnight but before next workday start
+        let prev_day_end_time = (local_now.date_naive() - Duration::days(1))
+            .and_hms_opt(workday_end, 0, 0).unwrap()
+            .and_local_timezone(FixedOffset::east_opt(7 * 3600).unwrap()).unwrap();
+        overtime_minutes = local_now.signed_duration_since(prev_day_end_time).num_minutes();
+    }
+
+    if overtime_minutes > 0 {
         overtime = Some(overtimes::ActiveModel {
             id: Set(Uuid::new_v4()),
             technician_id: Set(technician_id),
             work_order_id: Set(work_order.id),
-            overtime_minutes: Set(60), // Placeholder for 1 hour
+            overtime_minutes: Set(overtime_minutes as i32),
             created_at: Set(now),
         });
     }

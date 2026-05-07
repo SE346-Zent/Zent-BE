@@ -36,7 +36,7 @@ use crate::services::v1::work_orders::{create, list as list_svc, get_details as 
 use redis::AsyncCommands;
 use serde_json::json;
 
-use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms, work_order_image_links, users};
+use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms, users};
 use crate::entities::work_orders as work_orders;
 use sea_orm::TransactionTrait;
 use crate::core::config::AppConfig;
@@ -377,7 +377,6 @@ pub async fn approve_refusal(
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
     Path(id): Path<Uuid>,
-    Json(payload): Json<ApproveRefusalRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     // 1. Fetch data
     let work_order = work_orders::Entity::find_by_id(id)
@@ -398,34 +397,15 @@ pub async fn approve_refusal(
         .await?
         .ok_or_else(|| AppError::NotFound("Rejection form not found".to_string()))?;
 
-    let technician = users::Entity::find_by_id(payload.technician_id)
-        .filter(users::Column::RoleId.eq(3)) // Assuming Role::Technician = 3
-        .filter(users::Column::Province.eq(work_order.province.clone()))
-        .one(db.as_ref())
-        .await?
-        .ok_or_else(|| AppError::NotFound("Technician not found or not in this area".to_string()))?;
-
-    let technician_work_orders = work_orders::Entity::find()
-        .filter(work_orders::Column::TechnicianId.eq(technician.id))
-        .all(db.as_ref())
-        .await?;
-
-    let assigned_status_id = *luts.work_order_statuses_by_name.get("Assigned")
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Assigned status not found")))?;
-    let _in_progress_status_id = *luts.work_order_statuses_by_name.get("In Progress")
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("In Progress status not found")))?;
-    let done_status_id = *luts.work_order_statuses_by_name.get("Closed")
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Closed status not found")))?;
+    let rejected_status_id = *luts.work_order_statuses_by_name.get("Rejected")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Rejected status not found")))?;
 
     // 2. Decision Logic
     let effect = crate::services::v1::work_orders::approve_refusal::decide_approve_refusal(
         work_order,
         reject_form,
-        technician,
-        technician_work_orders,
         auth.user.id,
-        assigned_status_id,
-        done_status_id,
+        rejected_status_id,
     )?;
 
     // 3. Execution
@@ -441,7 +421,7 @@ pub async fn approve_refusal(
         sea_orm::TransactionError::Transaction(e) => e,
     })?;
 
-    Ok(Json(ApiResponse::message_only(200, "Refusal approved and work order reassigned")))
+    Ok(Json(ApiResponse::message_only(200, "Refusal approved successfully, work order is now Rejected")))
 }
 
 #[utoipa::path(
@@ -481,15 +461,15 @@ pub async fn deny_refusal(
         .await?
         .ok_or_else(|| AppError::NotFound("Rejection form not found".to_string()))?;
 
-    let rejected_status_id = *luts.work_order_statuses_by_name.get("Rejected")
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Rejected status not found")))?;
+    let pending_status_id = *luts.work_order_statuses_by_name.get("Pending")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status not found")))?;
 
     // 2. Decision Logic
     let effect = crate::services::v1::work_orders::deny_refusal::decide_deny_refusal(
         work_order,
         reject_form,
         auth.user.id,
-        rejected_status_id,
+        pending_status_id,
     )?;
 
     // 3. Execution
@@ -505,7 +485,7 @@ pub async fn deny_refusal(
         sea_orm::TransactionError::Transaction(e) => e,
     })?;
 
-    Ok(Json(ApiResponse::message_only(200, "Refusal denied successfully")))
+    Ok(Json(ApiResponse::message_only(200, "Refusal denied. Work order reset to Pending for reassignment.")))
 }
 
 #[utoipa::path(
@@ -850,7 +830,7 @@ pub async fn cancel(
 #[utoipa::path(
     post,
     path = "/api/v1/work_orders/{id}/complete",
-    request_body = CompleteWorkOrderRequest,
+    request_body(content = CompleteWorkOrderRequest, content_type = "application/json"),
     responses(
         (status = 200, description = "Work order completed successfully"),
         (status = 400, description = "Bad Request", body = ErrorResponse),
@@ -906,16 +886,9 @@ pub async fn complete(
     let completed_status_id = *luts.work_order_statuses_by_name.get("Closed")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
 
-    // Fetch existing image links to validate required photos
-    let existing_image_links = work_order_image_links::Entity::find()
-        .filter(work_order_image_links::Column::WorkOrderId.eq(id))
-        .all(db.as_ref())
-        .await?;
-
     let effect = crate::services::v1::work_orders::complete::decide_complete_work_order(
         payload,
         work_order,
-        existing_image_links,
         &luts.policies,
         completed_status_id,
         auth.user.id,

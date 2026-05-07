@@ -5,15 +5,6 @@ use validator::Validate;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct PhaseImage {
-    #[validate(length(min = 1))]
-    pub phase: String, // 'pre-disassembly', 'disassembled', 'post-assembly'
-    #[validate(url)]
-    pub image_url: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub struct PartChangeInput {
     pub part_id: Uuid,
     pub change_type: String, // 'installed', 'uninstalled'
@@ -31,8 +22,6 @@ pub struct CompleteWorkOrderRequest {
     pub diagnosis: String,
     pub latitude: f64,
     pub longitude: f64,
-    #[validate(length(min = 1))]
-    pub signature_file_name: String,
 }
 
 // Remove CompleteWorkOrderMultipart as it's no longer needed for detatched flow
