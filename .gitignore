@@ -58,3 +58,5 @@ db_seed.rs
 errors.txt
 seeder_errors.txt
 *config*
+.reasonix/
+nul

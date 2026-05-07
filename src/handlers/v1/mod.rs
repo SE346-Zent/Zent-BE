@@ -27,7 +27,6 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
 
     // 2. Technician Routes
     let tech_routes = Router::new()
-        .route("/{id}/schedule", axum::routing::post(work_orders::schedule))
         .route("/{id}/start", axum::routing::post(work_orders::start))
         .route("/{id}/refuse", axum::routing::post(work_orders::refuse))
         .route("/{id}/complete", axum::routing::post(work_orders::complete))
