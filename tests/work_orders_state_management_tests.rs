@@ -161,7 +161,8 @@ mod state_management_tests {
                 "partChanges": [],
                 "diagnosis": "Repaired screen.",
                 "latitude": 10.762622,
-                "longitude": 106.660172
+                "longitude": 106.660172,
+                "signatureFileName": "sig.png"
             }),
         );
         let r_complete = app.clone().oneshot(req_complete).await.unwrap();
@@ -184,7 +185,8 @@ mod state_management_tests {
                 "partChanges": [],
                 "diagnosis": "Repaired screen.",
                 "latitude": 10.762622,
-                "longitude": 106.660172
+                "longitude": 106.660172,
+                "signatureFileName": "sig.png"
             }),
         );
         let r_complete = app.clone().oneshot(req_complete).await.unwrap();

@@ -13,7 +13,7 @@ pub struct Model {
     pub mtm: String,
     pub serial_number: String,
     pub diagnosis: String,
-    pub signature_url: String,
+    pub signature_file_name: String,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
 }

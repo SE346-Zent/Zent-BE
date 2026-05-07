@@ -46,23 +46,37 @@ pub fn decide_complete_work_order(
         mtm: Set(req.mtm),
         serial_number: Set(req.serial_number),
         diagnosis: Set(req.diagnosis),
-        signature_url: Set(String::new()),
+        signature_file_name: Set(req.signature_file_name),
         created_at: Set(now),
         updated_at: Set(now),
     };
 
-    // 3. Prepare Part Changes
+    // 2. Prepare Part Changes and Updates
     let mut part_changes_models = Vec::new();
-    let part_updates = Vec::new();
+    let mut part_updates = Vec::new();
     for pc in req.part_changes {
         part_changes_models.push(part_changes::ActiveModel {
             part_id: Set(pc.part_id),
             work_order_closing_form_id: Set(closing_form_id),
-            change_type: Set(pc.change_type),
+            change_type: Set(pc.change_type.clone()),
             created_at: Set(now),
             updated_at: Set(now),
             ..Default::default()
         });
+
+        let mut part_update = parts::ActiveModel {
+            id: Set(pc.part_id),
+            ..Default::default()
+        };
+
+        if pc.change_type == "installed" {
+            part_update.product_id = Set(Some(work_order.product_id));
+            part_update.installation_date = Set(Some(now));
+        } else if pc.change_type == "uninstalled" {
+            part_update.product_id = Set(None);
+            part_update.removal_date = Set(Some(now));
+        }
+        part_updates.push(part_update);
     }
 
     // 4. Overtime Logic (Calculated from workday_end policy)

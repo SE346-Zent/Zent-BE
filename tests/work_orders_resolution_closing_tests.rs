@@ -126,7 +126,7 @@ mod resolution_closing_tests {
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK);
 
-        // Assert linkage: signature_url is updated in WorkOrderClosingForms
+        // Assert linkage: signature_file_name is updated in WorkOrderClosingForms
         let form = zent_be::entities::work_order_closing_forms::Entity::find()
             .filter(zent_be::entities::work_order_closing_forms::Column::WorkOrderId.eq(wo_id))
             .one(&db)
@@ -135,8 +135,8 @@ mod resolution_closing_tests {
 
         assert!(form.is_some(), "Expected a closing form for the work order");
         assert!(
-            !form.unwrap().signature_url.is_empty(),
-            "Expected a signature URL linkage to be made"
+            !form.unwrap().signature_file_name.is_empty(),
+            "Expected a signature file name linkage to be made"
         );
     }
 
@@ -157,7 +157,8 @@ mod resolution_closing_tests {
                 "partChanges": [],
                 "diagnosis": "Repaired screen. System passed tests.",
                 "latitude": 10.762622,
-                "longitude": 106.660172
+                "longitude": 106.660172,
+                "signatureFileName": "sig_file_123.png"
             }),
         );
 
@@ -171,5 +172,6 @@ mod resolution_closing_tests {
             .unwrap();
 
         assert!(form.is_some(), "WorkOrderClosingForm must be created");
+        assert_eq!(form.unwrap().signature_file_name, "sig_file_123.png");
     }
 }
