@@ -60,7 +60,7 @@ pub fn decide_complete_work_order(
         mtm: Set(req.mtm),
         serial_number: Set(req.serial_number),
         diagnosis: Set(req.diagnosis),
-        signature_url: Set(req.signature_url),
+        signature_url: Set(req.signature_file_name),
         created_at: Set(now),
         updated_at: Set(now),
     };

@@ -32,7 +32,7 @@ pub struct CompleteWorkOrderRequest {
     pub latitude: f64,
     pub longitude: f64,
     #[validate(length(min = 1))]
-    pub signature_url: String,
+    pub signature_file_name: String,
 }
 
 // Remove CompleteWorkOrderMultipart as it's no longer needed for detatched flow

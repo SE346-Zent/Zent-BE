@@ -32,7 +32,7 @@ use crate::model::{
             approve_refusal_request::ApproveRefusalRequest,
             add_parts_request::AddPartsRequest,
             refuse_request::{RefuseWorkOrderRequest, RefuseWorkOrderMultipart},
-            complete_request::CompleteWorkOrderMultipart,
+            complete_request::CompleteWorkOrderRequest,
         },
         pagination::PaginationRequest,
     },
@@ -111,7 +111,6 @@ use crate::handlers::v1::{auth, work_orders, media};
             StartWorkOrderRequest,
             ApproveRefusalRequest,
             AddPartsRequest,
-            CompleteWorkOrderMultipart,
         )
     ),
     modifiers(&SecurityAddon),

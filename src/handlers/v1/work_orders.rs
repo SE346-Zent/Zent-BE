@@ -21,7 +21,6 @@ use crate::model::{
         approve_refusal_request::ApproveRefusalRequest,
         add_parts_request::AddPartsRequest,
         refuse_request::RefuseWorkOrderMultipart,
-        complete_request::CompleteWorkOrderMultipart,
     },
     requests::pagination::PaginationRequest,
     responses::{
