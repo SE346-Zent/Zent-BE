@@ -377,6 +377,8 @@ pub async fn approve_refusal(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
+    State(rabbitmq_opt): State<Option<Arc<lapin::Connection>>>,
+    State(templates): State<Arc<std::collections::HashMap<String, String>>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     // 1. Fetch data
@@ -401,6 +403,10 @@ pub async fn approve_refusal(
     let rejected_status_id = *luts.work_order_statuses_by_name.get("Rejected")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Rejected status not found")))?;
 
+    // Save info for email before work_order is consumed
+    let customer_id = work_order.customer_id;
+    let wo_number = work_order.work_order_number.clone();
+
     // 2. Decision Logic
     let effect = crate::services::v1::work_orders::approve_refusal::decide_approve_refusal(
         work_order,
@@ -421,6 +427,23 @@ pub async fn approve_refusal(
         sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
         sea_orm::TransactionError::Transaction(e) => e,
     })?;
+
+    // 4. Send approval email to customer
+    if let Some(rabbitmq) = rabbitmq_opt.as_ref() {
+        let customer = users::Entity::find_by_id(customer_id)
+            .one(db.as_ref())
+            .await?;
+        if let Some(cust) = customer {
+            let cust_name = cust.full_name.clone();
+            let _ = crate::services::v1::core::email_service::send_work_order_refusal_approved_email(
+                rabbitmq,
+                &templates,
+                &cust.email,
+                &cust_name,
+                &wo_number,
+            ).await;
+        }
+    }
 
     Ok(Json(ApiResponse::message_only(200, "Refusal approved successfully, work order is now Rejected")))
 }

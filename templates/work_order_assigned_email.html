@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Order Assigned — Zent</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; color: #333333;">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed;">
+        <tr>
+            <td align="center" style="padding: 40px 0;">
+                <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06);">
+                    <!-- Header -->
+                    <tr>
+                        <td align="center" style="padding: 32px 40px; background-color: #0369A1;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 700; letter-spacing: -0.3px;">Zent</h1>
+                            <p style="margin: 6px 0 0 0; color: rgba(255,255,255,0.85); font-size: 14px;">Work Order Assignment</p>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px 40px 30px 40px;">
+                            <h2 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 600; color: #111111;">Hi {{name}},</h2>
+                            <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.7; color: #555555;">
+                                Great news! A technician has been assigned to your work order. Here are the details:
+                            </p>
+
+                            <!-- Details Card -->
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 28px;">
+                                <tr>
+                                    <td style="padding: 24px;">
+                                        <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                            <tr>
+                                                <td style="padding-bottom: 14px;">
+                                                    <span style="font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Work Order</span>
+                                                    <p style="margin: 4px 0 0 0; font-size: 20px; color: #0369A1; font-weight: 700;">{{work_order_number}}</p>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding-bottom: 12px;">
+                                                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                                        <tr>
+                                                            <td width="50%" style="padding: 6px 0;">
+                                                                <span style="font-size: 13px; color: #64748b;">Assigned Technician</span>
+                                                                <p style="margin: 2px 0 0 0; font-size: 15px; color: #1e293b; font-weight: 600;">{{technician_name}}</p>
+                                                            </td>
+                                                            <td width="50%" style="padding: 6px 0;">
+                                                                <span style="font-size: 13px; color: #64748b;">Appointment</span>
+                                                                <p style="margin: 2px 0 0 0; font-size: 15px; color: #1e293b; font-weight: 600;">{{appointment}}</p>
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 0 0 10px 0; font-size: 15px; line-height: 1.6; color: #555555;">
+                                The technician will arrive at your location at the scheduled appointment time. If you have any questions or need to reschedule, please contact our support team.
+                            </p>
+                            <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #555555;">
+                                You can track the real-time status of your work order in the Zent app.
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 24px 40px; background-color: #fcfcfc; border-top: 1px solid #eef2f6; text-align: center;">
+                            <p style="margin: 0 0 6px 0; font-size: 12px; color: #94a3b8;">
+                                &copy; 2026 Zent Project. All rights reserved.
+                            </p>
+                            <p style="margin: 0; font-size: 12px; color: #94a3b8;">
+                                This is an automated notification regarding your service request.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
