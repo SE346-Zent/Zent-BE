@@ -17,6 +17,11 @@ use crate::model::{
         assign_request::AssignWorkOrderRequest,
         complete_request::CompleteWorkOrderRequest,
         refuse_request::RefuseWorkOrderRequest,
+        start_request::StartWorkOrderRequest,
+        approve_refusal_request::ApproveRefusalRequest,
+        add_parts_request::AddPartsRequest,
+        refuse_request::RefuseWorkOrderMultipart,
+        complete_request::CompleteWorkOrderMultipart,
     },
     requests::pagination::PaginationRequest,
     responses::{
@@ -32,7 +37,8 @@ use crate::services::v1::work_orders::{create, list as list_svc, get_details as 
 use redis::AsyncCommands;
 use serde_json::json;
 
-use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms, work_order_closing_image_links};
+use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms, work_order_image_links, users};
+use crate::entities::work_orders as work_orders;
 use sea_orm::TransactionTrait;
 use crate::core::config::AppConfig;
 
@@ -354,6 +360,156 @@ async fn fetch_paginated_work_orders(
 }
 
 #[utoipa::path(
+    post,
+    path = "/api/v1/work_orders/{id}/refusal/approve",
+    request_body = ApproveRefusalRequest,
+    responses(
+        (status = 200, description = "Refusal approved and work order reassigned", body = ApiResponse<String>),
+        (status = 400, description = "Bad Request"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Work order or technician not found"),
+        (status = 409, description = "Technician schedule conflict"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn approve_refusal(
+    Extension(auth): Extension<AuthUser>,
+    State(db): State<Arc<DatabaseConnection>>,
+    State(luts): State<Arc<LookupTables>>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<ApproveRefusalRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    // 1. Fetch data
+    let work_order = work_orders::Entity::find_by_id(id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+
+    // Check geofence admin
+    if auth.user.province.as_ref() != Some(&work_order.province) {
+        return Err(AppError::Forbidden("You can only manage work orders in your area".into()));
+    }
+
+    let reject_form_id = work_order.reject_form_id
+        .ok_or_else(|| AppError::BadRequest("This work order does not have a rejection form".to_string()))?;
+
+    let reject_form = crate::entities::work_order_reject_forms::Entity::find_by_id(reject_form_id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Rejection form not found".to_string()))?;
+
+    let technician = users::Entity::find_by_id(payload.technician_id)
+        .filter(users::Column::RoleId.eq(3)) // Assuming Role::Technician = 3
+        .filter(users::Column::Province.eq(work_order.province.clone()))
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Technician not found or not in this area".to_string()))?;
+
+    let technician_work_orders = work_orders::Entity::find()
+        .filter(work_orders::Column::TechnicianId.eq(technician.id))
+        .all(db.as_ref())
+        .await?;
+
+    let assigned_status_id = *luts.work_order_statuses_by_name.get("Assigned")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Assigned status not found")))?;
+    let _in_progress_status_id = *luts.work_order_statuses_by_name.get("In Progress")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("In Progress status not found")))?;
+    let done_status_id = *luts.work_order_statuses_by_name.get("Closed")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Closed status not found")))?;
+
+    // 2. Decision Logic
+    let effect = crate::services::v1::work_orders::approve_refusal::decide_approve_refusal(
+        work_order,
+        reject_form,
+        technician,
+        technician_work_orders,
+        auth.user.id,
+        assigned_status_id,
+        done_status_id,
+    )?;
+
+    // 3. Execution
+    db.transaction::<_, (), AppError>(|txn| {
+        Box::pin(async move {
+            effect.work_order.update(txn).await?;
+            effect.reject_form.update(txn).await?;
+            effect.state_history.insert(txn).await?;
+            Ok(())
+        })
+    }).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
+
+    Ok(Json(ApiResponse::message_only(200, "Refusal approved and work order reassigned")))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/work_orders/{id}/refusal/deny",
+    responses(
+        (status = 200, description = "Refusal denied, status reverted", body = ApiResponse<String>),
+        (status = 400, description = "Bad Request"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Work order not found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn deny_refusal(
+    Extension(auth): Extension<AuthUser>,
+    State(db): State<Arc<DatabaseConnection>>,
+    State(luts): State<Arc<LookupTables>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    // 1. Fetch data
+    let work_order = work_orders::Entity::find_by_id(id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+
+    // Check geofence admin
+    if auth.user.province.as_ref() != Some(&work_order.province) {
+        return Err(AppError::Forbidden("You can only manage work orders in your area".into()));
+    }
+
+    let reject_form_id = work_order.reject_form_id
+        .ok_or_else(|| AppError::BadRequest("This work order does not have a rejection form".to_string()))?;
+
+    let reject_form = crate::entities::work_order_reject_forms::Entity::find_by_id(reject_form_id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Rejection form not found".to_string()))?;
+
+    let rejected_status_id = *luts.work_order_statuses_by_name.get("Rejected")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Rejected status not found")))?;
+
+    // 2. Decision Logic
+    let effect = crate::services::v1::work_orders::deny_refusal::decide_deny_refusal(
+        work_order,
+        reject_form,
+        auth.user.id,
+        rejected_status_id,
+    )?;
+
+    // 3. Execution
+    db.transaction::<_, (), AppError>(|txn| {
+        Box::pin(async move {
+            effect.work_order.update(txn).await?;
+            effect.reject_form.update(txn).await?;
+            effect.state_history.insert(txn).await?;
+            Ok(())
+        })
+    }).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
+
+    Ok(Json(ApiResponse::message_only(200, "Refusal denied successfully")))
+}
+
+#[utoipa::path(
     get,
     path = "/api/v1/work_orders/{id}",
     responses(
@@ -438,6 +594,8 @@ pub async fn assign(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
+    State(rabbitmq_opt): State<Option<Arc<lapin::Connection>>>,
+    State(templates): State<Arc<std::collections::HashMap<String, String>>>,
     Path(id): Path<Uuid>,
     Json(payload): Json<AssignWorkOrderRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
@@ -470,8 +628,8 @@ pub async fn assign(
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
 
     let effect = crate::services::v1::work_orders::assign::decide_assign_work_order(
-        payload,
-        work_order,
+        payload.clone(),
+        work_order.clone(),
         technician_work_orders,
         &luts.policies,
         assigned_status_id,
@@ -490,6 +648,32 @@ pub async fn assign(
         sea_orm::TransactionError::Transaction(e) => e,
     })?;
 
+    // Send email to customer
+    if let Some(rabbitmq) = rabbitmq_opt.as_ref() {
+        let technician = users::Entity::find_by_id(payload.technician_id)
+            .one(db.as_ref())
+            .await?;
+        let customer = users::Entity::find_by_id(work_order.customer_id)
+            .one(db.as_ref())
+            .await?;
+        
+        if let (Some(tech), Some(cust)) = (technician, customer) {
+            let tech_name = tech.full_name.clone();
+            let cust_name = cust.full_name.clone();
+            let appointment = work_order.appointment.to_string();
+            
+            let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(
+                rabbitmq,
+                &templates,
+                &cust.email,
+                &cust_name,
+                &work_order.work_order_number,
+                &tech_name,
+                &appointment,
+            ).await;
+        }
+    }
+
     Ok(Json(ApiResponse::success(200, "Work order assigned successfully", ())))
 }
 
@@ -497,14 +681,65 @@ pub async fn schedule(
     State(_db): State<Arc<DatabaseConnection>>,
 ) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/work_orders/{id}/start",
+    request_body = StartWorkOrderRequest,
+    responses(
+        (status = 200, description = "Work order started successfully", body = ApiResponse<String>),
+        (status = 400, description = "Bad Request"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Work order not found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn start(
-    State(_db): State<Arc<DatabaseConnection>>,
-) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
+    Extension(auth): Extension<AuthUser>,
+    State(db): State<Arc<DatabaseConnection>>,
+    State(luts): State<Arc<LookupTables>>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<StartWorkOrderRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+    // 1. Fetch data
+    let work_order = work_orders_ent::Entity::find_by_id(id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+
+    let in_progress_status_id = *luts.work_order_statuses_by_name.get("InProg")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("In Progress status not found")))?;
+
+    // 2. Decision Logic
+    let effect = crate::services::v1::work_orders::start::decide_start(
+        payload,
+        work_order,
+        auth.user.id,
+        in_progress_status_id,
+        &luts.policies,
+    ).await?;
+
+    // 3. Execution
+    db.transaction::<_, (), AppError>(|txn| {
+        Box::pin(async move {
+            effect.work_order.update(txn).await?;
+            effect.state_history.insert(txn).await?;
+            Ok(())
+        })
+    }).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
+
+    Ok(Json(ApiResponse::message_only(200, "Work order started successfully")))
+}
 
 #[utoipa::path(
     post,
     path = "/api/v1/work_orders/{id}/refuse",
-    request_body = RefuseWorkOrderRequest,
+    request_body(content = RefuseWorkOrderMultipart, content_type = "multipart/form-data"),
     responses(
         (status = 200, description = "Work order refusal submitted successfully"),
         (status = 400, description = "Bad Request", body = ErrorResponse),
@@ -519,14 +754,65 @@ pub async fn refuse(
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
     Path(id): Path<Uuid>,
-    Json(payload): Json<RefuseWorkOrderRequest>,
+    mut multipart: axum::extract::Multipart,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let mut reason = String::new();
+    let mut explanation = String::new();
+    let mut photos_data = Vec::new();
+
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "photos" {
+            let content_type = field.content_type().unwrap_or("image/jpeg").to_string();
+            let file_name = field.file_name().unwrap_or("photo.jpg").to_string();
+            if let Ok(data) = field.bytes().await {
+                photos_data.push((data, content_type, file_name));
+            }
+        } else if let Ok(text) = field.text().await {
+            match name.as_str() {
+                "reason" => reason = text,
+                "explanation" => explanation = text,
+                _ => {}
+            }
+        }
+    }
+
+    if reason.is_empty() {
+        return Err(AppError::BadRequest("reason is required".to_string()));
+    }
+    
+    if photos_data.len() > 5 {
+        return Err(AppError::BadRequest("A maximum of 5 photos are allowed".to_string()));
+    }
 
     let work_order = work_orders_ent::Entity::find_by_id(id)
         .one(db.as_ref())
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+
+    if work_order.technician_id != Some(auth.user.id) {
+        return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
+    }
+
+    let mut evidence_image_urls = Vec::new();
+    for (data, ct, file_name) in photos_data {
+        let extension = file_name.split('.').last().unwrap_or("jpg");
+        let unique_name = format!(
+            "refuse_{}_{}_{}.{}", 
+            id, 
+            chrono::Utc::now().timestamp(), 
+            Uuid::new_v4(), 
+            extension
+        );
+        crate::utils::oci::upload_object(&unique_name, data.to_vec(), &ct).await?;
+        evidence_image_urls.push(unique_name);
+    }
+
+    let payload = RefuseWorkOrderRequest {
+        reason,
+        explanation,
+        evidence_image_urls,
+    };
 
     let refuse_in_review_status_id = *luts.work_order_statuses_by_name.get("Reject_InReview")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Reject_InReview' status missing")))?;
@@ -594,12 +880,36 @@ pub async fn complete(
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
+    // Geofencing check
+    let target_location = crate::utils::geocoding::geocode_address(
+        &work_order.address,
+        &work_order.city,
+        &work_order.province,
+        &work_order.country,
+    ).await?;
+
+    let radius: f64 = luts.policies.get("geofencing_radius")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2000.0);
+    
+    let is_verified = crate::utils::geo::is_within_geofence(
+        payload.latitude,
+        payload.longitude,
+        target_location.lat,
+        target_location.lng,
+        radius,
+    );
+
+    if !is_verified {
+        return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
+    }
+
     let completed_status_id = *luts.work_order_statuses_by_name.get("Closed")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
 
     // Fetch existing image links to validate required photos
-    let existing_image_links = work_order_closing_image_links::Entity::find()
-        .filter(work_order_closing_image_links::Column::WorkOrderId.eq(id))
+    let existing_image_links = work_order_image_links::Entity::find()
+        .filter(work_order_image_links::Column::WorkOrderId.eq(id))
         .all(db.as_ref())
         .await?;
 
@@ -646,14 +956,50 @@ pub async fn history(
     State(_db): State<Arc<DatabaseConnection>>,
 ) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/work_orders/{id}/parts",
+    request_body = AddPartsRequest,
+    responses(
+        (status = 200, description = "Parts added successfully", body = ApiResponse<String>),
+        (status = 400, description = "Bad Request"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Work order not found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn add_parts(
-    State(_db): State<Arc<DatabaseConnection>>,
-) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
+    Extension(auth): Extension<AuthUser>,
+    State(db): State<Arc<DatabaseConnection>>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<AddPartsRequest>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-pub async fn approve_refusal(
-    State(_db): State<Arc<DatabaseConnection>>,
-) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
+    // 1. Fetch data
+    let work_order = work_orders_ent::Entity::find_by_id(id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
 
-pub async fn deny_refusal(
-    State(_db): State<Arc<DatabaseConnection>>,
-) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
+    // 2. Decision Logic
+    let effect = crate::services::v1::work_orders::add_parts::decide_add_parts(
+        payload,
+        work_order,
+        auth.user.id,
+    )?;
+
+    // 3. Execution
+    db.transaction::<_, (), AppError>(|txn| {
+        Box::pin(async move {
+            effect.new_part_form.insert(txn).await?;
+            Ok(())
+        })
+    }).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
+
+    Ok(Json(ApiResponse::message_only(200, "Parts added successfully")))
+}

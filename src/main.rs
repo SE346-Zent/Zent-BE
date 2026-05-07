@@ -86,6 +86,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let auto_assign_job = infrastructure::cron_tasks::auto_assign::build_auto_assign_job(
         db.clone(),
         state.lookup_tables.clone(),
+        state.rabbitmq.clone(),
+        state.templates.clone(),
     ).expect("Failed to build auto assign job");
     
     app_scheduler.register_job(user_cleanup_job)

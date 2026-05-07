@@ -3,7 +3,6 @@
 pub mod prelude;
 
 pub mod account_status;
-pub mod closing_form_image_links;
 pub mod images;
 pub mod new_part_form_image_links;
 pub mod new_part_forms;
@@ -25,7 +24,7 @@ pub mod sessions;
 pub mod users;
 pub mod warranties;
 pub mod work_order_closing_forms;
-pub mod work_order_closing_image_links;
+pub mod work_order_image_links;
 pub mod overtimes;
 pub mod work_order_reject_form_image_links;
 pub mod work_order_reject_forms;

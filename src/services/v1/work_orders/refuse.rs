@@ -46,9 +46,9 @@ pub fn decide_refuse_work_order(
 
     let reject_form = work_order_reject_forms::ActiveModel {
         id: Set(reject_form_id),
-        approver_id: Set(Uuid::nil()), // Will be filled when an admin reviews it
+        approver_id: Set(None), // Will be filled when an admin reviews it
         approved: Set(false),
-        reason: Set(Some(payload.reason)),
+        reason: Set(payload.reason),
         explanation: Set(payload.explanation),
         created_at: Set(Some(now)),
         updated_at: Set(Some(now)),

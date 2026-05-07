@@ -11,14 +11,18 @@ use tracing::{info, error};
 pub fn build_auto_assign_job(
     db: DatabaseConnection,
     luts: std::sync::Arc<LookupTables>,
+    rabbitmq: Option<std::sync::Arc<lapin::Connection>>,
+    templates: std::sync::Arc<std::collections::HashMap<String, String>>,
 ) -> Result<Job, anyhow::Error> {
     // Run every 1 hour at the top of the hour: "0 0 * * * *"
     let job = Job::new_async("0 0 * * * *", move |_uuid, _l| {
         let db_clone = db.clone();
         let luts_clone = luts.clone();
+        let rabbitmq_clone = rabbitmq.clone();
+        let templates_clone = templates.clone();
         Box::pin(async move {
             info!("Running auto-assign job...");
-            if let Err(e) = process_auto_assign(&db_clone, &luts_clone).await {
+            if let Err(e) = process_auto_assign(&db_clone, &luts_clone, &rabbitmq_clone, &templates_clone).await {
                 error!("Error in auto-assign job: {:?}", e);
             }
         })
@@ -29,6 +33,8 @@ pub fn build_auto_assign_job(
 async fn process_auto_assign(
     db: &DatabaseConnection,
     luts: &LookupTables,
+    rabbitmq_opt: &Option<std::sync::Arc<lapin::Connection>>,
+    templates: &std::sync::Arc<std::collections::HashMap<String, String>>,
 ) -> Result<(), anyhow::Error> {
     let cfg = AppConfig::get();
     let system_user_id = cfg.system_user_id;
@@ -105,6 +111,7 @@ async fn process_auto_assign(
 
         match effect {
             Ok(Some(eff)) => {
+                let assigned_tech_id = eff.work_order.technician_id.clone().unwrap().unwrap();
                 db.transaction::<_, (), anyhow::Error>(|txn| {
                     Box::pin(async move {
                         eff.work_order.update(txn).await.map_err(|e| anyhow::anyhow!(e))?;
@@ -112,7 +119,34 @@ async fn process_auto_assign(
                         Ok(())
                     })
                 }).await.map_err(|e| anyhow::anyhow!(e))?;
+                
                 info!("Auto-assigned WO {} successfully", wo.work_order_number);
+
+                // Send assigned email
+                if let Some(rabbitmq) = rabbitmq_opt.as_ref() {
+                    let customer = users::Entity::find_by_id(wo.customer_id)
+                        .one(db)
+                        .await
+                        .unwrap_or_default();
+                    let technician = users::Entity::find_by_id(assigned_tech_id)
+                        .one(db)
+                        .await
+                        .unwrap_or_default();
+                    if let (Some(cust), Some(tech)) = (customer, technician) {
+                        let tech_name = tech.full_name.clone();
+                        let cust_name = cust.full_name.clone();
+                        let appointment = wo.appointment.to_string();
+                        let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(
+                            rabbitmq,
+                            templates,
+                            &cust.email,
+                            &cust_name,
+                            &wo.work_order_number,
+                            &tech_name,
+                            &appointment,
+                        ).await;
+                    }
+                }
             }
             Ok(None) => {
                 info!("No suitable technician found for auto-assigning WO {}", wo.work_order_number);

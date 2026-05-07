@@ -29,6 +29,11 @@ pub struct CompleteWorkOrderRequest {
     pub part_changes: Vec<PartChangeInput>,
     #[validate(length(min = 1))]
     pub diagnosis: String,
-    #[validate(url)]
+    pub latitude: f64,
+    pub longitude: f64,
+    #[validate(length(min = 1))]
     pub signature_url: String,
 }
+
+// Remove CompleteWorkOrderMultipart as it's no longer needed for detatched flow
+// (or leave it if you prefer but we'll use JSON for the main call now)

@@ -58,7 +58,7 @@ pub async fn seed_product_models(db: &DatabaseConnection, _seed: u64) -> Result<
                 let img_id = Uuid::new_v4();
                 images::ActiveModel {
                     id: Set(img_id),
-                    image_url: Set(url.to_string()),
+                    object_name: Set(url.to_string()),
                     created_at: Set(now),
                     updated_at: Set(now),
                     deleted_at: Set(None),

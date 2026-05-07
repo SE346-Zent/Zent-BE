@@ -11,7 +11,7 @@ pub fn is_within_geofence(
     let tech_point = Point::new(tech_lng, tech_lat);
     let target_point = Point::new(target_lng, target_lat);
 
-    // Haversine distance in meters
+    // Haversine distance in meters (explicitly using meters as requested)
     #[allow(deprecated)]
     let distance = tech_point.haversine_distance(&target_point);
 

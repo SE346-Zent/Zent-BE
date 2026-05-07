@@ -18,7 +18,7 @@ pub fn decide_create_work_order(
     pending_status_id: i32,
 ) -> Result<CreateWorkOrderEffect, AppError> {
     // 1. Location Policy Validation
-    if req.city != "HCM" || req.province != "HN" {
+    if req.city != "HCM" && req.city != "HN" {
         return Err(AppError::BadRequest("Only HCM and HN are supported at this time".to_string()));
     }
 

@@ -13,6 +13,9 @@ mod m20260505_215000_overtimes_and_phases;
 mod m20260506_090000_update_reject_form;
 mod m20260506_100000_geofencing;
 mod m20260507_012900_rename_image_url;
+mod m20260507_102900_update_new_part_forms_and_reject_forms;
+mod m20260508_090000_refactor_image_links;
+mod m20260508_100000_make_approver_nullable;
 
 
 pub struct Migrator;
@@ -34,6 +37,9 @@ impl MigratorTrait for Migrator {
             Box::new(m20260506_090000_update_reject_form::Migration),
             Box::new(m20260506_100000_geofencing::Migration),
             Box::new(m20260507_012900_rename_image_url::Migration),
+            Box::new(m20260507_102900_update_new_part_forms_and_reject_forms::Migration),
+            Box::new(m20260508_090000_refactor_image_links::Migration),
+            Box::new(m20260508_100000_make_approver_nullable::Migration),
         ]
     }
 }

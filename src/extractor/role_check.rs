@@ -46,7 +46,13 @@ where
 
             // 3. Check if the user has the required role (or is SuperAdmin)
             if auth_user.user.role_id != *required_role_id && auth_user.user.role_id != *super_admin_role_id {
-                return Err(AppError::Forbidden("You do not have the required role to access this resource".to_string()));
+                return Err(AppError::Forbidden(format!(
+                    "Role mismatch: user has role_id {}, but required role '{}' has role_id {}. (SuperAdmin ID: {})",
+                    auth_user.user.role_id,
+                    role.as_str(),
+                    required_role_id,
+                    super_admin_role_id
+                )));
             }
 
             // 4. Inject AuthUser into extensions so handlers don't have to re-extract it

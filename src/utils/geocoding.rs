@@ -41,10 +41,22 @@ pub async fn geocode_address(
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse Nominatim response: {}", e)))?;
 
-    let first = resp.first().ok_or_else(|| AppError::BadRequest("Address not found".to_string()))?;
+    let first = resp.first().ok_or_else(|| {
+        AppError::BadRequest(format!("Address not found: '{}'", full_address))
+    })?;
+
+    let lat: f64 = first.lat.parse().unwrap_or(0.0);
+    let lon: f64 = first.lon.parse().unwrap_or(0.0);
+
+    tracing::info!(
+        "Geocoded address: '{}' -> Coordinates: (lat: {}, lon: {})",
+        full_address,
+        lat,
+        lon
+    );
 
     Ok(Location {
-        lat: first.lat.parse().unwrap_or(0.0),
-        lng: first.lon.parse().unwrap_or(0.0),
+        lat,
+        lng: lon,
     })
 }

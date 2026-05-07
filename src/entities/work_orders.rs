@@ -69,8 +69,8 @@ pub enum Relation {
     Users1,
     #[sea_orm(has_one = "super::work_order_closing_forms::Entity")]
     WorkOrderClosingForms,
-    #[sea_orm(has_many = "super::work_order_closing_image_links::Entity")]
-    WorkOrderClosingImageLinks,
+    #[sea_orm(has_many = "super::work_order_image_links::Entity")]
+    WorkOrderImageLinks,
     #[sea_orm(has_many = "super::overtimes::Entity")]
     Overtimes,
     #[sea_orm(
@@ -107,11 +107,19 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     SelfRef,
+    #[sea_orm(has_many = "super::new_part_forms::Entity")]
+    NewPartForms,
 }
 
 impl Related<super::products::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Products.def()
+    }
+}
+
+impl Related<super::new_part_forms::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::NewPartForms.def()
     }
 }
 
@@ -121,9 +129,9 @@ impl Related<super::work_order_closing_forms::Entity> for Entity {
     }
 }
 
-impl Related<super::work_order_closing_image_links::Entity> for Entity {
+impl Related<super::work_order_image_links::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::WorkOrderClosingImageLinks.def()
+        Relation::WorkOrderImageLinks.def()
     }
 }
 
@@ -159,11 +167,11 @@ impl Related<super::work_order_symptoms::Entity> for Entity {
 
 impl Related<super::images::Entity> for Entity {
     fn to() -> RelationDef {
-        super::work_order_closing_image_links::Relation::Images.def()
+        super::work_order_image_links::Relation::Images.def()
     }
     fn via() -> Option<RelationDef> {
         Some(
-            super::work_order_closing_image_links::Relation::WorkOrders
+            super::work_order_image_links::Relation::WorkOrders
                 .def()
                 .rev(),
         )

@@ -188,10 +188,10 @@ mod resolution_closing_tests {
 
         assert!(form.is_some(), "WorkOrderClosingForm must be created");
 
-        let links = zent_be::entities::closing_form_image_links::Entity::find()
+        let links = zent_be::entities::work_order_image_links::Entity::find()
             .filter(
-                zent_be::entities::closing_form_image_links::Column::WorkOrderClosingFormId
-                    .eq(form.unwrap().id),
+                zent_be::entities::work_order_image_links::Column::WorkOrderId
+                    .eq(wo_id),
             )
             .all(&db)
             .await
