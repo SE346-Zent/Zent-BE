@@ -82,6 +82,15 @@ pub async fn upload_closing_form_photo(
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
 
+    // 2. Authorization — only assigned technician (or superadmin/admin)
+    if work_order.technician_id != Some(auth.user.id)
+        && auth.role.name != "SuperAdmin"
+        && auth.role.name != "Admin"
+    {
+        return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
+    }
+
+    // 3. Geofencing check (before OCI upload to avoid orphaned objects)
     let target_location = geocoding::geocode_address(
         &work_order.address,
         &work_order.city,
@@ -89,7 +98,23 @@ pub async fn upload_closing_form_photo(
         &work_order.country,
     ).await?;
 
-    // 2. Generate Unique File Name and Upload to OCI
+    let radius: f64 = luts.policies.get("geofencing_radius")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(500.0);
+
+    let is_verified = crate::utils::geo::is_within_geofence(
+        latitude,
+        longitude,
+        target_location.lat,
+        target_location.lng,
+        radius,
+    );
+
+    if !is_verified {
+        return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
+    }
+
+    // 4. Generate Unique File Name and Upload to OCI
     let extension = file_name.split('.').last().unwrap_or("jpg");
     let unique_file_name = format!(
         "wo_closing_{}_{}_{}.{}", 
@@ -101,7 +126,7 @@ pub async fn upload_closing_form_photo(
 
     let object_name = oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
 
-    // 3. Decision Logic (Pure)
+    // 5. Decision Logic (Pure)
     let payload = ConfirmUploadRequest {
         unique_file_name,
         latitude,
@@ -119,7 +144,7 @@ pub async fn upload_closing_form_photo(
         &luts.policies,
     )?;
 
-    // 4. Execution (I/O)
+    // 6. Execution (I/O)
     db.transaction::<_, (), AppError>(|txn| {
         Box::pin(async move {
             effect.image.insert(txn).await?;
@@ -190,11 +215,20 @@ pub async fn update_closing_form_photo(
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
 
+    // 2. Authorization — only assigned technician (or superadmin/admin)
+    if work_order.technician_id != Some(auth.user.id)
+        && auth.role.name != "SuperAdmin"
+        && auth.role.name != "Admin"
+    {
+        return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
+    }
+
     let link = work_order_image_links::Entity::find_by_id((image_id, id))
         .one(db.as_ref())
         .await?
         .ok_or_else(|| AppError::NotFound("Image link not found".to_string()))?;
 
+    // 3. Geofencing check (before OCI upload to avoid orphaned objects)
     let target_location = geocoding::geocode_address(
         &work_order.address,
         &work_order.city,
@@ -202,7 +236,23 @@ pub async fn update_closing_form_photo(
         &work_order.country,
     ).await?;
 
-    // 2. Generate Unique File Name and Upload to OCI
+    let radius: f64 = luts.policies.get("geofencing_radius")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(500.0);
+
+    let is_verified = crate::utils::geo::is_within_geofence(
+        latitude,
+        longitude,
+        target_location.lat,
+        target_location.lng,
+        radius,
+    );
+
+    if !is_verified {
+        return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
+    }
+
+    // 4. Generate Unique File Name and Upload to OCI
     let extension = file_name.split('.').last().unwrap_or("jpg");
     let unique_file_name = format!(
         "wo_closing_update_{}_{}_{}.{}", 
@@ -214,7 +264,7 @@ pub async fn update_closing_form_photo(
 
     let object_name = oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
 
-    // 3. Decision Logic (Pure)
+    // 5. Decision Logic (Pure)
     let payload = ConfirmUpdateRequest {
         unique_file_name,
         latitude,
@@ -233,7 +283,7 @@ pub async fn update_closing_form_photo(
         &luts.policies,
     )?;
 
-    // 4. Execution (I/O)
+    // 6. Execution (I/O)
     db.transaction::<_, (), AppError>(|txn| {
         let image_id = effect.image_id;
         let object_name = effect.object_name;

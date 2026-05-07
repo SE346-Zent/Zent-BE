@@ -94,4 +94,10 @@ impl Related<super::work_order_state_history::Entity> for Entity {
     }
 }
 
+impl Related<super::overtimes::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Overtimes.def()
+    }
+}
+
 impl ActiveModelBehavior for ActiveModel {}
