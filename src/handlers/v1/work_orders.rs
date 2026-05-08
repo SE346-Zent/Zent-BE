@@ -37,7 +37,7 @@ use crate::services::v1::work_orders::{create, list as list_svc, get_details as 
 use redis::AsyncCommands;
 use serde_json::json;
 
-use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms, users};
+use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms, work_order_image_links, users};
 use crate::entities::work_orders as work_orders;
 use sea_orm::TransactionTrait;
 use crate::core::config::AppConfig;
@@ -387,8 +387,15 @@ pub async fn approve_refusal(
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
 
-    // Check geofence admin
-    if auth.user.province.as_ref() != Some(&work_order.province) {
+    // Role gate — only Admin or SuperAdmin can approve refusals
+    if auth.role.name != "Admin" && auth.role.name != "SuperAdmin" {
+        return Err(AppError::Forbidden("Only admins can approve refusals".into()));
+    }
+
+    // Province check — SuperAdmins have unrestricted access (no province assigned)
+    if auth.role.name != "SuperAdmin"
+        && auth.user.province.as_ref() != Some(&work_order.province)
+    {
         return Err(AppError::Forbidden("You can only manage work orders in your area".into()));
     }
 
@@ -472,8 +479,15 @@ pub async fn deny_refusal(
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
 
-    // Check geofence admin
-    if auth.user.province.as_ref() != Some(&work_order.province) {
+    // Role gate — only Admin or SuperAdmin can deny refusals
+    if auth.role.name != "Admin" && auth.role.name != "SuperAdmin" {
+        return Err(AppError::Forbidden("Only admins can deny refusals".into()));
+    }
+
+    // Province check — SuperAdmins have unrestricted access (no province assigned)
+    if auth.role.name != "SuperAdmin"
+        && auth.user.province.as_ref() != Some(&work_order.province)
+    {
         return Err(AppError::Forbidden("You can only manage work orders in your area".into()));
     }
 
@@ -931,7 +945,11 @@ pub async fn refuse(
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
 
-    if work_order.technician_id != Some(auth.user.id) {
+    // Ownership check — only the assigned technician (or admin/superadmin) may refuse
+    if work_order.technician_id != Some(auth.user.id)
+        && auth.role.name != "SuperAdmin"
+        && auth.role.name != "Admin"
+    {
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
@@ -1022,6 +1040,15 @@ pub async fn complete(
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
+    // State-machine check — only "In Progress" work orders can be completed
+    let in_progress_status_id = *luts.work_order_statuses_by_name.get("In Progress")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'In Progress' status missing")))?;
+    if work_order.work_order_status_id != in_progress_status_id {
+        return Err(AppError::BadRequest(
+            "Work order must be 'In Progress' to be completed".to_string()
+        ));
+    }
+
     // Geofencing check
     let target_location = crate::utils::geocoding::geocode_address(
         &work_order.address,
@@ -1049,9 +1076,16 @@ pub async fn complete(
     let completed_status_id = *luts.work_order_statuses_by_name.get("Closed")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
 
+    // Fetch existing image links for per-phase photo count validation
+    let existing_links = work_order_image_links::Entity::find()
+        .filter(work_order_image_links::Column::WorkOrderId.eq(id))
+        .all(db.as_ref())
+        .await?;
+
     let effect = crate::services::v1::work_orders::complete::decide_complete_work_order(
         payload,
         work_order,
+        &existing_links,
         &luts.policies,
         completed_status_id,
         auth.user.id,

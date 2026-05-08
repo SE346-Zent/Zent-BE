@@ -5,14 +5,14 @@ use axum::{
     Extension,
 };
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, EntityTrait, TransactionTrait, ActiveModelTrait, Set};
+use sea_orm::{DatabaseConnection, EntityTrait, TransactionTrait, ActiveModelTrait};
 use uuid::Uuid;
 
 use crate::core::errors::AppError;
 use crate::core::lookup_tables::LookupTables;
 use crate::extractor::auth_user::AuthUser;
 use crate::utils::{oci, geocoding};
-use crate::entities::{work_orders, work_order_image_links, images};
+use crate::entities::{work_orders, work_order_image_links};
 use crate::services::v1::media::{confirm_upload, confirm_update};
 use crate::model::responses::base::ApiResponse;
 use crate::model::requests::media::confirm_upload_request::ConfirmUploadRequest;
@@ -274,7 +274,6 @@ pub async fn update_closing_form_photo(
     let effect = confirm_update::decide_confirm_update(
         payload,
         &work_order,
-        image_id,
         link,
         auth.user.id,
         target_location.lat,
@@ -285,22 +284,14 @@ pub async fn update_closing_form_photo(
 
     // 6. Execution (I/O)
     db.transaction::<_, (), AppError>(|txn| {
-        let image_id = effect.image_id;
-        let object_name = effect.object_name;
-        let updated_at = effect.updated_at;
+        let new_image = effect.new_image;
         let link_update = effect.link_update;
 
         Box::pin(async move {
-            // Update Image record
-            let mut img_active = images::ActiveModel {
-                id: Set(image_id),
-                ..Default::default()
-            };
-            img_active.object_name = Set(object_name);
-            img_active.updated_at = Set(updated_at);
-            img_active.update(txn).await?;
+            // Insert new image record for the replacement photo
+            new_image.insert(txn).await?;
 
-            // Update Link record
+            // Update link to point to the new image
             link_update.update(txn).await?;
 
             Ok(())
@@ -437,7 +428,7 @@ pub async fn list_work_order_photos(
     security(("bearer_auth" = []))
 )]
 pub async fn upload_new_part_photo(
-    Extension(_auth): Extension<AuthUser>,
+    Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
     Path(id): Path<Uuid>,
     mut multipart: Multipart,
@@ -465,6 +456,16 @@ pub async fn upload_new_part_photo(
         .one(db.as_ref())
         .await?
         .ok_or_else(|| AppError::NotFound("New part form not found".to_string()))?;
+
+    // 1b. Ownership check — only the assigned technician may upload
+    let work_order = work_orders::Entity::find_by_id(form.work_order_id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Parent work order not found".to_string()))?;
+
+    if work_order.technician_id != Some(auth.user.id) {
+        return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
+    }
 
     // 2. Upload to OCI
     let extension = file_name.split('.').last().unwrap_or("jpg");

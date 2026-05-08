@@ -62,6 +62,7 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
 }
 
 fn media_router(state: AppState) -> Router<AppState> {
+    // Write routes — require technician role
     let closing_form_routes = Router::new()
         .route("/photos", axum::routing::post(media::upload_closing_form_photo))
         .route("/photos/{image_id}", axum::routing::patch(media::update_closing_form_photo))
@@ -71,13 +72,20 @@ fn media_router(state: AppState) -> Router<AppState> {
             require_role::<AppState>(Role::Technician),
         ));
 
-    Router::new()
+    let write_routes = Router::new()
         .nest("/work_orders/{id}/closing_form", closing_form_routes)
-        .route("/photos/work_orders/{id}", axum::routing::get(media::get_work_order_photo))
-        .route("/photos/work_orders", axum::routing::get(media::list_work_order_photos))
         .route("/new_part_forms/{id}/photos", axum::routing::post(media::upload_new_part_photo))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(Role::Technician),
-        ))
+        ));
+
+    // Read routes — no role middleware (authorization handled at handler level when implemented)
+    let read_routes = Router::new()
+        .route("/photos/work_orders/{id}", axum::routing::get(media::get_work_order_photo))
+        .route("/photos/work_orders", axum::routing::get(media::list_work_order_photos));
+
+    Router::new()
+        .merge(write_routes)
+        .merge(read_routes)
 }

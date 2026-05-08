@@ -1,23 +1,20 @@
 use std::collections::HashMap;
 use sea_orm::Set;
 use uuid::Uuid;
-use chrono::{Utc, DateTime};
+use chrono::Utc;
 use crate::core::errors::AppError;
 use crate::model::requests::media::confirm_update_request::ConfirmUpdateRequest;
-use crate::entities::{work_orders, work_order_image_links};
+use crate::entities::{work_orders, work_order_image_links, images};
 use crate::utils::geo::is_within_geofence;
 
 pub struct ConfirmUpdateEffect {
-    pub image_id: Uuid,
-    pub object_name: String,
-    pub updated_at: DateTime<Utc>,
+    pub new_image: images::ActiveModel,
     pub link_update: work_order_image_links::ActiveModel,
 }
 
 pub fn decide_confirm_update(
     req: ConfirmUpdateRequest,
     work_order: &work_orders::Model,
-    image_id: Uuid,
     existing_link: work_order_image_links::Model,
     technician_id: Uuid,
     target_lat: f64,
@@ -49,15 +46,26 @@ pub fn decide_confirm_update(
 
     // 3. Prepare Side-Effects
     let now = Utc::now();
+    let new_image_id = Uuid::new_v4();
+
+    // Create a new image record for the replacement photo
+    let new_image = images::ActiveModel {
+        id: Set(new_image_id),
+        object_name: Set(object_name),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    };
+
+    // Update the link to point to the new image record
     let mut link_active: work_order_image_links::ActiveModel = existing_link.into();
+    link_active.image_id = Set(new_image_id);
     link_active.latitude = Set(Some(req.latitude));
     link_active.longitude = Set(Some(req.longitude));
     link_active.is_verified = Set(true);
 
     Ok(ConfirmUpdateEffect {
-        image_id,
-        object_name,
-        updated_at: now,
+        new_image,
         link_update: link_active,
     })
 }

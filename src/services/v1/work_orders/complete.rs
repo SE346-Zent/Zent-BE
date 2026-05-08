@@ -15,6 +15,7 @@ use crate::{
         work_order_state_history,
     },
     model::requests::work_orders::complete_request::CompleteWorkOrderRequest,
+    utils::work_order_phase::WorkOrderPhase,
 };
 
 pub struct CompleteWorkOrderEffect {
@@ -31,12 +32,37 @@ pub struct CompleteWorkOrderEffect {
 pub fn decide_complete_work_order(
     req: CompleteWorkOrderRequest,
     work_order: work_orders::Model,
+    existing_links: &[work_order_image_links::Model],
     policies: &HashMap<String, String>,
     completed_status_id: i32,
     technician_id: Uuid,
 ) -> Result<CompleteWorkOrderEffect, AppError> {
     let now = Utc::now();
     let closing_form_id = Uuid::new_v4();
+
+    // 0. Photo-per-phase validation — at least 1 photo per phase required
+    {
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for phase in WorkOrderPhase::all() {
+            counts.insert(phase.as_str(), 0usize);
+        }
+        for link in existing_links {
+            // Only count links whose phase matches a known phase
+            if let Some(count) = counts.get_mut(link.phase.as_str()) {
+                *count += 1;
+            }
+        }
+        let missing: Vec<&str> = counts
+            .into_iter()
+            .filter(|(_, count)| *count == 0)
+            .map(|(name, _)| name)
+            .collect();
+        if !missing.is_empty() {
+            return Err(AppError::BadRequest(
+                format!("Minimum 1 photo required for phase(s): {}", missing.join(", "))
+            ));
+        }
+    }
 
     // 1. Prepare Closing Form
     let closing_form = work_order_closing_forms::ActiveModel {

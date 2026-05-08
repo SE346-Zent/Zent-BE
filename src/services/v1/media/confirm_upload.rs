@@ -5,6 +5,7 @@ use chrono::Utc;
 use crate::core::errors::AppError;
 use crate::entities::{work_orders, images, work_order_image_links};
 use crate::model::requests::media::confirm_upload_request::ConfirmUploadRequest;
+use crate::utils::work_order_phase::WorkOrderPhase;
 use crate::utils::geo::is_within_geofence;
 
 pub struct ConfirmUploadEffect {
@@ -26,7 +27,13 @@ pub fn decide_confirm_upload(
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
-    // 2. Geofencing Check
+    // 2. Phase Validation
+    let phase = WorkOrderPhase::from_str(&req.phase)
+        .ok_or_else(|| AppError::BadRequest(
+            format!("Invalid phase '{}'. Must be one of: pre-assembly, disassembled, post-assembly", req.phase)
+        ))?;
+
+    // 3. Geofencing Check
     let radius: f64 = policies.get("geofencing_radius")
         .and_then(|v| v.parse().ok())
         .unwrap_or(500.0);
@@ -43,7 +50,7 @@ pub fn decide_confirm_upload(
         return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
     }
 
-    // 3. Prepare Side-Effects
+    // 4. Prepare Side-Effects
     let now = Utc::now();
     let image_id = Uuid::new_v4();
 
@@ -58,7 +65,7 @@ pub fn decide_confirm_upload(
     let image_link = work_order_image_links::ActiveModel {
         image_id: Set(image_id),
         work_order_id: Set(work_order.id),
-        phase: Set(req.phase),
+        phase: Set(phase.to_string()),
         latitude: Set(Some(req.latitude)),
         longitude: Set(Some(req.longitude)),
         is_verified: Set(true),
