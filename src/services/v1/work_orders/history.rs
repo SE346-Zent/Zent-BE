@@ -1,29 +1,18 @@
-use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, QueryOrder, Order};
-use uuid::Uuid;
-
 use crate::{
-    core::errors::AppError,
     core::lookup_tables::LookupTables,
     entities::{work_order_state_history, users},
     model::responses::work_orders::history_response::WorkOrderStateHistoryEntry,
 };
 
-pub async fn decide_get_history(
-    db: &DatabaseConnection,
-    work_order_id: Uuid,
-    luts: &LookupTables,
-) -> Result<Vec<WorkOrderStateHistoryEntry>, AppError> {
-    // Fetch state history rows for this work order, ordered by time
-    let history_rows: Vec<(
+/// Pure transformation: maps raw history rows + user data into API response entries.
+/// The caller (handler) is responsible for fetching the rows from the database.
+pub fn decide_get_history(
+    history_rows: Vec<(
         work_order_state_history::Model,
         Option<users::Model>,
-    )> = work_order_state_history::Entity::find()
-        .filter(work_order_state_history::Column::WorkOrderId.eq(work_order_id))
-        .order_by(work_order_state_history::Column::ChangedAt, Order::Asc)
-        .find_also_related(users::Entity)
-        .all(db)
-        .await?;
-
+    )>,
+    luts: &LookupTables,
+) -> Vec<WorkOrderStateHistoryEntry> {
     let mut entries = Vec::with_capacity(history_rows.len());
 
     for (history, user) in history_rows {
@@ -44,5 +33,5 @@ pub async fn decide_get_history(
         });
     }
 
-    Ok(entries)
+    entries
 }

@@ -22,7 +22,7 @@ pub fn decide_assign_work_order(
     done_status_id: i32,
     changed_by_id: Uuid,
 ) -> Result<AssignWorkOrderEffect, AppError> {
-    let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap(); // GMT+7
+    let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap(); // UTC+7
     let appointment_local = work_order.appointment.with_timezone(&tz_offset);
 
     let workday_start: u32 = policies.get("workday_start")

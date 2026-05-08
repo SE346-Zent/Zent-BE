@@ -5,14 +5,14 @@ use axum::{
     Extension,
 };
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, EntityTrait, TransactionTrait, ActiveModelTrait};
+use sea_orm::{DatabaseConnection, EntityTrait, TransactionTrait, ActiveModelTrait, Set};
 use uuid::Uuid;
 
 use crate::core::errors::AppError;
 use crate::core::lookup_tables::LookupTables;
 use crate::extractor::auth_user::AuthUser;
 use crate::utils::{oci, geocoding};
-use crate::entities::{work_orders, work_order_image_links};
+use crate::entities::{work_orders, work_order_image_links, images};
 use crate::services::v1::media::{confirm_upload, confirm_update};
 use crate::model::responses::base::ApiResponse;
 use crate::model::requests::media::confirm_upload_request::ConfirmUploadRequest;
@@ -398,7 +398,40 @@ pub async fn upload_closing_form_signature(
         extension
     );
 
-    oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
+    let object_name = oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
+
+    // 3. Prepare image + image_link for signature phase
+    let now = chrono::Utc::now();
+    let image_id = Uuid::new_v4();
+
+    let image = images::ActiveModel {
+        id: Set(image_id),
+        object_name: Set(object_name),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    };
+
+    let image_link = work_order_image_links::ActiveModel {
+        image_id: Set(image_id),
+        work_order_id: Set(work_order.id),
+        phase: Set("signature".to_string()),
+        latitude: Set(Some(req_latitude)),
+        longitude: Set(Some(req_longitude)),
+        is_verified: Set(is_verified),
+    };
+
+    // 4. Execute transaction
+    db.transaction::<_, (), AppError>(|txn| {
+        Box::pin(async move {
+            image.insert(txn).await?;
+            image_link.insert(txn).await?;
+            Ok(())
+        })
+    }).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
 
     // Generate full URL for the signature since it's returned directly
     let cfg = crate::core::config::AppConfig::get();

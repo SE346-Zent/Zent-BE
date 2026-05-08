@@ -30,7 +30,7 @@ pub fn decide_confirm_upload(
     // 2. Phase Validation
     let phase = WorkOrderPhase::from_str(&req.phase)
         .ok_or_else(|| AppError::BadRequest(
-            format!("Invalid phase '{}'. Must be one of: pre-assembly, disassembled, post-assembly", req.phase)
+            format!("Invalid phase '{}'. Must be one of: pre-assembly, disassembled, post-assembly, signature", req.phase)
         ))?;
 
     // 3. Geofencing Check

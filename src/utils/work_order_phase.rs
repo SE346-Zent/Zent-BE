@@ -1,6 +1,6 @@
 use std::fmt;
 
-/// The three canonical phases of a work-order closing workflow.
+/// The four canonical phases of a work-order closing workflow.
 ///
 /// Every uploaded closing-form photo must carry one of these phases.
 /// Completing a work order requires at least one photo per phase.
@@ -9,6 +9,7 @@ pub enum WorkOrderPhase {
     PreAssembly,
     Disassembled,
     PostAssembly,
+    Signature,
 }
 
 impl WorkOrderPhase {
@@ -17,6 +18,7 @@ impl WorkOrderPhase {
             WorkOrderPhase::PreAssembly => "pre-assembly",
             WorkOrderPhase::Disassembled => "disassembled",
             WorkOrderPhase::PostAssembly => "post-assembly",
+            WorkOrderPhase::Signature => "signature",
         }
     }
 
@@ -27,6 +29,7 @@ impl WorkOrderPhase {
             "pre-assembly" | "preassembly" => Some(WorkOrderPhase::PreAssembly),
             "disassembled" => Some(WorkOrderPhase::Disassembled),
             "post-assembly" | "postassembly" => Some(WorkOrderPhase::PostAssembly),
+            "signature" => Some(WorkOrderPhase::Signature),
             _ => None,
         }
     }
@@ -37,6 +40,7 @@ impl WorkOrderPhase {
             WorkOrderPhase::PreAssembly,
             WorkOrderPhase::Disassembled,
             WorkOrderPhase::PostAssembly,
+            WorkOrderPhase::Signature,
         ]
     }
 }

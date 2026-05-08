@@ -37,7 +37,7 @@ use crate::services::v1::work_orders::{create, list as list_svc, get_details as 
 use redis::AsyncCommands;
 use serde_json::json;
 
-use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms, work_order_image_links, users};
+use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms, work_order_image_links, work_order_state_history, users};
 use crate::entities::work_orders as work_orders;
 use sea_orm::TransactionTrait;
 use crate::core::config::AppConfig;
@@ -1151,12 +1151,19 @@ pub async fn history(
         }
     }
 
-    // 3. Fetch and transform history
+    // 3. Fetch history rows from database (I/O)
+    let history_rows = work_order_state_history::Entity::find()
+        .filter(work_order_state_history::Column::WorkOrderId.eq(id))
+        .order_by(work_order_state_history::Column::ChangedAt, Order::Asc)
+        .find_also_related(users::Entity)
+        .all(db.as_ref())
+        .await?;
+
+    // 4. Pure transformation
     let entries = crate::services::v1::work_orders::history::decide_get_history(
-        db.as_ref(),
-        id,
+        history_rows,
         &luts,
-    ).await?;
+    );
 
     Ok(Json(ApiResponse::success(200, "Work order state history retrieved successfully", entries)))
 }

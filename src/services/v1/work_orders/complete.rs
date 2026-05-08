@@ -107,7 +107,7 @@ pub fn decide_complete_work_order(
 
     // 4. Overtime Logic (Calculated from workday_end policy)
     let mut overtime = None;
-    let local_now = now.with_timezone(&FixedOffset::east_opt(7 * 3600).unwrap()); // ICT
+    let local_now = now.with_timezone(&FixedOffset::east_opt(7 * 3600).unwrap()); // UTC+7
     
     let workday_start: u32 = policies.get("workday_start")
         .and_then(|v| v.parse().ok())
