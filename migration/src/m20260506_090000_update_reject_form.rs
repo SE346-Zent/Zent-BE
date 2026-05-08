@@ -6,13 +6,35 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // SQLite supports only one ALTER per statement — split into individual calls.
         manager
             .alter_table(
                 Table::alter()
                     .table(WorkOrderRejectForms::Table)
                     .add_column(string_null(WorkOrderRejectForms::Reason))
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(WorkOrderRejectForms::Table)
                     .add_column(string_null(WorkOrderRejectForms::Explanation))
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(WorkOrderRejectForms::Table)
                     .add_column(timestamp_null(CreatedAt))
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(WorkOrderRejectForms::Table)
                     .add_column(timestamp_null(UpdatedAt))
                     .to_owned(),
             )
@@ -62,13 +84,35 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // SQLite: one drop per ALTER
         manager
             .alter_table(
                 Table::alter()
                     .table(WorkOrderRejectForms::Table)
                     .drop_column(WorkOrderRejectForms::Reason)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(WorkOrderRejectForms::Table)
                     .drop_column(WorkOrderRejectForms::Explanation)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(WorkOrderRejectForms::Table)
                     .drop_column(CreatedAt)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(WorkOrderRejectForms::Table)
                     .drop_column(UpdatedAt)
                     .to_owned(),
             )

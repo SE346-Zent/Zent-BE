@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod api_docs;
 pub mod media;
+pub mod notifications;
 pub mod work_orders;
 
 use axum::{Router, middleware};

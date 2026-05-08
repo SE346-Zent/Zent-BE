@@ -1,9 +1,5 @@
-use std::sync::Arc;
 use sea_orm::{DatabaseConnection, Set, ActiveModelTrait};
 use zent_be::entities::{roles, account_status, work_order_statuses, work_order_symptoms};
-use zent_be::services::v1::work_orders::WorkOrderService;
-use zent_be::services::v1::core::media::MediaService;
-use axum::extract::FromRef;
 
 pub const WO_STATUSES: &[&str] = &["Pending", "Assigned", "InProg", "Closed", "Reject_InReview", "Rejected"];
 pub const WORK_ORDER_SYMPTOMS: &[&str] = &[
@@ -44,23 +40,5 @@ pub async fn seed_test_db(db: &DatabaseConnection) {
     }
 }
 
-// ---------------------------------------------------------
-// Test State
-// ---------------------------------------------------------
-#[derive(Clone)]
-pub struct WorkOrderTestState {
-    pub work_order_service: Arc<WorkOrderService>,
-    pub media_service: Arc<MediaService>,
-}
-
-impl FromRef<WorkOrderTestState> for Arc<WorkOrderService> {
-    fn from_ref(state: &WorkOrderTestState) -> Self {
-        state.work_order_service.clone()
-    }
-}
-
-impl FromRef<WorkOrderTestState> for Arc<MediaService> {
-    fn from_ref(state: &WorkOrderTestState) -> Self {
-        state.media_service.clone()
-    }
-}
+// WorkOrderTestState removed — WorkOrderService/MediaService are not yet implemented.
+// Use NotificationTestState (defined per-test) for notification tests.

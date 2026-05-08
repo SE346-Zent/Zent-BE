@@ -6,12 +6,19 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // Add work_order_id to new_part_forms
+        // SQLite: one ALTER per statement
         manager
             .alter_table(
                 Table::alter()
                     .table(NewPartForms::Table)
                     .add_column(ColumnDef::new(NewPartForms::WorkOrderId).uuid().not_null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(NewPartForms::Table)
                     .add_foreign_key(
                         TableForeignKey::new()
                             .name("fk_new_part_forms_work_order")
@@ -32,6 +39,13 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(WorkOrderRejectForms::Table)
                     .modify_column(ColumnDef::new(WorkOrderRejectForms::Reason).string().not_null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(WorkOrderRejectForms::Table)
                     .modify_column(ColumnDef::new(WorkOrderRejectForms::Explanation).string().not_null())
                     .to_owned(),
             )
@@ -46,6 +60,13 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(NewPartForms::Table)
                     .drop_foreign_key(Alias::new("fk_new_part_forms_work_order"))
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(NewPartForms::Table)
                     .drop_column(NewPartForms::WorkOrderId)
                     .to_owned(),
             )
@@ -56,6 +77,13 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(WorkOrderRejectForms::Table)
                     .modify_column(ColumnDef::new(WorkOrderRejectForms::Reason).string().null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(WorkOrderRejectForms::Table)
                     .modify_column(ColumnDef::new(WorkOrderRejectForms::Explanation).string().null())
                     .to_owned(),
             )
