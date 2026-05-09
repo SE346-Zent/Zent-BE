@@ -12,6 +12,7 @@ pub mod part_status;
 pub mod parts;
 pub mod part_condition;
 pub mod policy;
+pub mod checklist;
 
 pub use user::{seed_users, UserSeedConfig};
 pub use role::seed_roles;
@@ -27,3 +28,4 @@ pub use part_status::seed_part_statuses;
 pub use parts::{seed_parts_and_catalogs};
 pub use part_condition::seed_part_conditions;
 pub use policy::seed_policies;
+pub use checklist::seed_checklist_items;

@@ -7,6 +7,7 @@ use crate::{
     entities::{
         work_orders,
         work_order_closing_forms,
+        work_order_closing_form_checklist_results,
         images,
         work_order_image_links,
         part_changes,
@@ -26,6 +27,7 @@ pub struct CompleteWorkOrderEffect {
     pub overtime: Option<overtimes::ActiveModel>,
     pub work_order: work_orders::ActiveModel,
     pub state_history: work_order_state_history::ActiveModel,
+    pub checklist_results: Vec<work_order_closing_form_checklist_results::ActiveModel>,
 }
 
 pub fn decide_complete_work_order(
@@ -117,7 +119,24 @@ pub fn decide_complete_work_order(
         });
     }
 
-    // 5. Update Work Order
+    // 5. Prepare Checklist Results (nullable — only if client provided them)
+    let checklist_results = match req.checklist {
+        Some(items) => items
+            .into_iter()
+            .map(|item| {
+                work_order_closing_form_checklist_results::ActiveModel {
+                    closing_form_id: Set(closing_form_id),
+                    checklist_item_id: Set(item.id),
+                    result: Set(item.result),
+                    notes: Set(item.notes),
+                    created_at: Set(now),
+                }
+            })
+            .collect(),
+        None => Vec::new(),
+    };
+
+    // 6. Update Work Order
     let mut active_wo: work_orders::ActiveModel = work_order.clone().into();
     active_wo.work_order_status_id = Set(completed_status_id);
     active_wo.complete_form_id = Set(Some(closing_form_id));
@@ -141,5 +160,6 @@ pub fn decide_complete_work_order(
         overtime,
         work_order: active_wo,
         state_history,
+        checklist_results,
     })
 }

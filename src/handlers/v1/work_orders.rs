@@ -1072,6 +1072,9 @@ pub async fn complete(
             for pu in effect.part_updates {
                 pu.update(txn).await?;
             }
+            for cr in effect.checklist_results {
+                cr.insert(txn).await?;
+            }
             if let Some(ot) = effect.overtime {
                 ot.insert(txn).await?;
             }

@@ -12,6 +12,14 @@ pub struct PartChangeInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct ChecklistResultInput {
+    pub id: i32,
+    pub result: bool,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct CompleteWorkOrderRequest {
     #[validate(length(min = 1))]
     pub mtm: String,
@@ -24,7 +32,5 @@ pub struct CompleteWorkOrderRequest {
     pub longitude: f64,
     #[validate(length(min = 1))]
     pub signature_file_name: String,
+    pub checklist: Option<Vec<ChecklistResultInput>>,
 }
-
-// Remove CompleteWorkOrderMultipart as it's no longer needed for detatched flow
-// (or leave it if you prefer but we'll use JSON for the main call now)

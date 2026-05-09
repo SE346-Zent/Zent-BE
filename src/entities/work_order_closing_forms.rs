@@ -22,6 +22,8 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::part_changes::Entity")]
     PartChanges,
+    #[sea_orm(has_many = "super::work_order_closing_form_checklist_results::Entity")]
+    WorkOrderClosingFormChecklistResults,
     #[sea_orm(
         belongs_to = "super::products::Entity",
         from = "Column::ProductId",
@@ -43,6 +45,25 @@ pub enum Relation {
 impl Related<super::part_changes::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::PartChanges.def()
+    }
+}
+
+impl Related<super::work_order_closing_form_checklist_results::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderClosingFormChecklistResults.def()
+    }
+}
+
+impl Related<super::checklist_items::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::work_order_closing_form_checklist_results::Relation::ChecklistItems.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::work_order_closing_form_checklist_results::Relation::WorkOrderClosingForms
+                .def()
+                .rev(),
+        )
     }
 }
 

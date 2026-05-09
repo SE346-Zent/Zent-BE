@@ -30,3 +30,5 @@ pub use super::work_order_state_history::Entity as WorkOrderStateHistory;
 pub use super::work_order_statuses::Entity as WorkOrderStatuses;
 pub use super::work_order_symptoms::Entity as WorkOrderSymptoms;
 pub use super::work_orders::Entity as WorkOrders;
+pub use super::checklist_items::Entity as ChecklistItems;
+pub use super::work_order_closing_form_checklist_results::Entity as WorkOrderClosingFormChecklistResults;
