@@ -2,19 +2,14 @@ use axum::{
     body::Body,
     http::{self, Request, StatusCode},
     routing::{get, post},
-    Router,
+    Router, middleware,
 };
 use migration::{Migrator, MigratorTrait};
-use sea_orm::prelude::*;
-use sea_orm::ActiveModelTrait;
-use sea_orm::Set;
 use sea_orm::{Database, DatabaseConnection};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 use uuid::Uuid;
-use zent_be::entities::{account_status, roles};
 
 // ---------------------------------------------------------
 // Infrastructure Mocking
@@ -22,7 +17,10 @@ use zent_be::entities::{account_status, roles};
 
 #[path = "common/mod.rs"]
 mod common;
-use common::{seed_test_db, WorkOrderTestState};
+use common::{
+    seed_test_db, create_test_app_state, create_test_jwt,
+    TEST_ADMIN_ID, TEST_TECHNICIAN_ID,
+};
 
 async fn mock_db() -> DatabaseConnection {
     Database::connect("sqlite::memory:").await.unwrap()
@@ -36,34 +34,31 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
     let _ = tracing_subscriber::fmt::try_init();
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
+    let state = create_test_app_state(db).await;
 
-    let luts = std::sync::Arc::new(zent_be::core::lookup_tables::LookupTables::empty());
+    let admin_mw = middleware::from_fn_with_state(
+        state.clone(),
+        zent_be::extractor::role_check::require_role::<zent_be::core::state::AppState>(
+            zent_be::entities::roles::Role::Admin,
+        ),
+    );
+    let tech_mw = middleware::from_fn_with_state(
+        state.clone(),
+        zent_be::extractor::role_check::require_role::<zent_be::core::state::AppState>(
+            zent_be::entities::roles::Role::Technician,
+        ),
+    );
 
-    let work_order_service =
-        std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
-            db.clone(),
-            luts.clone(),
-            None,
-            None,
-        ));
-
-    let media_service = std::sync::Arc::new(zent_be::services::v1::core::media::MediaService::new(
-        db.clone(),
-        None,
-        None,
-    ));
-
-    let state = WorkOrderTestState {
-        work_order_service,
-        media_service,
-    };
-
-    Router::new()
-        // Core status transitions endpoints
+    // Admin routes
+    let admin_routes = Router::new()
         .route(
             "/api/v1/work_orders/{id}/assign",
             post(zent_be::handlers::v1::work_orders::assign),
         )
+        .layer(admin_mw);
+
+    // Technician routes
+    let tech_routes = Router::new()
         .route(
             "/api/v1/work_orders/{id}/start",
             post(zent_be::handlers::v1::work_orders::start),
@@ -72,11 +67,16 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
             "/api/v1/work_orders/{id}/complete",
             post(zent_be::handlers::v1::work_orders::complete),
         )
-        // New endpoint: State History
+        .layer(tech_mw);
+
+    // Shared routes (no middleware)
+    Router::new()
         .route(
             "/api/v1/work_orders/{id}/history",
             get(zent_be::handlers::v1::work_orders::history),
         )
+        .merge(admin_routes)
+        .merge(tech_routes)
         .with_state(state)
 }
 
@@ -84,12 +84,13 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
 // Request Builders
 // ---------------------------------------------------------
 
-fn create_json_request(method: http::Method, uri: &str, body: &serde_json::Value) -> Request<Body> {
+fn create_json_request_admin(method: http::Method, uri: &str, body: &serde_json::Value) -> Request<Body> {
+    let token = create_test_jwt(Uuid::parse_str(TEST_ADMIN_ID).unwrap());
     let mut req = Request::builder()
         .method(method)
         .uri(uri)
         .header(http::header::CONTENT_TYPE, "application/json")
-        .header(http::header::AUTHORIZATION, "Bearer mock_jwt_token")
+        .header(http::header::AUTHORIZATION, format!("Bearer {}", token))
         .body(Body::from(serde_json::to_string(body).unwrap()))
         .unwrap();
 
@@ -101,11 +102,48 @@ fn create_json_request(method: http::Method, uri: &str, body: &serde_json::Value
     req
 }
 
-fn create_empty_request(method: http::Method, uri: &str) -> Request<Body> {
+fn create_json_request_tech(method: http::Method, uri: &str, body: &serde_json::Value) -> Request<Body> {
+    let token = create_test_jwt(Uuid::parse_str(TEST_TECHNICIAN_ID).unwrap());
     let mut req = Request::builder()
         .method(method)
         .uri(uri)
-        .header(http::header::AUTHORIZATION, "Bearer mock_jwt_token")
+        .header(http::header::CONTENT_TYPE, "application/json")
+        .header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::from(serde_json::to_string(body).unwrap()))
+        .unwrap();
+
+    req.extensions_mut()
+        .insert(axum::extract::ConnectInfo(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            8080,
+        )));
+    req
+}
+
+fn create_empty_request_tech(method: http::Method, uri: &str) -> Request<Body> {
+    let token = create_test_jwt(Uuid::parse_str(TEST_TECHNICIAN_ID).unwrap());
+    let mut req = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(http::header::AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    req.extensions_mut()
+        .insert(axum::extract::ConnectInfo(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            8080,
+        )));
+    req
+}
+
+#[allow(dead_code)]
+fn create_empty_request_admin(method: http::Method, uri: &str) -> Request<Body> {
+    let token = create_test_jwt(Uuid::parse_str(TEST_ADMIN_ID).unwrap());
+    let mut req = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(http::header::AUTHORIZATION, format!("Bearer {}", token))
         .body(Body::empty())
         .unwrap();
 
@@ -130,19 +168,19 @@ mod state_management_tests {
         let app = setup_test_app(mock_db().await).await;
         let wo_id = Uuid::new_v4();
 
-        // 1. Pending -> Assigned
+        // 1. Pending -> Assigned (Admin)
         let uri_assign = format!("/api/v1/work_orders/{}/assign", wo_id);
-        let req_assign = create_json_request(
+        let req_assign = create_json_request_admin(
             http::Method::POST,
             &uri_assign,
-            &json!({ "technician_id": Uuid::new_v4() }),
+            &json!({ "technician_id": Uuid::parse_str(TEST_TECHNICIAN_ID).unwrap() }),
         );
         let r_assign = app.clone().oneshot(req_assign).await.unwrap();
         assert_eq!(r_assign.status(), StatusCode::OK);
 
-        // 2. Assigned -> In Progress
+        // 2. Assigned -> In Progress (Technician)
         let uri_start = format!("/api/v1/work_orders/{}/start", wo_id);
-        let req_start = create_json_request(
+        let req_start = create_json_request_tech(
             http::Method::POST,
             &uri_start,
             &json!({ "latitude": 10.0, "longitude": 106.0 }),
@@ -150,9 +188,9 @@ mod state_management_tests {
         let r_start = app.clone().oneshot(req_start).await.unwrap();
         assert_eq!(r_start.status(), StatusCode::OK);
 
-        // 3. In Progress -> Completed
+        // 3. In Progress -> Completed (Technician)
         let uri_complete = format!("/api/v1/work_orders/{}/complete", wo_id);
-        let req_complete = create_json_request(
+        let req_complete = create_json_request_tech(
             http::Method::POST,
             &uri_complete,
             &json!({
@@ -176,7 +214,7 @@ mod state_management_tests {
 
         // Directly from Pending -> Completed (Invalid)
         let uri_complete = format!("/api/v1/work_orders/{}/complete", wo_id);
-        let req_complete = create_json_request(
+        let req_complete = create_json_request_tech(
             http::Method::POST,
             &uri_complete,
             &json!({
@@ -201,7 +239,7 @@ mod state_management_tests {
 
         // Get History
         let uri_history = format!("/api/v1/work_orders/{}/history", wo_id);
-        let req_history = create_empty_request(http::Method::GET, &uri_history);
+        let req_history = create_empty_request_tech(http::Method::GET, &uri_history);
 
         let r_history = app.oneshot(req_history).await.unwrap();
         // Endpoint should exist

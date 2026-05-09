@@ -2,19 +2,14 @@ use axum::{
     body::Body,
     http::{self, Request, StatusCode},
     routing::post,
-    Router,
+    Router, middleware,
 };
 use migration::{Migrator, MigratorTrait};
-use sea_orm::prelude::*;
-use sea_orm::ActiveModelTrait;
-use sea_orm::Set;
 use sea_orm::{Database, DatabaseConnection};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 use uuid::Uuid;
-use zent_be::entities::{account_status, roles};
 
 // ---------------------------------------------------------
 // Infrastructure Mocking
@@ -22,7 +17,10 @@ use zent_be::entities::{account_status, roles};
 
 #[path = "common/mod.rs"]
 mod common;
-use common::{seed_test_db, WorkOrderTestState};
+use common::{
+    seed_test_db, create_test_app_state, create_test_jwt,
+    TEST_TECHNICIAN_ID,
+};
 
 async fn mock_db() -> DatabaseConnection {
     Database::connect("sqlite::memory:").await.unwrap()
@@ -36,33 +34,21 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
     let _ = tracing_subscriber::fmt::try_init();
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
+    let state = create_test_app_state(db).await;
 
-    let luts = std::sync::Arc::new(zent_be::core::lookup_tables::LookupTables::empty());
-
-    let work_order_service =
-        std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
-            db.clone(),
-            luts.clone(),
-            None,
-            None,
-        ));
-
-    let media_service = std::sync::Arc::new(zent_be::services::v1::core::media::MediaService::new(
-        db.clone(),
-        None,
-        None,
-    ));
-
-    let state = WorkOrderTestState {
-        work_order_service,
-        media_service,
-    };
+    let tech_mw = middleware::from_fn_with_state(
+        state.clone(),
+        zent_be::extractor::role_check::require_role::<zent_be::core::state::AppState>(
+            zent_be::entities::roles::Role::Technician,
+        ),
+    );
 
     Router::new()
         .route(
             "/api/v1/work_orders/{id}/parts",
             post(zent_be::handlers::v1::work_orders::add_parts),
         )
+        .layer(tech_mw)
         .with_state(state)
 }
 
@@ -71,11 +57,12 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
 // ---------------------------------------------------------
 
 fn create_json_request(method: http::Method, uri: &str, body: &serde_json::Value) -> Request<Body> {
+    let token = create_test_jwt(Uuid::parse_str(TEST_TECHNICIAN_ID).unwrap());
     let mut req = Request::builder()
         .method(method)
         .uri(uri)
         .header(http::header::CONTENT_TYPE, "application/json")
-        .header(http::header::AUTHORIZATION, "Bearer mock_jwt_token")
+        .header(http::header::AUTHORIZATION, format!("Bearer {}", token))
         .body(Body::from(serde_json::to_string(body).unwrap()))
         .unwrap();
 

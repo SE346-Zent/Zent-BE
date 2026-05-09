@@ -37,7 +37,7 @@ impl MigrationTrait for Migration {
                     .table(WorkOrderRejectForms::Table)
                     .if_not_exists()
                     .col(uuid(WorkOrderRejectForms::Id).primary_key())
-                    .col(uuid(WorkOrderRejectForms::ApproverId))
+                    .col(ColumnDef::new(WorkOrderRejectForms::ApproverId).uuid().null())
                     .col(boolean(WorkOrderRejectForms::Approved))
                     .foreign_key(
                         ForeignKey::create()
