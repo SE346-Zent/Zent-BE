@@ -23,6 +23,7 @@ use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 )]
 pub async fn verify_otp_handler(
     State(db): State<Arc<DatabaseConnection>>,
+    State(luts): State<Arc<LookupTables>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     State(rabbitmq): State<Option<Arc<lapin::Connection>>>,
     State(templates): State<Arc<std::collections::HashMap<String, String>>>,
@@ -50,12 +51,10 @@ pub async fn verify_otp_handler(
         .filter(users::Column::Email.eq(&payload.email))
         .one(db.as_ref()).await?;
 
-    let active_status = account_status::Entity::find()
-        .filter(account_status::Column::Name.eq("Active"))
-        .one(db.as_ref()).await?
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Active status missing")))?;
+    let active_status_id = *luts.account_statuses_by_name.get("Active")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Active status missing in cache")))?;
 
-    let effect = verify_otp::decide_verify_otp(result, user.as_ref(), active_status.id)?;
+    let effect = verify_otp::decide_verify_otp(result, user.as_ref(), active_status_id)?;
 
     let user_active = users::ActiveModel {
         id: Set(effect.user_id),

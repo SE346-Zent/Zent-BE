@@ -3,6 +3,7 @@ pub mod api_docs;
 pub mod media;
 pub mod notifications;
 pub mod work_orders;
+pub mod inventory;
 
 use axum::{Router, middleware};
 use crate::core::state::AppState;
@@ -14,6 +15,8 @@ pub fn router(state: AppState) -> Router<AppState> {
         .nest("/auth", auth::router())
         .nest("/docs", api_docs::router())
         .nest("/work_orders", work_orders_router(state.clone()))
+        .nest("/inventory", inventory::router(state.clone()))
+        .nest("/notifications", notifications::router())
         .nest("/media", media::media_router(state))
 }
 
@@ -29,7 +32,6 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/start", axum::routing::post(work_orders::start))
         .route("/{id}/refuse", axum::routing::post(work_orders::refuse))
         .route("/{id}/complete", axum::routing::post(work_orders::complete))
-        .route("/{id}/parts", axum::routing::post(work_orders::add_parts))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Technician]),

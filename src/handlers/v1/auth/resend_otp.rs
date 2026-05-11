@@ -22,6 +22,7 @@ use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 )]
 pub async fn resend_otp_handler(
     State(db): State<Arc<DatabaseConnection>>,
+    State(luts): State<Arc<LookupTables>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     State(rabbitmq): State<Option<Arc<lapin::Connection>>>,
     State(templates): State<Arc<std::collections::HashMap<String, String>>>,
@@ -33,12 +34,10 @@ pub async fn resend_otp_handler(
         .filter(users::Column::Email.eq(&payload.email))
         .one(db.as_ref()).await?;
 
-    let pending_status = account_status::Entity::find()
-        .filter(account_status::Column::Name.eq("Pending"))
-        .one(db.as_ref()).await?
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing")))?;
+    let pending_status_id = *luts.account_statuses_by_name.get("Pending")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing in cache")))?;
 
-    let effect = resend_otp::decide_resend_otp(user.as_ref(), pending_status.id, payload)?;
+    let effect = resend_otp::decide_resend_otp(user.as_ref(), pending_status_id, payload)?;
 
     use redis::AsyncCommands;
     if let Some(client) = valkey_client {

@@ -30,9 +30,11 @@ use crate::model::{
             list_query::WorkOrderQuery,
             start_request::StartWorkOrderRequest,
             approve_refusal_request::ApproveRefusalRequest,
-            add_parts_request::AddPartsRequest,
             refuse_request::{RefuseWorkOrderRequest, RefuseWorkOrderMultipart},
-
+        },
+        notifications::{
+            list_query::NotificationListQuery,
+            update_preference_request::UpdateNotificationPreferenceRequest,
         },
         pagination::PaginationRequest,
     },
@@ -45,6 +47,12 @@ use crate::model::{
             details_response::WorkOrderDetails,
             history_response::WorkOrderStateHistoryEntry,
         },
+        notifications::{
+            notification_category_response::NotificationCategoryResponse,
+            notification_detail_response::NotificationDetailResponse,
+            notification_list_response::NotificationListItem,
+            preference_response::NotificationPreferenceResponse,
+        },
         base::MessageOnlyResponse,
         pagination::PaginationResponse,
     },
@@ -52,7 +60,7 @@ use crate::model::{
 
 use crate::core::errors::ErrorResponse;
 
-use crate::handlers::v1::{auth, work_orders, media};
+use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -73,10 +81,18 @@ use crate::handlers::v1::{auth, work_orders, media};
         work_orders::complete,
         work_orders::refuse,
         work_orders::start,
-        work_orders::add_parts,
+        inventory::add_parts::add_parts,
         work_orders::approve_refusal,
         work_orders::deny_refusal,
         work_orders::history,
+        notifications::list::list,
+        notifications::get_detail::get_detail,
+        notifications::mark_read::mark_read,
+        notifications::mark_all_read::mark_all_read,
+        notifications::get_preferences::get_preferences,
+        notifications::update_preferences::update_preferences,
+        notifications::list_categories::list_categories,
+        notifications::sync_outbox::sync_outbox,
         media::upload_closing_form_photo,
         media::update_closing_form_photo,
         media::upload_closing_form_signature,
@@ -110,13 +126,23 @@ use crate::handlers::v1::{auth, work_orders, media};
             RefuseWorkOrderMultipart,
             StartWorkOrderRequest,
             ApproveRefusalRequest,
-            AddPartsRequest,
+            crate::model::requests::inventory::add_parts_request::AddPartsRequest,
             WorkOrderStateHistoryEntry,
+            NotificationListQuery,
+            UpdateNotificationPreferenceRequest,
+            NotificationCategoryResponse,
+            NotificationDetailResponse,
+            NotificationListItem,
+            NotificationPreferenceResponse,
         )
     ),
     modifiers(&SecurityAddon),
     tags(
-        (name = "Zent-BE", description = "Zent Backend API endpoints")
+        (name = "auth", description = "Authentication endpoints"),
+        (name = "work_orders", description = "Work order management"),
+        (name = "inventory", description = "Inventory management"),
+        (name = "notifications", description = "Notification management"),
+        (name = "media", description = "Media/OCI endpoints"),
     )
 )]
 pub struct ApiDoc;

@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::{
     core::errors::AppError,
     entities::{new_part_forms, work_orders, images, new_part_form_image_links},
-    model::requests::work_orders::add_parts_request::AddPartsRequest,
+    model::requests::inventory::add_parts_request::AddPartsRequest,
 };
 
 pub struct AddPartsEffect {

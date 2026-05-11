@@ -7,9 +7,7 @@ pub mod refuse;
 pub mod start;
 pub mod approve_refusal;
 pub mod deny_refusal;
-pub mod add_parts;
 pub mod history;
-pub mod schedule;
 pub mod cancel;
 
 pub use create::create;
@@ -21,9 +19,7 @@ pub use refuse::refuse;
 pub use start::start;
 pub use approve_refusal::approve_refusal;
 pub use deny_refusal::deny_refusal;
-pub use add_parts::add_parts;
 pub use history::history;
-pub use schedule::schedule;
 pub use cancel::cancel;
 
 // Re-export __path_* items for utoipa OpenApi derive
@@ -36,7 +32,6 @@ pub use refuse::__path_refuse;
 pub use start::__path_start;
 pub use approve_refusal::__path_approve_refusal;
 pub use deny_refusal::__path_deny_refusal;
-pub use add_parts::__path_add_parts;
 pub use history::__path_history;
 
 use axum::{Router, middleware};
@@ -71,7 +66,6 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/start", axum::routing::post(start))
         .route("/{id}/refuse", axum::routing::post(refuse))
         .route("/{id}/complete", axum::routing::post(complete))
-        .route("/{id}/parts", axum::routing::post(add_parts))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Technician]),
@@ -156,6 +150,79 @@ pub(crate) async fn fetch_paginated_work_orders(
     Ok(axum::Json(ApiResponse::success_with_meta(200, "Work orders retrieved successfully", data, meta)))
 }
 
+/// Cron-triggered cleanup: cancels all pending unassigned work orders that have exceeded
+/// the threshold defined in the policy and notifies the customer.
+pub async fn run_cleanup(
+    db: &DatabaseConnection,
+    luts: &LookupTables,
+    rabbitmq_opt: &Option<std::sync::Arc<lapin::Connection>>,
+) -> Result<(), anyhow::Error> {
+    use chrono::Utc;
+    use tracing::{info, error};
+    use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, TransactionTrait, ActiveModelTrait, Set};
+    use crate::entities::{work_orders as work_orders_ent, users, work_order_state_history};
+    use crate::core::config::AppConfig;
+
+    let cfg = AppConfig::get();
+    let system_user_id = cfg.system_user_id;
+
+    // Get threshold from policy cache (LUT)
+    let threshold_hours: i64 = luts.policies.get("unassigned_cleanup_threshold_hours").and_then(|v| v.parse().ok()).unwrap_or(24);
+
+    let pending_status_id = *luts.work_order_statuses_by_name.get("Pending assignment").unwrap_or_else(|| luts.work_order_statuses_by_name.get("Pending").unwrap());
+    let cancelled_status_id = *luts.work_order_statuses_by_name.get("Cancelled").unwrap();
+
+    let now = Utc::now();
+    let cutoff_time = now - chrono::Duration::hours(threshold_hours);
+
+    // Find WOs that are still pending assignment and were created before the cutoff time
+    let target_wos = work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::WorkOrderStatusId.eq(pending_status_id))
+        .filter(work_orders_ent::Column::TechnicianId.is_null())
+        .filter(work_orders_ent::Column::CreatedAt.lte(cutoff_time))
+        .all(db).await?;
+
+    if target_wos.is_empty() { return Ok(()); }
+
+    for wo in target_wos {
+        let mut wo_active: work_orders_ent::ActiveModel = wo.clone().into();
+        wo_active.work_order_status_id = Set(cancelled_status_id);
+        wo_active.updated_at = Set(now);
+
+        let history = work_order_state_history::ActiveModel {
+            id: Set(uuid::Uuid::new_v4()),
+            work_order_id: Set(wo.id),
+            from_status_id: Set(Some(pending_status_id)),
+            to_status_id: Set(cancelled_status_id),
+            changed_by_id: Set(system_user_id),
+            changed_at: Set(now),
+        };
+
+        match db.transaction::<_, (), anyhow::Error>(|txn| Box::pin(async move {
+            wo_active.update(txn).await.map_err(|e| anyhow::anyhow!(e))?;
+            history.insert(txn).await.map_err(|e| anyhow::anyhow!(e))?;
+            Ok(())
+        })).await {
+            Ok(_) => {
+                info!("Cancelled unassigned WO {} successfully", wo.work_order_number);
+                if let Some(rmq) = rabbitmq_opt.as_ref() {
+                    let cust = users::Entity::find_by_id(wo.customer_id).one(db).await.unwrap_or_default();
+                    if let Some(c) = cust {
+                        let _ = crate::services::v1::core::email_service::send_email(
+                            rmq,
+                            &c.email,
+                            "Work Order Cancelled",
+                            &format!("Dear {},\n\nYour work order {} has been cancelled because we could not assign a technician within the required time. We apologize for the inconvenience.", c.full_name, wo.work_order_number),
+                        ).await;
+                    }
+                }
+            }
+            Err(e) => error!("Cleanup failed for WO {}: {}", wo.work_order_number, e),
+        }
+    }
+    Ok(())
+}
+
 pub(crate) async fn try_auto_assign_single(
     db: Arc<DatabaseConnection>,
     luts: Arc<LookupTables>,
@@ -172,10 +239,7 @@ pub(crate) async fn try_auto_assign_single(
         Some(id) => *id,
         None => { tracing::warn!("Technician role not found"); return false; }
     };
-    let policies_vec = match policy::Entity::find().all(db.as_ref()).await {
-        Ok(p) => p, Err(e) => { tracing::warn!("Failed to load policies: {}", e); return false; }
-    };
-    let policies: HashMap<String, String> = policies_vec.into_iter().map(|p| (p.policy_name, p.policy_value)).collect();
+    let policies = &luts.policies;
     let assigned_status_id = *luts.work_order_statuses_by_name.get("Assigned").unwrap_or_else(|| luts.work_order_statuses_by_name.get("Pending").unwrap());
     let done_status_id = *luts.work_order_statuses_by_name.get("Closed").unwrap_or_else(|| luts.work_order_statuses_by_name.get("Pending").unwrap());
     let cfg = crate::core::config::AppConfig::get();
@@ -196,7 +260,7 @@ pub(crate) async fn try_auto_assign_single(
     let mut technician_agendas: HashMap<Uuid, Vec<work_orders_ent::Model>> = HashMap::new();
     for a in agendas { if let Some(tid) = a.technician_id { technician_agendas.entry(tid).or_default().push(a); } }
 
-    let effect = match crate::services::v1::work_orders::schedule::decide_auto_assign(wo.clone(), technicians, technician_agendas, &policies, assigned_status_id, done_status_id, system_user_id) {
+    let effect = match crate::services::v1::work_orders::auto_assign::decide_auto_assign(wo.clone(), technicians, technician_agendas, &policies, assigned_status_id, done_status_id, system_user_id) {
         Ok(Some(eff)) => eff,
         Ok(None) => { tracing::info!("Auto-assign: no suitable tech for WO {} — admin needed", wo.work_order_number); return false; }
         Err(e) => { tracing::error!("Auto-assign failed for WO {}: {}", wo.work_order_number, e); return false; }

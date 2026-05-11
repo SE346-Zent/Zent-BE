@@ -31,18 +31,30 @@ pub async fn list(
             return Err(AppError::Forbidden(format!("Requested context '{}' does not match your assigned role '{}'", requested_role, auth.role.name)));
         }
     }
-    let mut resolved_province = query.province.clone();
-    let mut resolved_tech_id = query.technician_id;
+    let mut resolved_province = None;
+    let mut resolved_tech_id = None;
     let mut resolved_customer_id = None;
+
     let cache_key_prefix = match auth.role.name.as_str() {
-        "SuperAdmin" => format!("superadmin:p:{:?}:t:{:?}", resolved_province, resolved_tech_id),
+        "SuperAdmin" => {
+            resolved_province = query.province.clone();
+            resolved_tech_id = query.technician_id;
+            format!("superadmin:p:{:?}:t:{:?}", resolved_province, resolved_tech_id)
+        }
         "Admin" => {
             let p = auth.user.province.clone().ok_or_else(|| AppError::Forbidden("Admin profile missing province".to_string()))?;
             resolved_province = Some(p.clone());
+            resolved_tech_id = query.technician_id;
             format!("admin_geo:{}:t:{:?}", p, resolved_tech_id)
         }
-        "Technician" => { resolved_tech_id = Some(auth.user.id); format!("tech:{}:p:{:?}", auth.user.id, resolved_province) }
-        "Customer" => { resolved_customer_id = Some(auth.user.id); resolved_tech_id = None; resolved_province = None; format!("customer:{}", auth.user.id) }
+        "Technician" => {
+            resolved_tech_id = Some(auth.user.id);
+            format!("tech:{}", auth.user.id)
+        }
+        "Customer" => {
+            resolved_customer_id = Some(auth.user.id);
+            format!("customer:{}", auth.user.id)
+        }
         _ => return Err(AppError::Forbidden("Role not recognized".to_string())),
     };
     fetch_paginated_work_orders(db, valkey_client, lookup_tables, query.pagination, &cache_key_prefix, resolved_tech_id, resolved_province, resolved_customer_id).await

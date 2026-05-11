@@ -2,7 +2,6 @@ pub mod create_work_order_request;
 pub mod list_query;
 pub mod start_request;
 pub mod approve_refusal_request;
-pub mod add_parts_request;
 pub mod refuse_request;
 pub mod assign_request;
 pub mod complete_request;

@@ -64,6 +64,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         core::state::SessionDefaultTTLSeconds(cfg.session_ttl_seconds),
     );
 
+    // Start background asynchronous AMQP work order consumer pool
+    infrastructure::consumers::work_order::start_work_order_consumer(state.clone()).await;
+
     // Start background cron scheduler for maintenance tasks using pre-loaded LUT
     let app_scheduler: AppScheduler = infrastructure::scheduler::AppScheduler::new()
         .await
@@ -83,11 +86,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let metrics_job = infrastructure::cron_tasks::observability_metrics::build_metrics_job()
         .expect("Failed to build metrics collection job");
         
-    let auto_assign_job = infrastructure::cron_tasks::auto_assign::build_auto_assign_job(
+    let auto_assign_job = infrastructure::cron_tasks::cleanup_work_order::clean_up_work_order_job(
         db.clone(),
         state.lookup_tables.clone(),
         state.rabbitmq.clone(),
-        state.templates.clone(),
     ).expect("Failed to build auto assign job");
     
     app_scheduler.register_job(user_cleanup_job)

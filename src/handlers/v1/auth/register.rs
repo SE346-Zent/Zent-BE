@@ -25,6 +25,7 @@ use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 )]
 pub async fn register_handler(
     State(db): State<Arc<DatabaseConnection>>,
+    State(luts): State<Arc<LookupTables>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     State(rabbitmq): State<Option<Arc<lapin::Connection>>>,
     State(templates): State<Arc<std::collections::HashMap<String, String>>>,
@@ -32,22 +33,18 @@ pub async fn register_handler(
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-    let pending_status = account_status::Entity::find()
-        .filter(account_status::Column::Name.eq("Pending"))
-        .one(db.as_ref()).await?
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing")))?;
+    let pending_status_id = *luts.account_statuses_by_name.get("Pending")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing in cache")))?;
 
-    let customer_role = roles::Entity::find()
-        .filter(roles::Column::Name.eq("Customer"))
-        .one(db.as_ref()).await?
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Customer role missing")))?;
+    let customer_role_id = *luts.roles_by_name.get("Customer")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Customer role missing in cache")))?;
 
     let existing = users::Entity::find()
         .filter(users::Column::Email.eq(&payload.email))
         .one(db.as_ref()).await?;
 
     let hashed_password = hasher::hash_password(payload.password.clone()).await?;
-    let effect = register::decide_register(payload, existing.as_ref(), pending_status.id, customer_role.id, hashed_password)?;
+    let effect = register::decide_register(payload, existing.as_ref(), pending_status_id, customer_role_id, hashed_password)?;
 
     let now = Utc::now();
     let mut user_active = users::ActiveModel {

@@ -102,8 +102,16 @@ pub async fn create(
         let _: () = client.get_connection().incr("cache:work_orders:generation", 1).await.unwrap_or_default();
     }
 
-    let was_assigned = super::try_auto_assign_single(db.clone(), luts.clone(), wo_model.clone(), valkey_client.clone(), None, None).await;
-    let status_text = if was_assigned { "Assigned".to_string() } else { "Pending assignment".to_string() };
+    // Publish to MQ for asynchronous auto-assignment
+    if let Some(rmq) = rabbitmq_opt.as_ref() {
+        let producer = crate::infrastructure::mq::work_order::WorkOrderProducer::new(Some(rmq.clone()));
+        let payload = serde_json::json!({ "id": wo_model.id });
+        if let Ok(payload_bytes) = serde_json::to_vec(&payload) {
+            let _ = producer.publish_created(&payload_bytes).await;
+        }
+    }
+
+    let status_text = "Pending assignment".to_string();
 
     let response = WorkOrderResponseData { id: wo_model.id, work_order_number: wo_model.work_order_number, status: status_text };
 
