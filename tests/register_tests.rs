@@ -46,28 +46,16 @@ async fn setup_app_with_db(db: DatabaseConnection) -> Router {
 
     let mut templates = std::collections::HashMap::new();
     templates.insert("verification_email.html".to_string(), "Template content".to_string());
-    let templates_arc = std::sync::Arc::new(templates);
 
-    let auth_service = zent_be::services::v1::auth::AuthService::new(
+    let state = AppState::new(
+        b"integration_test_secret_for_tokens",
+        LookupTables::empty(),
         db.clone(),
         None,
         None,
-        templates_arc.clone(),
+        templates,
         zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
         zent_be::core::state::SessionDefaultTTLSeconds(3600),
-        jsonwebtoken::EncodingKey::from_secret(b"integration_test_secret_for_tokens"),
-    );
-
-    let luts = std::sync::Arc::new(LookupTables::empty());
-    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(db.clone(), luts, None, None);
-    let media_service = zent_be::services::v1::core::media::MediaService::new(db.clone(), None, None);
-
-    let state = AppState::new(
-        b"integration_test_secret_for_tokens", 
-        LookupTables::empty(),
-        auth_service,
-        work_order_service,
-        media_service,
     );
 
     Router::new()
@@ -131,6 +119,7 @@ async fn test_register_existing_pending_user() {
         phone_number: Set("000".to_string()),
         account_status: Set(1), // Pending
         role_id: Set(1),
+        province: Set(None),
         created_at: Set(chrono::Utc::now()),
         updated_at: Set(chrono::Utc::now()),
         deleted_at: Set(None),
@@ -176,6 +165,7 @@ async fn test_register_existing_active_user_conflict() {
         phone_number: Set("111".to_string()),
         account_status: Set(2), // Active
         role_id: Set(1),
+        province: Set(None),
         created_at: Set(chrono::Utc::now()),
         updated_at: Set(chrono::Utc::now()),
         deleted_at: Set(None),

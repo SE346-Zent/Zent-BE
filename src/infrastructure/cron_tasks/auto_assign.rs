@@ -18,7 +18,7 @@ pub fn build_auto_assign_job(
         let templates_clone = templates.clone();
         Box::pin(async move {
             info!("Running auto-assign job...");
-            if let Err(e) = crate::handlers::v1::work_orders::schedule::schedule(
+            if let Err(e) = crate::handlers::v1::work_orders::schedule::run_schedule(
                 &db_clone,
                 &luts_clone,
                 &rabbitmq_clone,

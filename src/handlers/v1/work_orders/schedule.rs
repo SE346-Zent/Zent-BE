@@ -1,10 +1,14 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use axum::{extract::State, Json};
 use sea_orm::DatabaseConnection;
 use crate::core::lookup_tables::LookupTables;
+use crate::core::errors::AppError;
+use crate::model::responses::base::ApiResponse;
 
 /// Cron-triggered auto-assign: finds all pending unassigned work orders within the
 /// appointment threshold and assigns them to the least-loaded technician in the same province.
-pub async fn schedule(
+pub async fn run_schedule(
     db: &DatabaseConnection,
     luts: &LookupTables,
     rabbitmq_opt: &Option<std::sync::Arc<lapin::Connection>>,
@@ -70,4 +74,17 @@ pub async fn schedule(
         }
     }
     Ok(())
+}
+
+/// Axum handler wrapper: triggers auto-assign via HTTP POST.
+pub async fn schedule(
+    State(db): State<Arc<DatabaseConnection>>,
+    State(luts): State<Arc<LookupTables>>,
+    State(rabbitmq_opt): State<Option<Arc<lapin::Connection>>>,
+    State(templates): State<Arc<std::collections::HashMap<String, String>>>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    run_schedule(&db, &luts, &rabbitmq_opt, &templates)
+        .await
+        .map_err(|e| AppError::Internal(e))?;
+    Ok(Json(ApiResponse::message_only(200, "Auto-assign complete")))
 }

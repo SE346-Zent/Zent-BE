@@ -10,6 +10,7 @@ pub mod deny_refusal;
 pub mod add_parts;
 pub mod history;
 pub mod schedule;
+pub mod cancel;
 
 pub use create::create;
 pub use list::list;
@@ -22,6 +23,8 @@ pub use approve_refusal::approve_refusal;
 pub use deny_refusal::deny_refusal;
 pub use add_parts::add_parts;
 pub use history::history;
+pub use schedule::schedule;
+pub use cancel::cancel;
 
 // Re-export __path_* items for utoipa OpenApi derive
 pub use create::__path_create;
@@ -96,7 +99,7 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
         .merge(admin_routes)
 }
 
-pub async fn cancel() -> axum::http::StatusCode { axum::http::StatusCode::NOT_IMPLEMENTED }
+//pub async fn cancel() -> axum::http::StatusCode { axum::http::StatusCode::NOT_IMPLEMENTED }
 
 pub(crate) async fn fetch_paginated_work_orders(
     db: Arc<DatabaseConnection>,

@@ -21,8 +21,7 @@ use uuid::Uuid;
 
 // #[path = "common/mod.rs"]
 // mod common;
-// use common::seed_test_db;
-// DB not needed — handlers use unimplemented!()
+// // DB not needed — handlers use unimplemented!()
 
 async fn mock_db() -> DatabaseConnection {
     Database::connect("sqlite::memory:").await.unwrap()

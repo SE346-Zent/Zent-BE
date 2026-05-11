@@ -6,13 +6,17 @@ pub use upload_closing_form_photo::upload_closing_form_photo;
 pub use update_closing_form_photo::update_closing_form_photo;
 pub use upload_closing_form_signature::upload_closing_form_signature;
 
+// Stub kept for backward compat with integration tests
+use axum::http::StatusCode;
+pub async fn upload_work_order_photo() -> StatusCode { StatusCode::NOT_IMPLEMENTED }
+pub async fn upload_work_order_signature() -> StatusCode { StatusCode::NOT_IMPLEMENTED }
+
 pub use upload_closing_form_photo::__path_upload_closing_form_photo;
 pub use update_closing_form_photo::__path_update_closing_form_photo;
 pub use upload_closing_form_signature::__path_upload_closing_form_signature;
 
 use axum::{Router, middleware, routing};
 use std::sync::Arc;
-use axum::http::StatusCode;
 use sea_orm::DatabaseConnection;
 use crate::core::state::AppState;
 use crate::entities::roles::Role;
@@ -38,10 +42,10 @@ pub fn media_router(state: AppState) -> Router<AppState> {
         ))
 }
 
-async fn get_work_order_photo(
+pub async fn get_work_order_photo(
     axum::extract::State(_db): axum::extract::State<Arc<DatabaseConnection>>,
 ) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
 
-async fn list_work_order_photos(
+pub async fn list_work_order_photos(
     axum::extract::State(_db): axum::extract::State<Arc<DatabaseConnection>>,
 ) -> StatusCode { StatusCode::NOT_IMPLEMENTED }
