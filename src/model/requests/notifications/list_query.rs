@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
 /// Query parameters for listing in-app notifications.
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema, IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub struct NotificationListQuery {
     /// Page number (1-based).  Defaults to 1.

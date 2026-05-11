@@ -1,6 +1,5 @@
 use axum::extract::State;
 use axum::Json;
-use std::sync::Arc;
 use crate::core::errors::AppError;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::notifications::preference_response::NotificationPreferenceResponse;

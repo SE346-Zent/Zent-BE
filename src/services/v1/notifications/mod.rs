@@ -53,6 +53,7 @@ pub fn list_categories() -> Vec<crate::model::responses::notifications::notifica
             id: (i + 1) as i32,
             slug: slug.to_string(),
             name: name.to_string(),
+            description: None,
         }
     }).collect()
 }

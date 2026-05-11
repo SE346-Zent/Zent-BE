@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use lapin::{
     options::{BasicConsumeOptions, BasicAckOptions, BasicNackOptions},
     types::FieldTable,
@@ -6,8 +5,6 @@ use lapin::{
 use futures::stream::StreamExt;
 use tracing::{info, error, warn};
 use tokio::time::{sleep, Duration};
-use sea_orm::DatabaseConnection;
-
 use crate::core::state::AppState;
 use crate::infrastructure::mq::work_order::{WORK_ORDER_CREATED_QUEUE, setup_work_order_topology};
 use crate::entities::work_orders as work_orders_ent;

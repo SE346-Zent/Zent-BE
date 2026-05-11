@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 pub struct WorkOrderDetails {
     pub id: Uuid,
     pub work_order_number: String,
+    pub technician_id: Option<Uuid>,
     pub status: String,
     pub customer_id: Uuid,
     pub customer_name: String,

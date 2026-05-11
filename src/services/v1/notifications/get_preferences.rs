@@ -19,6 +19,7 @@ pub fn get_preferences(
             category_slug,
             category_name: name.to_string(),
             os_enabled,
+            updated_at: None,
         }
     }).collect()
 }

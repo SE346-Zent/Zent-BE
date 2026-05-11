@@ -38,19 +38,22 @@ pub fn list_notifications(
         .map(|n| NotificationListItem {
             notification_id: n.notification_id.to_string(),
             category_id: n.category_id,
+            category_name: super::find_category_slug_by_id(n.category_id).unwrap_or("").to_string(),
             title: n.title.clone(),
             body: n.body.clone(),
+            data: Some(n.data.clone()),
             is_read: n.is_read,
-            created_at: n.created_at,
+            created_at: n.created_at.to_string(),
         })
         .collect();
 
-    let total_pages = (total_records as f64 / limit as f64).ceil() as i64;
+    let total_pages = (total_records as f64 / limit as f64).ceil() as u64;
 
     (paginated, PaginationResponse {
-        page,
-        limit,
-        total_pages,
-        total_records: total_records as i64,
+        current_page: page as u64,
+        limit: limit as u64,
+        total_pages: total_pages as u64,
+        total_records: total_records as u64,
+        has_next: (page as u64) < (total_pages as u64),
     })
 }

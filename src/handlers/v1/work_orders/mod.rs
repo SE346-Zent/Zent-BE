@@ -232,7 +232,7 @@ pub(crate) async fn try_auto_assign_single(
     templates: Option<Arc<std::collections::HashMap<String, String>>>,
 ) -> bool {
     use std::collections::HashMap;
-    use crate::entities::{users, policy};
+    use crate::entities::users;
     use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, TransactionTrait, ActiveModelTrait};
 
     let tech_role_id = match luts.roles_by_name.get("Technician") {

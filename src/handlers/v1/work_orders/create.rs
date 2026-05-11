@@ -34,6 +34,7 @@ pub async fn create(
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
+    State(rabbitmq): State<Option<Arc<lapin::Connection>>>,
     headers: axum::http::HeaderMap,
     Json(payload): Json<CreateWorkOrderRequest>,
 ) -> Result<Json<ApiResponse<WorkOrderResponseData>>, AppError> {
@@ -103,7 +104,7 @@ pub async fn create(
     }
 
     // Publish to MQ for asynchronous auto-assignment
-    if let Some(rmq) = rabbitmq_opt.as_ref() {
+    if let Some(rmq) = rabbitmq.as_ref() {
         let producer = crate::infrastructure::mq::work_order::WorkOrderProducer::new(Some(rmq.clone()));
         let payload = serde_json::json!({ "id": wo_model.id });
         if let Ok(payload_bytes) = serde_json::to_vec(&payload) {

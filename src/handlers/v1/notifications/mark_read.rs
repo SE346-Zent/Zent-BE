@@ -2,14 +2,14 @@ use axum::extract::{State, Path};
 use axum::Json;
 use uuid::Uuid;
 use crate::core::errors::AppError;
-use crate::model::responses::base::ApiResponse;
+use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 use crate::core::state::AppState;
 use crate::extractor::auth_user::AuthUser;
 
 #[utoipa::path(
     post, path = "/api/v1/notifications/{id}/read",
     responses(
-        (status = 200, description = "Marked as read", body = ApiResponse<()>),
+        (status = 200, description = "Marked as read", body = MessageOnlyResponse),
         (status = 404, description = "Not Found"),
         (status = 500, description = "Internal Server Error")
     ),

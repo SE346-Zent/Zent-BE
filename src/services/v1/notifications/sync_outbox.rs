@@ -18,10 +18,12 @@ pub fn sync_outbox(
             items.push(NotificationListItem {
                 notification_id: n.notification_id.to_string(),
                 category_id: n.category_id,
+                category_name: super::find_category_slug_by_id(n.category_id).unwrap_or("").to_string(),
                 title: n.title.clone(),
                 body: n.body.clone(),
+                data: Some(n.data.clone()),
                 is_read: n.is_read,
-                created_at: n.created_at,
+                created_at: n.created_at.to_string(),
             });
             entry.delivered = true;
         }

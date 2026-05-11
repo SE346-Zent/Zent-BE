@@ -11,6 +11,7 @@ pub fn map_to_details(
     WorkOrderDetails {
         id: wo.id,
         work_order_number: wo.work_order_number,
+        technician_id: wo.technician_id,
         status: status.map(|s| s.name).unwrap_or_else(|| "Unknown".to_string()),
         customer_id: wo.customer_id,
         customer_name: format!("{} {}", wo.first_name, wo.last_name),

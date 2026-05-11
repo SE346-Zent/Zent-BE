@@ -192,3 +192,20 @@ pub async fn send_work_order_assigned_email(
     
     publish_email_task(rabbitmq, email_payload, "work order assigned email").await
 }
+
+/// Generic send_email helper — publishes arbitrary email content via RabbitMQ.
+/// Used by cleanup/cancel flows that don't need templated emails.
+pub async fn send_email(
+    rabbitmq: &Arc<Connection>,
+    to: &str,
+    subject: &str,
+    body: &str,
+) -> Result<(), AppError> {
+    let email_payload = serde_json::json!({
+        "to": to,
+        "subject": subject,
+        "body": body,
+    });
+
+    publish_email_task(rabbitmq, email_payload, "generic email").await
+}

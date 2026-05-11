@@ -17,7 +17,7 @@ use crate::extractor::auth_user::AuthUser;
     security(("bearer_auth" = []))
 )]
 pub async fn list(
-    auth: AuthUser,
+    _auth: AuthUser,
     State(_state): State<AppState>,
     Query(query): Query<NotificationListQuery>,
 ) -> Result<Json<ApiResponse<Vec<NotificationListItem>>>, AppError> {

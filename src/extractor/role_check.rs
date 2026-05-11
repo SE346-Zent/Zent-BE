@@ -12,6 +12,7 @@ use crate::{
     entities::roles::Role,
     extractor::auth_user::AuthUser,
     core::errors::AppError,
+    infrastructure::cache::ValkeyClient,
 };
 
 /// Middleware factory to require one of several roles.
@@ -22,6 +23,7 @@ where
     DecodingKey: FromRef<S>,
     Arc<DatabaseConnection>: FromRef<S>,
     Arc<LookupTables>: FromRef<S>,
+    Option<Arc<ValkeyClient>>: FromRef<S>,
 {
     move |State(state), mut req, next| {
         let roles = roles;

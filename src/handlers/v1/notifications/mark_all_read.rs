@@ -1,14 +1,14 @@
 use axum::extract::State;
 use axum::Json;
 use crate::core::errors::AppError;
-use crate::model::responses::base::ApiResponse;
+use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 use crate::core::state::AppState;
 use crate::extractor::auth_user::AuthUser;
 
 #[utoipa::path(
     post, path = "/api/v1/notifications/read-all",
     responses(
-        (status = 200, description = "All marked as read", body = ApiResponse<()>),
+        (status = 200, description = "All marked as read", body = MessageOnlyResponse),
         (status = 500, description = "Internal Server Error")
     ),
     security(("bearer_auth" = []))

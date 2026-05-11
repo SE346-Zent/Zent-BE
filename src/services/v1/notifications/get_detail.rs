@@ -18,10 +18,12 @@ pub fn get_detail(
     Ok(NotificationDetailResponse {
         notification_id: n.notification_id.to_string(),
         category_id: n.category_id,
+        category_name: super::find_category_slug_by_id(n.category_id).unwrap_or("").to_string(),
         title: n.title.clone(),
         body: n.body.clone(),
-        data: n.data.clone(),
+        data: Some(n.data.clone()),
         is_read: n.is_read,
-        created_at: n.created_at,
+        os_notification_id: n.os_notification_id.map(|id| id.to_string()),
+        created_at: n.created_at.to_string(),
     })
 }

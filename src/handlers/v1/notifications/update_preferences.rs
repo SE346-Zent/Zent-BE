@@ -1,7 +1,7 @@
 use axum::extract::State;
 use axum::Json;
 use crate::core::errors::AppError;
-use crate::model::responses::base::ApiResponse;
+use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 use crate::model::requests::notifications::update_preference_request::UpdateNotificationPreferenceRequest;
 use crate::core::state::AppState;
 use crate::extractor::auth_user::AuthUser;
@@ -10,7 +10,7 @@ use crate::extractor::auth_user::AuthUser;
     put, path = "/api/v1/notifications/preferences",
     request_body = UpdateNotificationPreferenceRequest,
     responses(
-        (status = 200, description = "Preferences updated", body = ApiResponse<()>),
+        (status = 200, description = "Preferences updated", body = MessageOnlyResponse),
         (status = 400, description = "Bad Request"),
         (status = 500, description = "Internal Server Error")
     ),
