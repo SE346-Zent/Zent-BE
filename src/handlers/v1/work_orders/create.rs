@@ -15,6 +15,8 @@ use crate::model::responses::work_orders::create_response::WorkOrderResponseData
 use crate::services::v1::work_orders::create as create_svc;
 use crate::entities::{products, work_orders as work_orders_ent};
 use serde_json::json;
+use redis::AsyncCommands;
+
 use super::IDEMPOTENCY_PENDING;
 
 #[utoipa::path(
@@ -99,7 +101,6 @@ pub async fn create(
     })?;
 
     if let Some(client) = valkey_client.as_ref() {
-        use redis::AsyncCommands;
         let _: () = client.get_connection().incr("cache:work_orders:generation", 1).await.unwrap_or_default();
     }
 
@@ -117,7 +118,6 @@ pub async fn create(
     let response = WorkOrderResponseData { id: wo_model.id, work_order_number: wo_model.work_order_number, status: status_text };
 
     if let (Some(mut conn), Some(cache_key)) = (conn_opt, cache_key_opt) {
-        use redis::AsyncCommands;
         let _: () = conn.set_ex(&cache_key, json!({"payload":payload,"response":response}).to_string(), cfg.idempotency_final_ttl_seconds).await?;
     }
 

@@ -7,6 +7,10 @@ use crate::core::errors::{AppError, ErrorResponse};
 use crate::infrastructure::cache::ValkeyClient;
 use crate::services::v1::auth::forgot_password;
 use crate::services::v1::core::email_service;
+use redis::AsyncCommands;
+use sea_orm::EntityTrait;
+
+use crate::entities::users;
 use crate::model::requests::auth::forgot_password_request::ForgotPasswordRequest;
 use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 
@@ -30,8 +34,6 @@ pub async fn forgot_password_handler(
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-    use sea_orm::EntityTrait;
-    use crate::entities::users;
     let user = users::Entity::find()
         .filter(users::Column::Email.eq(&payload.email))
         .one(db.as_ref()).await?;
@@ -39,7 +41,6 @@ pub async fn forgot_password_handler(
     let effect = forgot_password::decide_forgot_password(user.as_ref(), payload)?;
 
     if let Some(effect) = effect {
-        use redis::AsyncCommands;
         if let Some(client) = valkey_client {
             let mut conn = client.get_connection();
             let valkey_key = format!("forgot_password_verification:{}", effect.email);

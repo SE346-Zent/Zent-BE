@@ -10,6 +10,8 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 
+use redis::AsyncCommands;
+
 use crate::{
     entities::{roles, users},
     model::jwt_claims::Claims,
@@ -45,7 +47,6 @@ where
         
         // Try to get from Valkey cache first
         if let Some(client) = valkey.as_ref() {
-            use redis::AsyncCommands;
             let mut conn = client.get_connection();
             let cache_key = format!("user_profile:{}", user_id);
             
@@ -78,7 +79,6 @@ where
 
         // Save to Valkey cache
         if let Some(client) = valkey {
-            use redis::AsyncCommands;
             let mut conn = client.get_connection();
             let cache_key = format!("user_profile:{}", user_id);
             if let Ok(json) = serde_json::to_string(&auth_user) {

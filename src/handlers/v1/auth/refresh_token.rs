@@ -11,6 +11,8 @@ use crate::services::v1::auth::refresh_token;
 use crate::services::v1::core::token_service;
 use crate::model::requests::auth::refresh_token_request::RefreshTokenRequest;
 use crate::model::responses::base::ApiResponse;
+use redis::AsyncCommands;
+
 use crate::model::responses::auth::login_response::LoginResponseData;
 
 #[utoipa::path(
@@ -33,7 +35,6 @@ pub async fn refresh_token_handler(
 ) -> Result<Json<ApiResponse<LoginResponseData>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-    use redis::AsyncCommands;
     let refresh_token_hash = token_service::hash_refresh_token(&payload.refresh_token);
     let session = sessions::Entity::find()
         .filter(sessions::Column::RefreshTokenHash.eq(&refresh_token_hash))

@@ -9,6 +9,8 @@ use crate::entities::{users, sessions};
 use crate::utils::hasher;
 use crate::services::v1::auth::reset_password;
 use crate::model::requests::auth::reset_password_request::ResetPasswordRequest;
+use redis::AsyncCommands;
+
 use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 
 #[utoipa::path(
@@ -28,7 +30,6 @@ pub async fn reset_password_handler(
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-    use redis::AsyncCommands;
     let client = valkey_client.ok_or_else(|| AppError::Internal(anyhow::anyhow!("Valkey missing")))?;
     let mut conn = client.get_connection();
     let reset_token_key = format!("password_reset_token:{}", payload.reset_token);

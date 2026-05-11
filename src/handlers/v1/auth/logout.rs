@@ -8,6 +8,8 @@ use crate::entities::sessions;
 use crate::extractor::auth_user::AuthUser;
 use crate::services::v1::auth::logout;
 use crate::services::v1::core::token_service;
+use redis::AsyncCommands;
+
 use crate::model::requests::auth::logout_request::LogoutRequest;
 use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 
@@ -37,7 +39,6 @@ pub async fn logout_handler(
 
     let effect = logout::decide_logout(&session, auth.user.id)?;
 
-    use redis::AsyncCommands;
     let mut session_active: sessions::ActiveModel = session.into();
     session_active.revoked_at = Set(Some(Utc::now()));
     session_active.update(db.as_ref()).await?;

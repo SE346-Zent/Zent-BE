@@ -9,6 +9,8 @@ use crate::infrastructure::cache::ValkeyClient;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::details_response::WorkOrderDetails;
 use crate::services::v1::work_orders::get_details as get_svc;
+use redis::AsyncCommands;
+
 use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms};
 
 #[utoipa::path(
@@ -31,7 +33,6 @@ pub async fn get_details(
     let mut conn_opt = None;
     let cache_key = format!("cache:work_order:{}", id);
     if let Some(client) = valkey_client.as_ref() {
-        use redis::AsyncCommands;
         let mut conn = client.get_connection();
         if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&cache_key).await {
             if let Ok(details) = serde_json::from_str::<WorkOrderDetails>(&cached_json) {
@@ -52,7 +53,6 @@ pub async fn get_details(
 
     let details = get_svc::decide_get_details(wo, product, symptom, &lookup_tables);
     if let Some(mut conn) = conn_opt {
-        use redis::AsyncCommands;
         if let Ok(cached_val) = serde_json::to_string(&details) { let _: () = conn.set_ex(&cache_key, cached_val, 600).await.unwrap_or_default(); }
     }
     Ok(Json(ApiResponse::success(200, "Work order details retrieved successfully", details)))

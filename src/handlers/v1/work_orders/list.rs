@@ -38,14 +38,12 @@ pub async fn list(
     let cache_key_prefix = match auth.role.name.as_str() {
         "SuperAdmin" => {
             resolved_province = query.province.clone();
-            resolved_tech_id = query.technician_id;
-            format!("superadmin:p:{:?}:t:{:?}", resolved_province, resolved_tech_id)
+            format!("superadmin:p:{:?}", resolved_province)
         }
         "Admin" => {
             let p = auth.user.province.clone().ok_or_else(|| AppError::Forbidden("Admin profile missing province".to_string()))?;
             resolved_province = Some(p.clone());
-            resolved_tech_id = query.technician_id;
-            format!("admin_geo:{}:t:{:?}", p, resolved_tech_id)
+            format!("admin_geo:{}", p)
         }
         "Technician" => {
             resolved_tech_id = Some(auth.user.id);

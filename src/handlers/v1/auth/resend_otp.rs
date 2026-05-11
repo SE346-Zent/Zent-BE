@@ -9,6 +9,8 @@ use crate::entities::users;
 use crate::services::v1::auth::resend_otp;
 use crate::services::v1::core::email_service;
 use crate::model::requests::auth::resend_otp_request::ResendOtpRequest;
+use redis::AsyncCommands;
+
 use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 
 #[utoipa::path(
@@ -40,7 +42,6 @@ pub async fn resend_otp_handler(
 
     let effect = resend_otp::decide_resend_otp(user.as_ref(), pending_status_id, payload)?;
 
-    use redis::AsyncCommands;
     if let Some(client) = valkey_client {
         let mut conn = client.get_connection();
         let valkey_key = format!("register_verification:{}", effect.email);

@@ -35,13 +35,19 @@ pub use deny_refusal::__path_deny_refusal;
 pub use history::__path_history;
 
 use axum::{Router, middleware};
+use std::collections::HashMap;
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, prelude::Uuid};
+use chrono::Utc;
+use redis::AsyncCommands;
+use sea_orm::{DatabaseConnection, prelude::Uuid, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, ColumnTrait, TransactionTrait, ActiveModelTrait, Set};
+use tracing::{info, error};
+use crate::core::config::AppConfig;
 use crate::core::state::AppState;
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::AppError;
 use crate::entities::roles::Role;
 use crate::entities::work_orders as work_orders_ent;
+use crate::entities::{products, work_order_symptoms, users, work_order_state_history};
 use crate::extractor::role_check::require_role;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::list_response::WorkOrderListItem;
@@ -49,7 +55,6 @@ use crate::model::responses::pagination::PaginationResponse;
 use crate::model::requests::pagination::PaginationRequest;
 use crate::services::v1::work_orders::list as list_svc;
 use crate::infrastructure::cache::ValkeyClient;
-use crate::entities::{products, work_order_symptoms};
 
 /// Sentinel value stored during the idempotency claim window.
 pub(crate) const IDEMPOTENCY_PENDING: &str = "__PENDING__";
@@ -105,8 +110,6 @@ pub(crate) async fn fetch_paginated_work_orders(
     province_filter: Option<String>,
     customer_id: Option<Uuid>,
 ) -> Result<axum::Json<ApiResponse<Vec<WorkOrderListItem>>>, AppError> {
-    use redis::AsyncCommands;
-    use sea_orm::{EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, ColumnTrait};
     let mut conn_opt = None;
     let mut full_cache_key = String::new();
 
@@ -157,20 +160,14 @@ pub async fn run_cleanup(
     luts: &LookupTables,
     rabbitmq_opt: &Option<std::sync::Arc<lapin::Connection>>,
 ) -> Result<(), anyhow::Error> {
-    use chrono::Utc;
-    use tracing::{info, error};
-    use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, TransactionTrait, ActiveModelTrait, Set};
-    use crate::entities::{work_orders as work_orders_ent, users, work_order_state_history};
-    use crate::core::config::AppConfig;
-
     let cfg = AppConfig::get();
     let system_user_id = cfg.system_user_id;
 
     // Get threshold from policy cache (LUT)
-    let threshold_hours: i64 = luts.policies.get("unassigned_cleanup_threshold_hours").and_then(|v| v.parse().ok()).unwrap_or(24);
+    let threshold_hours: i64 = luts.policies.get("unassigned_cleanup_threshold_hours").and_then(|v| v.parse().ok()).unwrap_or(3);
 
-    let pending_status_id = *luts.work_order_statuses_by_name.get("Pending assignment").unwrap_or_else(|| luts.work_order_statuses_by_name.get("Pending").unwrap());
-    let cancelled_status_id = *luts.work_order_statuses_by_name.get("Cancelled").unwrap();
+    let pending_status_id = *luts.work_order_statuses_by_name.get("Pending").unwrap_or_else(|| luts.work_order_statuses_by_name.get("Pending assignment").unwrap());
+    let closed_status_id = *luts.work_order_statuses_by_name.get("Closed").unwrap();
 
     let now = Utc::now();
     let cutoff_time = now - chrono::Duration::hours(threshold_hours);
@@ -186,14 +183,14 @@ pub async fn run_cleanup(
 
     for wo in target_wos {
         let mut wo_active: work_orders_ent::ActiveModel = wo.clone().into();
-        wo_active.work_order_status_id = Set(cancelled_status_id);
+        wo_active.work_order_status_id = Set(closed_status_id);
         wo_active.updated_at = Set(now);
 
         let history = work_order_state_history::ActiveModel {
             id: Set(uuid::Uuid::new_v4()),
             work_order_id: Set(wo.id),
             from_status_id: Set(Some(pending_status_id)),
-            to_status_id: Set(cancelled_status_id),
+            to_status_id: Set(closed_status_id),
             changed_by_id: Set(system_user_id),
             changed_at: Set(now),
         };
@@ -231,10 +228,6 @@ pub(crate) async fn try_auto_assign_single(
     rabbitmq_opt: Option<Arc<lapin::Connection>>,
     templates: Option<Arc<std::collections::HashMap<String, String>>>,
 ) -> bool {
-    use std::collections::HashMap;
-    use crate::entities::users;
-    use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, TransactionTrait, ActiveModelTrait};
-
     let tech_role_id = match luts.roles_by_name.get("Technician") {
         Some(id) => *id,
         None => { tracing::warn!("Technician role not found"); return false; }
@@ -282,7 +275,6 @@ pub(crate) async fn try_auto_assign_single(
         }
     }
     if let Some(client) = valkey_client.as_ref() {
-        use redis::AsyncCommands;
         let mut conn = client.get_connection();
         let _: u64 = conn.incr::<&str, i32, u64>("cache:work_orders:generation", 1).await.unwrap_or_default();
     }

@@ -11,6 +11,8 @@ use crate::utils::hasher;
 use crate::services::v1::auth::register;
 use crate::services::v1::core::email_service;
 use crate::model::requests::auth::user_registration_request::UserRegistrationRequest;
+use redis::AsyncCommands;
+
 use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 
 #[utoipa::path(
@@ -67,7 +69,6 @@ pub async fn register_handler(
         user_active.update(db.as_ref()).await?;
     }
 
-    use redis::AsyncCommands;
     if let Some(client) = valkey_client {
         let mut conn = client.get_connection();
         let valkey_key = format!("register_verification:{}", effect.email);

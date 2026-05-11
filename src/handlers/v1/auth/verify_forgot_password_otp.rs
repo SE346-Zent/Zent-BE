@@ -6,6 +6,8 @@ use crate::infrastructure::cache::ValkeyClient;
 use crate::services::v1::auth::verify_forgot_password_otp;
 use crate::model::requests::auth::verify_forgot_password_otp_request::VerifyForgotPasswordOtpRequest;
 use crate::model::responses::base::ApiResponse;
+use redis::AsyncCommands;
+
 use crate::model::responses::auth::verify_forgot_password_otp_response::VerifyForgotPasswordOtpResponseData;
 
 #[utoipa::path(
@@ -25,7 +27,6 @@ pub async fn verify_forgot_password_otp_handler(
 ) -> Result<Json<ApiResponse<VerifyForgotPasswordOtpResponseData>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-    use redis::AsyncCommands;
     let client = valkey_client.ok_or_else(|| AppError::Internal(anyhow::anyhow!("Valkey missing")))?;
     let mut conn = client.get_connection();
     let script_hashes = client.get_script_hashes();
