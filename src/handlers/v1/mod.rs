@@ -14,11 +14,10 @@ pub fn router(state: AppState) -> Router<AppState> {
         .nest("/auth", auth::router())
         .nest("/docs", api_docs::router())
         .nest("/work_orders", work_orders_router(state.clone()))
-        .nest("/media", media_router(state))
+        .nest("/media", media::media_router(state))
 }
 
 fn work_orders_router(state: AppState) -> Router<AppState> {
-    // 1. Customer Routes
     let customer_routes = Router::new()
         .route("/", axum::routing::post(work_orders::create))
         .route_layer(middleware::from_fn_with_state(
@@ -26,7 +25,6 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
             require_role::<AppState>(&[Role::Customer]),
         ));
 
-    // 2. Technician Routes
     let tech_routes = Router::new()
         .route("/{id}/start", axum::routing::post(work_orders::start))
         .route("/{id}/refuse", axum::routing::post(work_orders::refuse))
@@ -37,7 +35,6 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
             require_role::<AppState>(&[Role::Technician]),
         ));
 
-    // 3. Admin Routes
     let admin_routes = Router::new()
         .route("/{id}/assign", axum::routing::post(work_orders::assign))
         .route("/{id}/cancel", axum::routing::post(work_orders::cancel))
@@ -48,11 +45,9 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
             require_role::<AppState>(&[Role::Admin]),
         ));
 
-    // 4. Unified List Route (Shared by all roles - Auth checked inside handler)
     let list_route = Router::new()
         .route("/", axum::routing::get(work_orders::list));
 
-    // 5. Shared/Open Routes
     Router::new()
         .route("/{id}", axum::routing::get(work_orders::get_details))
         .route("/{id}/history", axum::routing::get(work_orders::history))
@@ -60,24 +55,4 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .merge(customer_routes)
         .merge(tech_routes)
         .merge(admin_routes)
-}
-
-fn media_router(state: AppState) -> Router<AppState> {
-    let closing_form_routes = Router::new()
-        .route("/photos", axum::routing::post(media::upload_closing_form_photo))
-        .route("/photos/{image_id}", axum::routing::patch(media::update_closing_form_photo))
-        .route("/signature", axum::routing::post(media::upload_closing_form_signature))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_role::<AppState>(&[Role::Technician]),
-        ));
-
-    Router::new()
-        .nest("/work_orders/{id}/closing_form", closing_form_routes)
-        .route("/photos/work_orders/{id}", axum::routing::get(media::get_work_order_photo))
-        .route("/photos/work_orders", axum::routing::get(media::list_work_order_photos))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_role::<AppState>(&[Role::Technician]),
-        ))
 }
