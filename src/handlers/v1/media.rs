@@ -92,10 +92,9 @@ pub async fn upload_closing_form_photo(
     // 2. Generate Unique File Name and Upload to OCI
     let extension = file_name.split('.').last().unwrap_or("jpg");
     let unique_file_name = format!(
-        "wo_closing_{}_{}_{}.{}", 
+        "{}/wo_closing/{}.{}", 
         id, 
         chrono::Utc::now().timestamp(), 
-        Uuid::new_v4(), 
         extension
     );
 
@@ -205,10 +204,9 @@ pub async fn update_closing_form_photo(
     // 2. Generate Unique File Name and Upload to OCI
     let extension = file_name.split('.').last().unwrap_or("jpg");
     let unique_file_name = format!(
-        "wo_closing_update_{}_{}_{}.{}", 
+        "{}/wo_closing_update/{}.{}", 
         id, 
         chrono::Utc::now().timestamp(), 
-        Uuid::new_v4(), 
         extension
     );
 
@@ -350,10 +348,9 @@ pub async fn upload_closing_form_signature(
     // 2. Generate Unique File Name and Upload to OCI
     let extension = file_name.split('.').last().unwrap_or("png");
     let unique_file_name = format!(
-        "sig_{}_{}_{}.{}", 
+        "{}/sig/{}.{}", 
         id, 
         chrono::Utc::now().timestamp(), 
-        Uuid::new_v4(), 
         extension
     );
 

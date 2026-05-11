@@ -196,10 +196,28 @@ pub async fn create(
         let _: () = conn.incr("cache:work_orders:generation", 1).await.unwrap_or_default();
     }
 
+    // ── 5.2 Trigger auto-assign for the new work order ──────────────────
+    let was_assigned = try_auto_assign_single(
+        db.clone(),
+        luts.clone(),
+        wo_model.clone(),
+        valkey_client.clone(),
+        None, // rabbitmq_opt not available in create handler; cron will send email if assigned later
+        None, // templates not available
+    ).await;
+
+    let status_text = if was_assigned {
+        "Assigned".to_string()
+    } else {
+        // TODO: Send notification to admin when notification system is available
+        // The admin should manually assign this work order via /work_orders/{id}/assign
+        "Pending assignment".to_string()
+    };
+
     let response = WorkOrderResponseData {
         id: wo_model.id,
         work_order_number: wo_model.work_order_number,
-        status: "Pending assignment".to_string(),
+        status: status_text,
     };
 
     // ── 6. Finalise Idempotency ─────────────────────────────────────────
@@ -377,8 +395,6 @@ pub async fn approve_refusal(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
-    State(rabbitmq_opt): State<Option<Arc<lapin::Connection>>>,
-    State(templates): State<Arc<std::collections::HashMap<String, String>>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     // 1. Fetch data
@@ -387,9 +403,11 @@ pub async fn approve_refusal(
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
 
-    // Check geofence admin
-    if auth.user.province.as_ref() != Some(&work_order.province) {
-        return Err(AppError::Forbidden("You can only manage work orders in your area".into()));
+    // Province check only for regular Admin, not SuperAdmin
+    if auth.role.name == "Admin" {
+        if auth.user.province.as_ref() != Some(&work_order.province) {
+            return Err(AppError::Forbidden("You can only manage work orders in your area".into()));
+        }
     }
 
     let reject_form_id = work_order.reject_form_id
@@ -402,10 +420,6 @@ pub async fn approve_refusal(
 
     let rejected_status_id = *luts.work_order_statuses_by_name.get("Rejected")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Rejected status not found")))?;
-
-    // Save info for email before work_order is consumed
-    let customer_id = work_order.customer_id;
-    let wo_number = work_order.work_order_number.clone();
 
     // 2. Decision Logic
     let effect = crate::services::v1::work_orders::approve_refusal::decide_approve_refusal(
@@ -428,23 +442,6 @@ pub async fn approve_refusal(
         sea_orm::TransactionError::Transaction(e) => e,
     })?;
 
-    // 4. Send approval email to customer
-    if let Some(rabbitmq) = rabbitmq_opt.as_ref() {
-        let customer = users::Entity::find_by_id(customer_id)
-            .one(db.as_ref())
-            .await?;
-        if let Some(cust) = customer {
-            let cust_name = cust.full_name.clone();
-            let _ = crate::services::v1::core::email_service::send_work_order_refusal_approved_email(
-                rabbitmq,
-                &templates,
-                &cust.email,
-                &cust_name,
-                &wo_number,
-            ).await;
-        }
-    }
-
     Ok(Json(ApiResponse::message_only(200, "Refusal approved successfully, work order is now Rejected")))
 }
 
@@ -464,6 +461,8 @@ pub async fn deny_refusal(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
+    State(rabbitmq_opt): State<Option<Arc<lapin::Connection>>>,
+    State(templates): State<Arc<std::collections::HashMap<String, String>>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     // 1. Fetch data
@@ -472,9 +471,11 @@ pub async fn deny_refusal(
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
 
-    // Check geofence admin
-    if auth.user.province.as_ref() != Some(&work_order.province) {
-        return Err(AppError::Forbidden("You can only manage work orders in your area".into()));
+    // Province check only for regular Admin, not SuperAdmin
+    if auth.role.name == "Admin" {
+        if auth.user.province.as_ref() != Some(&work_order.province) {
+            return Err(AppError::Forbidden("You can only manage work orders in your area".into()));
+        }
     }
 
     let reject_form_id = work_order.reject_form_id
@@ -487,6 +488,10 @@ pub async fn deny_refusal(
 
     let pending_status_id = *luts.work_order_statuses_by_name.get("Pending")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status not found")))?;
+
+    // Save info for email before work_order is consumed
+    let customer_id = work_order.customer_id;
+    let wo_number = work_order.work_order_number.clone();
 
     // 2. Decision Logic
     let effect = crate::services::v1::work_orders::deny_refusal::decide_deny_refusal(
@@ -509,6 +514,23 @@ pub async fn deny_refusal(
         sea_orm::TransactionError::Transaction(e) => e,
     })?;
 
+    // 4. Send denial apology email to customer
+    if let Some(rabbitmq) = rabbitmq_opt.as_ref() {
+        let customer = users::Entity::find_by_id(customer_id)
+            .one(db.as_ref())
+            .await?;
+        if let Some(cust) = customer {
+            let cust_name = cust.full_name.clone();
+            let _ = crate::services::v1::core::email_service::send_work_order_refusal_denied_email(
+                rabbitmq,
+                &templates,
+                &cust.email,
+                &cust_name,
+                &wo_number,
+            ).await;
+        }
+    }
+
     Ok(Json(ApiResponse::message_only(200, "Refusal denied. Work order reset to Pending for reassignment.")))
 }
 
@@ -524,7 +546,7 @@ pub async fn deny_refusal(
     security(("bearer_auth" = []))
 )]
 pub async fn get_details(
-    auth: AuthUser,
+    _auth: AuthUser,
     State(db): State<Arc<DatabaseConnection>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     State(lookup_tables): State<Arc<LookupTables>>,
@@ -537,9 +559,7 @@ pub async fn get_details(
         let mut conn = client.get_connection();
         if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&cache_key).await {
             if let Ok(details) = serde_json::from_str::<WorkOrderDetails>(&cached_json) {
-                if has_access_to_work_order(&auth, &details) {
-                    return Ok(Json(ApiResponse::success(200, "Work order details retrieved successfully", details)));
-                }
+                return Ok(Json(ApiResponse::success(200, "Work order details retrieved successfully", details)));
             }
         }
         conn_opt = Some(conn);
@@ -555,10 +575,6 @@ pub async fn get_details(
 
     let details = get_svc::decide_get_details(wo, product, symptom, &lookup_tables);
 
-    if !has_access_to_work_order(&auth, &details) {
-        return Err(AppError::Forbidden("You do not have permission to view this work order".to_string()));
-    }
-
     if let Some(mut conn) = conn_opt {
         if let Ok(cached_val) = serde_json::to_string(&details) {
             let _: () = conn.set_ex(&cache_key, cached_val, 600).await.unwrap_or_default();
@@ -566,11 +582,6 @@ pub async fn get_details(
     }
 
     Ok(Json(ApiResponse::success(200, "Work order details retrieved successfully", details)))
-}
-
-fn has_access_to_work_order(_auth: &AuthUser, _details: &WorkOrderDetails) -> bool {
-    // All authenticated roles can view work order details
-    true
 }
 
 #[utoipa::path(
@@ -816,6 +827,167 @@ pub async fn schedule(
     Ok(())
 }
 
+/// Attempt to auto-assign a single newly-created work order to the least-loaded
+/// technician in the same province. Returns true if assignment succeeded.
+async fn try_auto_assign_single(
+    db: Arc<DatabaseConnection>,
+    luts: Arc<LookupTables>,
+    wo: work_orders_ent::Model,
+    valkey_client: Option<Arc<ValkeyClient>>,
+    rabbitmq_opt: Option<Arc<lapin::Connection>>,
+    templates: Option<Arc<std::collections::HashMap<String, String>>>,
+) -> bool {
+    use crate::entities::{users, policy};
+    use std::collections::HashMap;
+
+    let tech_role_id = match luts.roles_by_name.get("Technician") {
+        Some(id) => *id,
+        None => {
+            tracing::warn!("Technician role not found in lookup tables");
+            return false;
+        }
+    };
+
+    let policies_vec = match policy::Entity::find().all(db.as_ref()).await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!("Failed to load policies for auto-assign: {}", e);
+            return false;
+        }
+    };
+    let policies: HashMap<String, String> = policies_vec.into_iter()
+        .map(|p| (p.policy_name, p.policy_value))
+        .collect();
+
+    let assigned_status_id = *luts.work_order_statuses_by_name.get("Assigned")
+        .unwrap_or_else(|| luts.work_order_statuses_by_name.get("Pending").unwrap());
+    let done_status_id = *luts.work_order_statuses_by_name.get("Closed")
+        .unwrap_or_else(|| luts.work_order_statuses_by_name.get("Pending").unwrap());
+
+    let cfg = crate::core::config::AppConfig::get();
+    let system_user_id = cfg.system_user_id;
+
+    let province = wo.province.clone();
+
+    // Find technicians in the same province
+    let technicians = match users::Entity::find()
+        .filter(users::Column::RoleId.eq(tech_role_id))
+        .filter(users::Column::Province.eq(&province))
+        .all(db.as_ref())
+        .await
+    {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::warn!("Failed to find technicians for auto-assign: {}", e);
+            return false;
+        }
+    };
+
+    if technicians.is_empty() {
+        tracing::info!(
+            "Auto-assign: no technicians found in province '{}' for WO {} — admin manual assignment needed",
+            province, wo.work_order_number
+        );
+        // TODO: Notify admin that WO needs manual assignment (notification system not yet available)
+        return false;
+    }
+
+    let tech_ids: Vec<Uuid> = technicians.iter().map(|t| t.id).collect();
+    let agendas = match work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::TechnicianId.is_in(tech_ids))
+        .filter(work_orders_ent::Column::WorkOrderStatusId.ne(done_status_id))
+        .all(db.as_ref())
+        .await
+    {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!("Failed to load technician agendas: {}", e);
+            return false;
+        }
+    };
+
+    let mut technician_agendas: HashMap<Uuid, Vec<work_orders::Model>> = HashMap::new();
+    for agenda_wo in agendas {
+        if let Some(tid) = agenda_wo.technician_id {
+            technician_agendas.entry(tid).or_default().push(agenda_wo);
+        }
+    }
+
+    let effect = match crate::services::v1::work_orders::schedule::decide_auto_assign(
+        wo.clone(),
+        technicians,
+        technician_agendas,
+        &policies,
+        assigned_status_id,
+        done_status_id,
+        system_user_id,
+    ) {
+        Ok(Some(eff)) => eff,
+        Ok(None) => {
+            tracing::info!(
+                "Auto-assign: no suitable technician for WO {} — admin manual assignment needed",
+                wo.work_order_number
+            );
+            // TODO: Notify admin that WO needs manual assignment (notification system not yet available)
+            return false;
+        }
+        Err(e) => {
+            tracing::error!("Auto-assign decision failed for WO {}: {}", wo.work_order_number, e);
+            return false;
+        }
+    };
+
+    let assigned_tech_id = effect.work_order.technician_id.clone().unwrap().unwrap();
+
+    // Execute the assignment
+    if let Err(e) = db.transaction::<_, (), anyhow::Error>(|txn| {
+        Box::pin(async move {
+            effect.work_order.update(txn).await.map_err(|e| anyhow::anyhow!(e))?;
+            effect.state_history.insert(txn).await.map_err(|e| anyhow::anyhow!(e))?;
+            Ok(())
+        })
+    }).await {
+        tracing::error!("Auto-assign transaction failed for WO {}: {}", wo.work_order_number, e);
+        return false;
+    }
+
+    tracing::info!("Auto-assigned WO {} to technician {}", wo.work_order_number, assigned_tech_id);
+
+    // Send assignment email to customer
+    if let (Some(rabbitmq), Some(templates)) = (rabbitmq_opt.as_ref(), templates.as_ref()) {
+        let customer = users::Entity::find_by_id(wo.customer_id)
+            .one(db.as_ref())
+            .await
+            .unwrap_or_default();
+        let technician = users::Entity::find_by_id(assigned_tech_id)
+            .one(db.as_ref())
+            .await
+            .unwrap_or_default();
+        if let (Some(cust), Some(tech)) = (customer, technician) {
+            let tech_name = tech.full_name.clone();
+            let cust_name = cust.full_name.clone();
+            let appointment = wo.appointment.to_string();
+            let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(
+                rabbitmq,
+                &templates,
+                &cust.email,
+                &cust_name,
+                &wo.work_order_number,
+                &tech_name,
+                &appointment,
+            ).await;
+        }
+    }
+
+    // Invalidate list caches
+    if let Some(client) = valkey_client.as_ref() {
+        let mut conn = client.get_connection();
+        let _: u64 = conn.incr::<&str, i32, u64>("cache:work_orders:generation", 1).await.unwrap_or_default();
+    }
+
+    true
+}
+
 #[utoipa::path(
     post,
     path = "/api/v1/work_orders/{id}/start",
@@ -1045,7 +1217,6 @@ pub async fn complete(
     let effect = crate::services::v1::work_orders::complete::decide_complete_work_order(
         payload,
         work_order,
-        &luts.policies,
         completed_status_id,
         auth.user.id,
     )?;
@@ -1064,9 +1235,6 @@ pub async fn complete(
             }
             for pu in effect.part_updates {
                 pu.update(txn).await?;
-            }
-            if let Some(ot) = effect.overtime {
-                ot.insert(txn).await?;
             }
             effect.work_order.update(txn).await?;
             effect.state_history.insert(txn).await?;
@@ -1103,25 +1271,18 @@ pub async fn complete(
     security(("bearer_auth" = []))
 )]
 pub async fn history(
-    auth: AuthUser,
+    _auth: AuthUser,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<Vec<WorkOrderStateHistoryEntry>>>, AppError> {
-    // 1. Fetch the work order to verify it exists and check access
-    let work_order = work_orders_ent::Entity::find_by_id(id)
+    // 1. Fetch the work order to verify it exists
+    let _work_order = work_orders_ent::Entity::find_by_id(id)
         .one(db.as_ref())
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
 
-    // 2. Access control — same visibility rules as get_details
-    if auth.role.name != "SuperAdmin" && auth.role.name != "Admin" {
-        if auth.user.id != work_order.customer_id {
-            return Err(AppError::Forbidden("You do not have permission to view this work order's history".to_string()));
-        }
-    }
-
-    // 3. Fetch and transform history
+    // 2. Fetch and transform history
     let entries = crate::services::v1::work_orders::history::decide_get_history(
         db.as_ref(),
         id,

@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use chrono::{FixedOffset, Utc, Timelike, Duration};
+use chrono::Utc;
 use sea_orm::Set;
 use uuid::Uuid;
 use crate::{
@@ -11,7 +10,6 @@ use crate::{
         work_order_image_links,
         part_changes,
         parts,
-        overtimes,
         work_order_state_history,
     },
     model::requests::work_orders::complete_request::CompleteWorkOrderRequest,
@@ -24,7 +22,6 @@ pub struct CompleteWorkOrderEffect {
     pub image_links: Vec<work_order_image_links::ActiveModel>,
     pub part_changes: Vec<part_changes::ActiveModel>,
     pub part_updates: Vec<parts::ActiveModel>,
-    pub overtime: Option<overtimes::ActiveModel>,
     pub work_order: work_orders::ActiveModel,
     pub state_history: work_order_state_history::ActiveModel,
     /// Checklist JSON to write to disk (serialized bytes, ready for tokio::fs::write)
@@ -34,7 +31,6 @@ pub struct CompleteWorkOrderEffect {
 pub fn decide_complete_work_order(
     req: CompleteWorkOrderRequest,
     work_order: work_orders::Model,
-    policies: &HashMap<String, String>,
     completed_status_id: i32,
     technician_id: Uuid,
 ) -> Result<CompleteWorkOrderEffect, AppError> {
@@ -82,50 +78,12 @@ pub fn decide_complete_work_order(
         part_updates.push(part_update);
     }
 
-    // 4. Overtime Logic (Calculated from workday_end policy)
-    let mut overtime = None;
-    let local_now = now.with_timezone(&FixedOffset::east_opt(7 * 3600).unwrap()); // ICT
-    
-    let workday_start: u32 = policies.get("workday_start")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(8);
-    let workday_end: u32 = policies.get("workday_end")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(18);
-
-    let hour = local_now.hour();
-    let mut overtime_minutes = 0;
-
-    if hour >= workday_end {
-        // Case A: Finished after workday end on the same day
-        let day_end_time = local_now.date_naive()
-            .and_hms_opt(workday_end, 0, 0).unwrap()
-            .and_local_timezone(FixedOffset::east_opt(7 * 3600).unwrap()).unwrap();
-        overtime_minutes = local_now.signed_duration_since(day_end_time).num_minutes();
-    } else if hour < workday_start {
-        // Case B: Finished after midnight but before next workday start
-        let prev_day_end_time = (local_now.date_naive() - Duration::days(1))
-            .and_hms_opt(workday_end, 0, 0).unwrap()
-            .and_local_timezone(FixedOffset::east_opt(7 * 3600).unwrap()).unwrap();
-        overtime_minutes = local_now.signed_duration_since(prev_day_end_time).num_minutes();
-    }
-
-    if overtime_minutes > 0 {
-        overtime = Some(overtimes::ActiveModel {
-            id: Set(Uuid::new_v4()),
-            technician_id: Set(technician_id),
-            work_order_id: Set(work_order.id),
-            overtime_minutes: Set(overtime_minutes as i32),
-            created_at: Set(now),
-        });
-    }
-
-    // 5. Prepare Checklist as JSON for disk storage
+    // 4. Prepare Checklist as JSON for disk storage
     let checklist_json = req.checklist.map(|items| {
         serde_json::to_vec_pretty(&items).unwrap_or_else(|_| b"[]".to_vec())
     });
 
-    // 6. Update Work Order
+    // 5. Update Work Order
     let mut active_wo: work_orders::ActiveModel = work_order.clone().into();
     active_wo.work_order_status_id = Set(completed_status_id);
     active_wo.complete_form_id = Set(Some(closing_form_id));
@@ -147,7 +105,6 @@ pub fn decide_complete_work_order(
         image_links: Vec::new(),
         part_changes: part_changes_models,
         part_updates,
-        overtime,
         work_order: active_wo,
         state_history,
         checklist_json,

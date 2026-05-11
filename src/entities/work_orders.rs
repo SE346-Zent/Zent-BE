@@ -71,8 +71,6 @@ pub enum Relation {
     WorkOrderClosingForms,
     #[sea_orm(has_many = "super::work_order_image_links::Entity")]
     WorkOrderImageLinks,
-    #[sea_orm(has_many = "super::overtimes::Entity")]
-    Overtimes,
     #[sea_orm(
         belongs_to = "super::work_order_reject_forms::Entity",
         from = "Column::RejectFormId",
@@ -132,12 +130,6 @@ impl Related<super::work_order_closing_forms::Entity> for Entity {
 impl Related<super::work_order_image_links::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::WorkOrderImageLinks.def()
-    }
-}
-
-impl Related<super::overtimes::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Overtimes.def()
     }
 }
 

@@ -125,7 +125,7 @@ pub async fn send_work_order_created_email(
     publish_email_task(rabbitmq, email_payload, "work order creation email").await
 }
 
-pub async fn send_work_order_refusal_approved_email(
+pub async fn send_work_order_refusal_denied_email(
     rabbitmq: &Arc<Connection>,
     templates: &HashMap<String, String>,
     to: &str,
@@ -135,25 +135,25 @@ pub async fn send_work_order_refusal_approved_email(
     let escaped_name = v_htmlescape::escape(name).to_string();
     let escaped_wo_number = v_htmlescape::escape(work_order_number).to_string();
 
-    let email_body = if let Some(template_content) = templates.get("work_order_refusal_approved_email.html") {
+    let email_body = if let Some(template_content) = templates.get("work_order_refusal_denied_email.html") {
         template_content
             .replace("{{name}}", &escaped_name)
             .replace("{{work_order_number}}", &escaped_wo_number)
     } else {
-        tracing::warn!("Template 'work_order_refusal_approved_email.html' not found in cache! Using minimal HTML fallback.");
+        tracing::warn!("Template 'work_order_refusal_denied_email.html' not found in cache! Using minimal HTML fallback.");
         format!(
-            "<html><body><h2>Work Order Update, {}!</h2><p>Your work order <strong>{}</strong> has been reviewed and resolved.</p><p>If you have any questions, please contact our support team.</p></body></html>",
+            "<html><body><h2>Work Order Update, {}!</h2><p>We regret to inform you that the technician's refusal for work order <strong>{}</strong> has been declined. Your work order remains active and will be reassigned.</p><p>We apologize for any inconvenience.</p></body></html>",
             escaped_name, escaped_wo_number
         )
     };
 
     let email_payload = serde_json::json!({
         "to": to,
-        "subject": format!("Work Order Resolved: {}", work_order_number),
+        "subject": format!("Work Order Update: {}", work_order_number),
         "body": email_body
     });
 
-    publish_email_task(rabbitmq, email_payload, "work order refusal approved email").await
+    publish_email_task(rabbitmq, email_payload, "work order refusal denied email").await
 }
 
 pub async fn send_work_order_assigned_email(
