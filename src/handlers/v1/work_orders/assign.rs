@@ -7,6 +7,7 @@ use sea_orm::{QueryFilter, ColumnTrait};
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
+use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::work_orders::assign_request::AssignWorkOrderRequest;
 use crate::model::responses::base::ApiResponse;
 use crate::entities::{work_orders as work_orders_ent, users};
@@ -27,13 +28,15 @@ pub async fn assign(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
+    State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     State(rabbitmq_opt): State<Option<Arc<lapin::Connection>>>,
     State(templates): State<Arc<std::collections::HashMap<String, String>>>,
     Path(id): Path<Uuid>,
     Json(payload): Json<AssignWorkOrderRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
-    let work_order = work_orders_ent::Entity::find_by_id(id).one(db.as_ref()).await?.ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+    // Write-through: use the cache for individual work order instead of querying DB
+    let work_order = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
 
     if auth.role.name == "Admin" {
         let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Admin has no province assigned".to_string()))?;
@@ -48,6 +51,9 @@ pub async fn assign(
 
     db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order.update(txn).await?; effect.state_history.insert(txn).await?; Ok(()) }))
         .await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
+
+    // Write-through cache: store full WorkOrderDetails in cache and bump list generation
+    super::write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), id).await;
 
     if let Some(rmq) = rabbitmq_opt.as_ref() {
         let tech = users::Entity::find_by_id(payload.technician_id).one(db.as_ref()).await?;

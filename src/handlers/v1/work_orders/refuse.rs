@@ -1,13 +1,13 @@
 use axum::{extract::{State, Path}, Json, Extension};
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, TransactionTrait};
+use sea_orm::{DatabaseConnection, ActiveModelTrait, TransactionTrait};
 use uuid::Uuid;
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
+use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::work_orders::refuse_request::{RefuseWorkOrderRequest, RefuseWorkOrderMultipart};
 use crate::model::responses::base::ApiResponse;
-use crate::entities::work_orders as work_orders_ent;
 
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/refuse",
@@ -23,6 +23,7 @@ pub async fn refuse(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
+    State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     Path(id): Path<Uuid>,
     mut multipart: axum::extract::Multipart,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
@@ -44,7 +45,8 @@ pub async fn refuse(
     if reason.is_empty() { return Err(AppError::BadRequest("reason is required".to_string())); }
     if photos_data.len() > 5 { return Err(AppError::BadRequest("A maximum of 5 photos are allowed".to_string())); }
 
-    let wo = work_orders_ent::Entity::find_by_id(id).one(db.as_ref()).await?.ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+    // Write-through: use the cache for individual work order instead of querying DB
+    let wo = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
     if wo.technician_id != Some(auth.user.id) { return Err(AppError::Forbidden("You are not assigned to this work order".to_string())); }
 
     let mut urls = Vec::new();
@@ -67,6 +69,9 @@ pub async fn refuse(
         effect.state_history.insert(txn).await?;
         Ok(())
     })).await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
+
+    // Write-through cache: store full WorkOrderDetails in cache and bump list generation
+    super::write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), id).await;
 
     Ok(Json(ApiResponse::success(200, "Work order refusal submitted successfully", ())))
 }

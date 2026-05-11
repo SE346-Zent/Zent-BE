@@ -5,8 +5,9 @@ use uuid::Uuid;
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::AppError;
 use crate::extractor::auth_user::AuthUser;
+use crate::infrastructure::cache::ValkeyClient;
 use crate::model::responses::base::ApiResponse;
-use crate::entities::{work_orders, users};
+use crate::entities::users;
 
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/refusal/deny",
@@ -21,11 +22,13 @@ pub async fn deny_refusal(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
+    State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     State(rabbitmq_opt): State<Option<Arc<lapin::Connection>>>,
     State(templates): State<Arc<std::collections::HashMap<String, String>>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    let wo = work_orders::Entity::find_by_id(id).one(db.as_ref()).await?.ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+    // Write-through: use the cache for individual work order instead of querying DB
+    let wo = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
 
     if auth.role.name == "Admin" {
         if auth.user.province.as_ref() != Some(&wo.province) { return Err(AppError::Forbidden("You can only manage work orders in your area".into())); }
@@ -40,6 +43,9 @@ pub async fn deny_refusal(
 
     db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order.update(txn).await?; effect.reject_form.update(txn).await?; effect.state_history.insert(txn).await?; Ok(()) }))
         .await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
+
+    // Write-through cache: store full WorkOrderDetails in cache and bump list generation
+    super::write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), id).await;
 
     if let Some(rmq) = rabbitmq_opt.as_ref() {
         if let Some(cust) = users::Entity::find_by_id(customer_id).one(db.as_ref()).await? {

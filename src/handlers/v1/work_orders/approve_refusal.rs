@@ -5,9 +5,9 @@ use uuid::Uuid;
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::AppError;
 use crate::extractor::auth_user::AuthUser;
+use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::work_orders::approve_refusal_request::ApproveRefusalRequest;
 use crate::model::responses::base::ApiResponse;
-use crate::entities::work_orders;
 
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/refusal/approve", request_body = ApproveRefusalRequest,
@@ -23,9 +23,11 @@ pub async fn approve_refusal(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
+    State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    let wo = work_orders::Entity::find_by_id(id).one(db.as_ref()).await?.ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+    // Write-through: use the cache for individual work order instead of querying DB
+    let wo = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
 
     if auth.role.name == "Admin" {
         if auth.user.province.as_ref() != Some(&wo.province) { return Err(AppError::Forbidden("You can only manage work orders in your area".into())); }
@@ -37,6 +39,9 @@ pub async fn approve_refusal(
     let effect = crate::services::v1::work_orders::approve_refusal::decide_approve_refusal(wo, rf, auth.user.id, rejected_id)?;
     db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order.update(txn).await?; effect.reject_form.update(txn).await?; effect.state_history.insert(txn).await?; Ok(()) }))
         .await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
+
+    // Write-through cache: store full WorkOrderDetails in cache and bump list generation
+    super::write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), id).await;
 
     Ok(Json(ApiResponse::message_only(200, "Refusal approved successfully, work order is now Rejected")))
 }

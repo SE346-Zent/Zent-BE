@@ -1,14 +1,14 @@
 use axum::{extract::{State, Path}, Json, Extension};
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, TransactionTrait};
+use sea_orm::{DatabaseConnection, ActiveModelTrait, TransactionTrait};
 use uuid::Uuid;
 use validator::Validate;
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
+use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::work_orders::complete_request::CompleteWorkOrderRequest;
 use crate::model::responses::base::ApiResponse;
-use crate::entities::work_orders as work_orders_ent;
 
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/complete",
@@ -25,11 +25,13 @@ pub async fn complete(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
+    State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     Path(id): Path<Uuid>,
     Json(payload): Json<CompleteWorkOrderRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
-    let wo = work_orders_ent::Entity::find_by_id(id).one(db.as_ref()).await?.ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+    // Write-through: use the cache for individual work order instead of querying DB
+    let wo = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
 
     if wo.technician_id != Some(auth.user.id) { return Err(AppError::Forbidden("You are not assigned to this work order".to_string())); }
 
@@ -58,5 +60,9 @@ pub async fn complete(
         tokio::fs::create_dir_all(&dir).await.map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create checklist dir: {}", e)))?;
         tokio::fs::write(format!("{}/checklist.json", dir), &bytes).await.map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to write checklist: {}", e)))?;
     }
+
+    // Write-through cache: store full WorkOrderDetails in cache and bump list generation
+    super::write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), id).await;
+
     Ok(Json(ApiResponse::success(200, "Work order completed successfully", ())))
 }

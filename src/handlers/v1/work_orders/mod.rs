@@ -100,6 +100,106 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
 
 //pub async fn cancel() -> axum::http::StatusCode { axum::http::StatusCode::NOT_IMPLEMENTED }
 
+/// Load a work order model — cache-first, DB-fallback.
+/// Checks `cache:work_order_model:{id}`, returns the raw `work_orders::Model` if found.
+/// On cache miss, queries the database, stores the model in cache, and returns it.
+/// Returns `AppError::NotFound` if the work order doesn't exist.
+pub(crate) async fn get_cached_work_order_model(
+    db: &DatabaseConnection,
+    valkey_client: &Option<Arc<ValkeyClient>>,
+    id: Uuid,
+) -> Result<work_orders_ent::Model, AppError> {
+    let model_cache_key = format!("cache:work_order_model:{}", id);
+
+    // Cache hit — serve from RAM
+    if let Some(client) = valkey_client.as_ref() {
+        let mut conn = client.get_connection();
+        if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&model_cache_key).await {
+            if let Ok(model) = serde_json::from_str::<work_orders_ent::Model>(&cached_json) {
+                return Ok(model);
+            }
+        }
+    }
+
+    // Cache miss — load from DB
+    let model = work_orders_ent::Entity::find_by_id(id)
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+
+    // Populate cache for next time (TTL matches details cache)
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(cached_val) = serde_json::to_string(&model) {
+            let mut conn = client.get_connection();
+            let _: () = conn
+                .set_ex(&model_cache_key, cached_val, 600)
+                .await
+                .unwrap_or_default();
+        }
+    }
+
+    Ok(model)
+}
+
+/// Write-through cache: after a successful mutation, re-fetch the work order with
+/// its related entities, build the full WorkOrderDetails and cache the raw model,
+/// then bump the generation counter so listing caches are invalidated.
+///
+/// This ensures `get_details` always serves from RAM and list queries never show stale data.
+pub(crate) async fn write_through_work_order_cache(
+    db: &DatabaseConnection,
+    valkey_client: Option<Arc<ValkeyClient>>,
+    lookup_tables: &LookupTables,
+    wo_id: Uuid,
+) {
+    if valkey_client.is_none() {
+        return;
+    }
+    // Re-fetch the work order with joins so we can build the full WorkOrderDetails
+    if let Ok(Some((wo, product, symptom))) = work_orders_ent::Entity::find_by_id(wo_id)
+        .find_also_related(products::Entity)
+        .find_also_related(work_order_symptoms::Entity)
+        .one(db)
+        .await
+    {
+        let client = valkey_client.as_ref().unwrap();
+        let mut conn = client.get_connection();
+
+        // 1. Cache the raw model (for mutation handlers that need it)
+        if let Ok(model_json) = serde_json::to_string(&wo) {
+            let _: () = conn
+                .set_ex::<_, _, ()>(
+                    format!("cache:work_order_model:{}", wo_id),
+                    model_json,
+                    600,
+                )
+                .await
+                .unwrap_or_default();
+        }
+
+        // 2. Cache the full WorkOrderDetails (for get_details read path)
+        let details = crate::services::v1::work_orders::get_details::decide_get_details(
+            wo, product, symptom, lookup_tables,
+        );
+        if let Ok(details_json) = serde_json::to_string(&details) {
+            let _: () = conn
+                .set_ex::<_, _, ()>(
+                    format!("cache:work_order:{}", wo_id),
+                    details_json,
+                    600,
+                )
+                .await
+                .unwrap_or_default();
+        }
+
+        // 3. Bump generation to invalidate listing caches
+        let _: u64 = conn
+            .incr::<&str, i32, u64>("cache:work_orders:generation", 1)
+            .await
+            .unwrap_or_default();
+    }
+}
+
 pub(crate) async fn fetch_paginated_work_orders(
     db: Arc<DatabaseConnection>,
     valkey_client: Option<Arc<ValkeyClient>>,
@@ -158,6 +258,7 @@ pub(crate) async fn fetch_paginated_work_orders(
 pub async fn run_cleanup(
     db: &DatabaseConnection,
     luts: &LookupTables,
+    valkey_client: Option<Arc<ValkeyClient>>,
     rabbitmq_opt: &Option<std::sync::Arc<lapin::Connection>>,
 ) -> Result<(), anyhow::Error> {
     let cfg = AppConfig::get();
@@ -201,6 +302,8 @@ pub async fn run_cleanup(
             Ok(())
         })).await {
             Ok(_) => {
+                // Write-through cache: store full WorkOrderDetails in cache and bump list generation
+                write_through_work_order_cache(db, valkey_client.clone(), luts, wo.id).await;
                 info!("Cancelled unassigned WO {} successfully", wo.work_order_number);
                 if let Some(rmq) = rabbitmq_opt.as_ref() {
                     let cust = users::Entity::find_by_id(wo.customer_id).one(db).await.unwrap_or_default();
@@ -274,9 +377,7 @@ pub(crate) async fn try_auto_assign_single(
             let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(rmq, tmpl, &c.email, &c.full_name, &wo.work_order_number, &t.full_name, &wo.appointment.to_string()).await;
         }
     }
-    if let Some(client) = valkey_client.as_ref() {
-        let mut conn = client.get_connection();
-        let _: u64 = conn.incr::<&str, i32, u64>("cache:work_orders:generation", 1).await.unwrap_or_default();
-    }
+    // Write-through cache: store full WorkOrderDetails in cache and bump list generation
+    write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), wo.id).await;
     true
 }

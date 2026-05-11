@@ -65,11 +65,30 @@ pub async fn create(
                 Some(val) if val == IDEMPOTENCY_PENDING => { tokio::time::sleep(poll_delay).await; }
                 Some(json_str) => {
                     let cached_val: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| AppError::Internal(e.into()))?;
-                    if serde_json::to_value(&payload).map_err(|e| AppError::Internal(e.into()))?["payload"] != cached_val["payload"] {
-                        return Err(AppError::Conflict("Idempotency key reused with different payload".to_string()));
+
+                    // cached_val is {"payload": <full request body>, "response": <response>}
+                    // Compare the current request body directly against the cached payload
+                    let current_payload = serde_json::to_value(&payload).map_err(|e| AppError::Internal(e.into()))?;
+                    if current_payload == cached_val["payload"] {
+                        // Same payload — genuine retry (e.g. network timeout), return cached response
+                        let response: WorkOrderResponseData = serde_json::from_value(cached_val["response"].clone()).map_err(|e| AppError::Internal(e.into()))?;
+                        return Ok(Json(ApiResponse::success(201, "Work order created successfully", response)));
                     }
-                    let response: WorkOrderResponseData = serde_json::from_value(cached_val["response"].clone()).map_err(|e| AppError::Internal(e.into()))?;
-                    return Ok(Json(ApiResponse::success(201, "Work order created successfully", response)));
+
+                    // Different payload — the same idempotency key is being used for a new operation.
+                    // Delete the stale cache entry and immediately re-claim as PENDING
+                    // so the handler can proceed to create a new work order.
+                    let _: () = redis::cmd("DEL").arg(&cache_key).query_async(&mut conn).await.unwrap_or_default();
+                    let _: () = redis::cmd("SET")
+                        .arg(&cache_key)
+                        .arg(IDEMPOTENCY_PENDING)
+                        .arg("EX")
+                        .arg(cfg.idempotency_claim_ttl_seconds)
+                        .query_async(&mut conn)
+                        .await
+                        .unwrap_or_default();
+                    claimed = true;
+                    break;
                 }
             }
         }
@@ -100,9 +119,8 @@ pub async fn create(
         sea_orm::TransactionError::Transaction(e) => e,
     })?;
 
-    if let Some(client) = valkey_client.as_ref() {
-        let _: () = client.get_connection().incr("cache:work_orders:generation", 1).await.unwrap_or_default();
-    }
+    // Write-through cache: store full WorkOrderDetails in cache and bump list generation
+    super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), wo_model.id).await;
 
     // Publish to MQ for asynchronous auto-assignment
     if let Some(rmq) = rabbitmq.as_ref() {
