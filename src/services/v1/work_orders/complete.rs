@@ -7,7 +7,6 @@ use crate::{
     entities::{
         work_orders,
         work_order_closing_forms,
-        work_order_closing_form_checklist_results,
         images,
         work_order_image_links,
         part_changes,
@@ -19,6 +18,7 @@ use crate::{
 };
 
 pub struct CompleteWorkOrderEffect {
+    pub closing_form_id: Uuid,
     pub closing_form: work_order_closing_forms::ActiveModel,
     pub images: Vec<images::ActiveModel>,
     pub image_links: Vec<work_order_image_links::ActiveModel>,
@@ -27,7 +27,8 @@ pub struct CompleteWorkOrderEffect {
     pub overtime: Option<overtimes::ActiveModel>,
     pub work_order: work_orders::ActiveModel,
     pub state_history: work_order_state_history::ActiveModel,
-    pub checklist_results: Vec<work_order_closing_form_checklist_results::ActiveModel>,
+    /// Checklist JSON to write to disk (serialized bytes, ready for tokio::fs::write)
+    pub checklist_json: Option<Vec<u8>>,
 }
 
 pub fn decide_complete_work_order(
@@ -119,22 +120,10 @@ pub fn decide_complete_work_order(
         });
     }
 
-    // 5. Prepare Checklist Results (nullable — only if client provided them)
-    let checklist_results = match req.checklist {
-        Some(items) => items
-            .into_iter()
-            .map(|item| {
-                work_order_closing_form_checklist_results::ActiveModel {
-                    closing_form_id: Set(closing_form_id),
-                    checklist_item_id: Set(item.id),
-                    result: Set(item.result),
-                    notes: Set(item.notes),
-                    created_at: Set(now),
-                }
-            })
-            .collect(),
-        None => Vec::new(),
-    };
+    // 5. Prepare Checklist as JSON for disk storage
+    let checklist_json = req.checklist.map(|items| {
+        serde_json::to_vec_pretty(&items).unwrap_or_else(|_| b"[]".to_vec())
+    });
 
     // 6. Update Work Order
     let mut active_wo: work_orders::ActiveModel = work_order.clone().into();
@@ -152,6 +141,7 @@ pub fn decide_complete_work_order(
     };
 
     Ok(CompleteWorkOrderEffect {
+        closing_form_id,
         closing_form,
         images: Vec::new(),
         image_links: Vec::new(),
@@ -160,6 +150,6 @@ pub fn decide_complete_work_order(
         overtime,
         work_order: active_wo,
         state_history,
-        checklist_results,
+        checklist_json,
     })
 }

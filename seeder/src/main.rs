@@ -7,7 +7,7 @@ use seeder::{
     seed_random_products, seed_random_warranties, seed_random_work_orders, seed_roles,
     seed_users, seed_work_order_closing_forms, seed_work_order_statuses,
     seed_parts_and_catalogs, seed_part_statuses, seed_work_order_symptoms, seed_part_conditions,
-    seed_policies, seed_checklist_items
+    seed_policies
 };
 use serde_json::to_string_pretty;
 use std::path::PathBuf;
@@ -115,8 +115,6 @@ async fn main() -> Result<()> {
     println!("\n--- Seeding Policies ---");
     let _policies = seed_policies(&db).await?;
 
-    println!("\n--- Seeding Checklist Items ---");
-    let _checklist_items = seed_checklist_items(&db).await?;
 
     // -----------------------------------------------------------------------
     // Step 2: seed users FIRST (products & warranties need customer_id)

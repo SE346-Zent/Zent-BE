@@ -568,15 +568,9 @@ pub async fn get_details(
     Ok(Json(ApiResponse::success(200, "Work order details retrieved successfully", details)))
 }
 
-fn has_access_to_work_order(auth: &AuthUser, details: &WorkOrderDetails) -> bool {
-    if auth.role.name == "SuperAdmin" || auth.role.name == "Admin" {
-        return true;
-    }
-    
-    if auth.user.id == details.customer_id {
-        return true;
-    }
-    false
+fn has_access_to_work_order(_auth: &AuthUser, _details: &WorkOrderDetails) -> bool {
+    // All authenticated roles can view work order details
+    true
 }
 
 #[utoipa::path(
@@ -939,10 +933,9 @@ pub async fn refuse(
     for (data, ct, file_name) in photos_data {
         let extension = file_name.split('.').last().unwrap_or("jpg");
         let unique_name = format!(
-            "refuse_{}_{}_{}.{}", 
+            "{}/refusal/{}.{}", 
             id, 
             chrono::Utc::now().timestamp(), 
-            Uuid::new_v4(), 
             extension
         );
         crate::utils::oci::upload_object(&unique_name, data.to_vec(), &ct).await?;
@@ -1072,9 +1065,6 @@ pub async fn complete(
             for pu in effect.part_updates {
                 pu.update(txn).await?;
             }
-            for cr in effect.checklist_results {
-                cr.insert(txn).await?;
-            }
             if let Some(ot) = effect.overtime {
                 ot.insert(txn).await?;
             }
@@ -1086,6 +1076,17 @@ pub async fn complete(
         sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
         sea_orm::TransactionError::Transaction(e) => e,
     })?;
+
+    // Write checklist JSON to disk (outside DB transaction)
+    if let Some(checklist_bytes) = effect.checklist_json {
+        let dir = format!("zent_checklist/{}", effect.closing_form_id);
+        tokio::fs::create_dir_all(&dir).await.map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to create checklist dir: {}", e))
+        })?;
+        tokio::fs::write(format!("{}/checklist.json", dir), &checklist_bytes).await.map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to write checklist file: {}", e))
+        })?;
+    }
 
     Ok(Json(ApiResponse::success(200, "Work order completed successfully", ())))
 }
@@ -1168,6 +1169,12 @@ pub async fn add_parts(
     db.transaction::<_, (), AppError>(|txn| {
         Box::pin(async move {
             effect.new_part_form.insert(txn).await?;
+            for img in effect.images {
+                img.insert(txn).await?;
+            }
+            for link in effect.image_links {
+                link.insert(txn).await?;
+            }
             Ok(())
         })
     }).await.map_err(|e| match e {

@@ -77,7 +77,6 @@ use crate::handlers::v1::{auth, work_orders, media};
         work_orders::approve_refusal,
         work_orders::deny_refusal,
         work_orders::history,
-        media::upload_new_part_photo,
         media::upload_closing_form_photo,
         media::update_closing_form_photo,
         media::upload_closing_form_signature,

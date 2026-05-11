@@ -14,8 +14,9 @@ use crate::{
     core::errors::AppError,
 };
 
-/// Middleware factory to require a specific role.
-pub fn require_role<S>(role: Role) -> impl Fn(State<S>, Request, Next) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, AppError>> + Send>> + Clone
+/// Middleware factory to require one of several roles.
+/// Pass a slice of allowed roles; the middleware passes if the user holds any of them (or is SuperAdmin).
+pub fn require_role<S>(roles: &'static [Role]) -> impl Fn(State<S>, Request, Next) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, AppError>> + Send>> + Clone
 where
     S: Send + Sync + 'static,
     DecodingKey: FromRef<S>,
@@ -23,7 +24,7 @@ where
     Arc<LookupTables>: FromRef<S>,
 {
     move |State(state), mut req, next| {
-        let role = role;
+        let roles = roles;
         Box::pin(async move {
             // 1. Run the AuthUser extractor manually
             let (mut parts, body) = req.into_parts();
@@ -32,33 +33,34 @@ where
             // Reconstruct the request
             req = Request::from_parts(parts, body);
             
-            // 2. Get LookupTables to find the ID for the required role
+            // 2. Get LookupTables
             let lookup_tables = Arc::<LookupTables>::from_ref(&state);
-            let required_role_id = lookup_tables
-                .roles_by_name
-                .get(role.as_str())
-                .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Role ID not found for role: {}", role.as_str())))?;
 
             let super_admin_role_id = lookup_tables
                 .roles_by_name
                 .get("SuperAdmin")
                 .ok_or_else(|| AppError::Internal(anyhow::anyhow!("SuperAdmin role ID not found")))?;
 
-            // 3. Check if the user has the required role (or is SuperAdmin)
-            if auth_user.user.role_id != *required_role_id && auth_user.user.role_id != *super_admin_role_id {
-                return Err(AppError::Forbidden(format!(
-                    "Role mismatch: user has role_id {}, but required role '{}' has role_id {}. (SuperAdmin ID: {})",
-                    auth_user.user.role_id,
-                    role.as_str(),
-                    required_role_id,
-                    super_admin_role_id
-                )));
+            // 3. Check if the user has SuperAdmin or any of the allowed roles
+            if auth_user.user.role_id == *super_admin_role_id {
+                req.extensions_mut().insert(auth_user);
+                return Ok(next.run(req).await);
             }
 
-            // 4. Inject AuthUser into extensions so handlers don't have to re-extract it
-            req.extensions_mut().insert(auth_user);
+            for role in roles {
+                if let Some(role_id) = lookup_tables.roles_by_name.get(role.as_str()) {
+                    if auth_user.user.role_id == *role_id {
+                        req.extensions_mut().insert(auth_user);
+                        return Ok(next.run(req).await);
+                    }
+                }
+            }
 
-            Ok(next.run(req).await)
+            Err(AppError::Forbidden(format!(
+                "Role mismatch: user has role_id {}, but required one of: [{}]",
+                auth_user.user.role_id,
+                roles.iter().map(|r| r.as_str()).collect::<Vec<_>>().join(", ")
+            )))
         })
     }
 }

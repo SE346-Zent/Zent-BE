@@ -14,4 +14,8 @@ pub struct AddPartsRequest {
     pub serial_number: String,
     #[validate(length(max = 1000))]
     pub description: Option<String>,
+    /// OCI object names for photos (already uploaded or to be uploaded separately)
+    #[serde(default)]
+    #[validate(length(max = 5))]
+    pub photos: Vec<String>,
 }

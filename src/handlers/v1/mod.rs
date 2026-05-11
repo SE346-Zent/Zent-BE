@@ -23,7 +23,7 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/", axum::routing::post(work_orders::create))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_role::<AppState>(Role::Customer),
+            require_role::<AppState>(&[Role::Customer]),
         ));
 
     // 2. Technician Routes
@@ -34,7 +34,7 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/parts", axum::routing::post(work_orders::add_parts))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_role::<AppState>(Role::Technician),
+            require_role::<AppState>(&[Role::Technician]),
         ));
 
     // 3. Admin Routes
@@ -45,7 +45,7 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/refusal/deny", axum::routing::post(work_orders::deny_refusal))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_role::<AppState>(Role::Admin),
+            require_role::<AppState>(&[Role::Admin]),
         ));
 
     // 4. Unified List Route (Shared by all roles - Auth checked inside handler)
@@ -69,16 +69,15 @@ fn media_router(state: AppState) -> Router<AppState> {
         .route("/signature", axum::routing::post(media::upload_closing_form_signature))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_role::<AppState>(Role::Technician),
+            require_role::<AppState>(&[Role::Technician]),
         ));
 
     Router::new()
         .nest("/work_orders/{id}/closing_form", closing_form_routes)
         .route("/photos/work_orders/{id}", axum::routing::get(media::get_work_order_photo))
         .route("/photos/work_orders", axum::routing::get(media::list_work_order_photos))
-        .route("/new_part_forms/{id}/photos", axum::routing::post(media::upload_new_part_photo))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_role::<AppState>(Role::Technician),
+            require_role::<AppState>(&[Role::Technician]),
         ))
 }

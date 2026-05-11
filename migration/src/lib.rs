@@ -19,6 +19,7 @@ mod m20260508_100000_make_approver_nullable;
 mod m20260507_122648_rename_signature_field;
 mod m20260509_100000_refactor_state_history;
 mod m20260510_100000_add_checklist;
+mod m20260511_100000_drop_checklist_tables;
 
 
 pub struct Migrator;
@@ -46,6 +47,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260507_122648_rename_signature_field::Migration),
             Box::new(m20260509_100000_refactor_state_history::Migration),
             Box::new(m20260510_100000_add_checklist::Migration),
+            Box::new(m20260511_100000_drop_checklist_tables::Migration),
         ]
     }
 }

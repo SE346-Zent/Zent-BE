@@ -4,12 +4,14 @@ use uuid::Uuid;
 
 use crate::{
     core::errors::AppError,
-    entities::{new_part_forms, work_orders},
+    entities::{new_part_forms, work_orders, images, new_part_form_image_links},
     model::requests::work_orders::add_parts_request::AddPartsRequest,
 };
 
 pub struct AddPartsEffect {
     pub new_part_form: new_part_forms::ActiveModel,
+    pub images: Vec<images::ActiveModel>,
+    pub image_links: Vec<new_part_form_image_links::ActiveModel>,
 }
 
 pub fn decide_add_parts(
@@ -37,5 +39,29 @@ pub fn decide_add_parts(
         deleted_at: Set(None),
     };
 
-    Ok(AddPartsEffect { new_part_form })
+    // Create image + link records for each photo filename
+    let mut images_to_insert = Vec::new();
+    let mut image_links_to_insert = Vec::new();
+
+    for object_name in payload.photos {
+        let image_id = Uuid::new_v4();
+        images_to_insert.push(images::ActiveModel {
+            id: Set(image_id),
+            object_name: Set(object_name),
+            created_at: Set(now),
+            updated_at: Set(now),
+            deleted_at: Set(None),
+        });
+
+        image_links_to_insert.push(new_part_form_image_links::ActiveModel {
+            image_id: Set(image_id),
+            new_part_form_id: Set(form_id),
+        });
+    }
+
+    Ok(AddPartsEffect {
+        new_part_form,
+        images: images_to_insert,
+        image_links: image_links_to_insert,
+    })
 }
