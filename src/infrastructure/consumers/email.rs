@@ -1,31 +1,63 @@
 use std::sync::Arc;
+use std::time::Duration;
 use lapin::{
     options::{BasicConsumeOptions, BasicAckOptions, BasicNackOptions},
     types::FieldTable,
+    Connection, ConnectionProperties,
 };
 use futures::stream::StreamExt;
 use tracing::{info, error, warn};
 use lettre::{Message, AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 use lettre::transport::smtp::authentication::Credentials;
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep};
 
 use crate::core::config::AppConfig;
 use crate::infrastructure::mq::email::{EMAIL_QUEUE, setup_email_topology};
 
+/// Append `heartbeat=60` to the AMQP URL if not already present.
+fn ensure_heartbeat(url: &str) -> String {
+    let heartbeat_param = "heartbeat=60";
+    if url.contains("heartbeat=") {
+        url.to_string()
+    } else if url.contains('?') {
+        format!("{}&{}", url, heartbeat_param)
+    } else {
+        format!("{}?{}", url, heartbeat_param)
+    }
+}
+
+/// Try to create a new RabbitMQ connection using the URL from AppConfig.
+async fn create_fresh_connection(url: &str) -> Result<Connection, lapin::Error> {
+    Connection::connect(&ensure_heartbeat(url), ConnectionProperties::default()).await
+}
+
 pub async fn start_email_consumer(connection: Option<Arc<lapin::Connection>>) {
-    let conn_opt = match connection {
+    let mut conn_opt = match connection {
         Some(c) => c,
         None => return, // Stub mode
     };
+
+    let url = AppConfig::get().rabbitmq_url.clone();
 
     tokio::spawn(async move {
         loop {
             let channel = match conn_opt.create_channel().await {
                 Ok(c) => c,
                 Err(e) => {
-                    error!("Failed to create MQ channel for consumer: {:?}. Retrying in 5s...", e);
-                    sleep(Duration::from_secs(5)).await;
-                    continue;
+                    error!("Failed to create MQ channel for consumer: {:?}. Reconnecting...", e);
+                    // Try to create a fresh connection — the old one is likely dead
+                    match create_fresh_connection(&url).await {
+                        Ok(new_conn) => {
+                            info!("Email consumer established new RabbitMQ connection");
+                            conn_opt = Arc::new(new_conn);
+                            continue;
+                        }
+                        Err(re) => {
+                            error!("Failed to reconnect email consumer: {:?}. Retrying in 5s...", re);
+                            sleep(Duration::from_secs(5)).await;
+                            continue;
+                        }
+                    }
                 }
             };
 

@@ -6,16 +6,26 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // 1. Add fcm_token and installation_id to `users` table
+        // 1a. Add fcm_token to `users` table
         manager
             .alter_table(
                 Table::alter()
                     .table(Users::Table)
-                    .add_column_if_not_exists(ColumnDef::new(Users::FcmToken).string().null())
-                    .add_column_if_not_exists(ColumnDef::new(Users::InstallationId).string().null())
+                    .add_column(ColumnDef::new(Users::FcmToken).string().null())
                     .to_owned(),
             )
             .await?;
+
+        // 1b. Add installation_id to `users` table
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(Users::Table)
+                    .add_column(ColumnDef::new(Users::InstallationId).string().null())
+                    .to_owned(),
+            )
+            .await?;
+
 
         // 2. Create `outbox_records` table
         manager

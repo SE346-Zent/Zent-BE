@@ -1,21 +1,26 @@
+use std::sync::Arc;
+use std::time::Duration;
 use lapin::{
     options::{BasicConsumeOptions, BasicAckOptions, BasicNackOptions},
     types::FieldTable,
+    Connection, ConnectionProperties,
 };
 use futures::stream::StreamExt;
 use tracing::{info, error, warn};
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep};
+use crate::core::config::AppConfig;
 use crate::core::state::AppState;
 use crate::infrastructure::mq::work_order::{WORK_ORDER_CREATED_QUEUE, setup_work_order_topology};
 use crate::entities::work_orders as work_orders_ent;
 use sea_orm::EntityTrait;
 
 pub async fn start_work_order_consumer(state: AppState) {
-    let conn_opt = match state.rabbitmq {
+    let mut conn_opt = match state.rabbitmq {
         Some(ref c) => c.clone(),
         None => return,
     };
 
+    let url = AppConfig::get().rabbitmq_url.clone();
     let db = state.db.clone();
     let luts = state.lookup_tables.clone();
     let valkey = state.valkey.clone();
@@ -27,9 +32,29 @@ pub async fn start_work_order_consumer(state: AppState) {
             let channel = match conn_opt.create_channel().await {
                 Ok(c) => c,
                 Err(e) => {
-                    error!("Failed to create MQ channel for work order consumer: {:?}. Retrying in 5s...", e);
-                    sleep(Duration::from_secs(5)).await;
-                    continue;
+                    error!("Failed to create MQ channel for work order consumer: {:?}. Reconnecting...", e);
+                    let fresh_url = if url.contains("heartbeat=") {
+                            url.clone()
+                        } else if url.contains('?') {
+                            format!("{}&heartbeat=60", url)
+                        } else {
+                            format!("{}?heartbeat=60", url)
+                        };
+                    match Connection::connect(
+                        &fresh_url,
+                        ConnectionProperties::default(),
+                    ).await {
+                        Ok(new_conn) => {
+                            info!("Work order consumer established new RabbitMQ connection");
+                            conn_opt = Arc::new(new_conn);
+                            continue;
+                        }
+                        Err(re) => {
+                            error!("Failed to reconnect work order consumer: {:?}. Retrying in 5s...", re);
+                            sleep(Duration::from_secs(5)).await;
+                            continue;
+                        }
+                    }
                 }
             };
 

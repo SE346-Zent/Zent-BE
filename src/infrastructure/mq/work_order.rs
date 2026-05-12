@@ -91,8 +91,19 @@ impl WorkOrderProducer {
             BasicProperties::default().with_delivery_mode(2),
         ).await?;
 
-        confirm.await?;
-        let _ = channel.close(200, "OK").await;
-        Ok(())
+        match confirm.await {
+            Ok(lapin::publisher_confirm::Confirmation::Ack(_)) | Ok(lapin::publisher_confirm::Confirmation::NotRequested) => {
+                let _ = channel.close(200, "OK").await;
+                Ok(())
+            }
+            Ok(lapin::publisher_confirm::Confirmation::Nack(_)) => {
+                let _ = channel.close(200, "OK").await;
+                Err(anyhow::anyhow!("Broker returned Nack"))
+            }
+            Err(err) => {
+                let _ = channel.close(200, "OK").await;
+                Err(err.into())
+            }
+        }
     }
 }

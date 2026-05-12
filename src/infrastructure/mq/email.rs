@@ -105,10 +105,12 @@ impl EmailProducer {
             }
             Ok(lapin::publisher_confirm::Confirmation::Nack(_)) => {
                 publish_errors.add(1, &[opentelemetry::KeyValue::new("exchange", EMAIL_EXCHANGE)]);
+                let _ = channel.close(200, "OK").await;
                 Err(anyhow::anyhow!("Broker returned Nack"))
             }
             Err(err) => {
                 publish_errors.add(1, &[opentelemetry::KeyValue::new("exchange", EMAIL_EXCHANGE)]);
+                let _ = channel.close(200, "OK").await;
                 Err(err.into())
             }
         }
