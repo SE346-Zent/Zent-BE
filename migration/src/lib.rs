@@ -21,6 +21,7 @@ mod m20260509_100000_refactor_state_history;
 mod m20260510_100000_add_checklist;
 mod m20260511_100000_drop_checklist_tables;
 mod m20260512_100000_drop_overtimes;
+mod m20260512_164300_add_fcm_token_and_outbox;
 
 pub struct Migrator;
 
@@ -49,6 +50,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260510_100000_add_checklist::Migration),
             Box::new(m20260511_100000_drop_checklist_tables::Migration),
             Box::new(m20260512_100000_drop_overtimes::Migration),
+            Box::new(m20260512_164300_add_fcm_token_and_outbox::Migration),
         ]
     }
 }

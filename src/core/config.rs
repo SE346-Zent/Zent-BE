@@ -10,6 +10,7 @@ pub struct AppConfig {
     pub smtp_username: String,
     pub rabbitmq_url: String,
     pub valkey_url: String,
+    pub mongodb_url: String,
 
     #[serde(rename = "nominatim_user_agent")]
     pub nominatim_user_agent: String,

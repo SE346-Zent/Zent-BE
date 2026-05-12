@@ -15,13 +15,9 @@ use uuid::Uuid;
 /// Each tuple is (slug, display_name).
 pub const NOTIFICATION_CATEGORIES: &[(&str, &str)] = &[
     ("work_order_assigned", "Work Order Assigned"),
-    ("work_order_started", "Work Order Started"),
-    ("work_order_completed", "Work Order Completed"),
-    ("work_order_rejected", "Work Order Rejected"),
-    ("work_order_refusal_approved", "Refusal Approved"),
-    ("work_order_scheduled", "Work Order Scheduled"),
-    ("account_verified", "Account Verified"),
-    ("account_locked", "Account Locked"),
+    ("about_to_start", "About to Start"),
+    ("work_order_rejection_form", "Work Order Rejection Form"),
+    ("add_new_part", "Add New Part"),
 ];
 
 // ── Shared Data Types ──────────────────────────────────────────────────
