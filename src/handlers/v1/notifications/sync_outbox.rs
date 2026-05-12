@@ -12,6 +12,7 @@ use crate::extractor::auth_user::AuthUser;
         (status = 200, description = "Synced outbox", body = ApiResponse<Vec<NotificationListItem>>),
         (status = 500, description = "Internal Server Error")
     ),
+    tag = "notifications",
     security(("bearer_auth" = []))
 )]
 pub async fn sync_outbox(

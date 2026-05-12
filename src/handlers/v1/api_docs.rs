@@ -48,7 +48,6 @@ use crate::model::{
             history_response::WorkOrderStateHistoryEntry,
         },
         notifications::{
-            notification_category_response::NotificationCategoryResponse,
             notification_list_response::NotificationListItem,
             preference_response::NotificationPreferenceResponse,
         },
@@ -87,7 +86,6 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
         notifications::list::list,
         notifications::get_preferences::get_preferences,
         notifications::update_preferences::update_preferences,
-        notifications::list_categories::list_categories,
         notifications::sync_outbox::sync_outbox,
         media::upload_closing_form_photo,
         media::update_closing_form_photo,
@@ -126,7 +124,6 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
             WorkOrderStateHistoryEntry,
             NotificationListQuery,
             UpdateNotificationPreferenceRequest,
-            NotificationCategoryResponse,
             NotificationListItem,
             NotificationPreferenceResponse,
         )

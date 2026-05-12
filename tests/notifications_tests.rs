@@ -189,21 +189,6 @@ impl MockMqProducer {
 }
 
 // ---------------------------------------------------------
-// Categories
-// ---------------------------------------------------------
-
-pub const NOTIFICATION_CATEGORIES: &[(&str, &str)] = &[
-    ("work_order_assigned", "Work Order Assigned"),
-    ("work_order_started", "Work Order Started"),
-    ("work_order_completed", "Work Order Completed"),
-    ("work_order_rejected", "Work Order Rejected"),
-    ("work_order_refusal_approved", "Refusal Approved"),
-    ("work_order_scheduled", "Work Order Scheduled"),
-    ("account_verified", "Account Verified"),
-    ("account_locked", "Account Locked"),
-];
-
-// ---------------------------------------------------------
 // Test State
 // ---------------------------------------------------------
 
@@ -239,9 +224,6 @@ async fn setup_test_app(_db: DatabaseConnection) -> Router {
         )
         .route("/api/v1/notifications/outbox/sync",
             post(zent_be::handlers::v1::notifications::sync_outbox),
-        )
-        .route("/api/v1/notifications/categories",
-            get(zent_be::handlers::v1::notifications::list_categories),
         )
         .with_state(state)
 }
@@ -289,7 +271,7 @@ async fn test_preferences_and_categories_workflow() {
     let body: Value = serde_json::from_slice(&axum::body::to_bytes(r.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(body["statusCode"], 200);
     let prefs = body["data"].as_array().unwrap();
-    assert_eq!(prefs.len(), NOTIFICATION_CATEGORIES.len());
+    assert_eq!(prefs.len(), zent_be::services::v1::notifications::NOTIFICATION_CATEGORIES.len());
     for p in prefs {
         assert!(p["categoryId"].is_number());
         assert!(p["categoryName"].is_string());
@@ -318,17 +300,6 @@ async fn test_preferences_and_categories_workflow() {
         &json!({"categoryId": 1}))).await.unwrap();
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
 
-    // ── GET /categories ───────────────────────────────────────────
-    let r = app.clone().oneshot(empty_req(http::Method::GET, "/api/v1/notifications/categories")).await.unwrap();
-    assert_eq!(r.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(&axum::body::to_bytes(r.into_body(), usize::MAX).await.unwrap()).unwrap();
-    let cats = body["data"].as_array().unwrap();
-    assert_eq!(cats.len(), NOTIFICATION_CATEGORIES.len());
-    for c in cats {
-        assert!(c["id"].is_number());
-        assert!(c["name"].is_string());
-        assert!(c["slug"].is_string());
-    }
 }
 
 // =====================================================================

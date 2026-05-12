@@ -12,6 +12,7 @@ use crate::extractor::auth_user::AuthUser;
         (status = 200, description = "Notification preferences", body = ApiResponse<Vec<NotificationPreferenceResponse>>),
         (status = 500, description = "Internal Server Error")
     ),
+    tag = "notifications",
     security(("bearer_auth" = []))
 )]
 pub async fn get_preferences(
@@ -37,6 +38,11 @@ pub async fn get_preferences(
         }
     }
 
-    let data = crate::services::v1::notifications::get_preferences::get_preferences(&mock_prefs);
+    let role_name_lc = auth.role.name.to_lowercase();
+    let allowed_ids = state.lookup_tables.notification_categories_by_role.get(&role_name_lc)
+        .map(|v| v.as_slice())
+        .unwrap_or(&[]);
+
+    let data = crate::services::v1::notifications::get_preferences::get_preferences(&mock_prefs, allowed_ids);
     Ok(Json(ApiResponse::success(200, "Preferences retrieved", data)))
 }

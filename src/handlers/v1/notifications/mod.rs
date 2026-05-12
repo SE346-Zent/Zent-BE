@@ -1,4 +1,3 @@
-pub mod list_categories;
 pub mod get_preferences;
 pub mod update_preferences;
 pub mod list;
@@ -20,6 +19,5 @@ pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", axum::routing::get(list::list))
         .nest("/preferences", pref_routes)
-        .route("/categories", axum::routing::get(list_categories::list_categories))
         .route("/outbox/sync", axum::routing::post(sync_outbox::sync_outbox))
 }

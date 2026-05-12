@@ -1,4 +1,3 @@
-pub mod list_categories;
 pub mod get_preferences;
 pub mod update_preference;
 pub mod list;
@@ -38,18 +37,6 @@ pub struct NotificationRecord {
 }
 
 // ── Shared Helper Functions ───────────────────────────────────────────
-
-/// Build the full list of notification categories as a response payload.
-pub fn list_categories() -> Vec<crate::model::responses::notifications::notification_category_response::NotificationCategoryResponse> {
-    NOTIFICATION_CATEGORIES.iter().enumerate().map(|(i, (slug, name))| {
-        crate::model::responses::notifications::notification_category_response::NotificationCategoryResponse {
-            id: (i + 1) as i32,
-            slug: slug.to_string(),
-            name: name.to_string(),
-            description: None,
-        }
-    }).collect()
-}
 
 /// Look up a category id by its slug.
 pub fn find_category_id_by_slug(slug: &str) -> Option<i32> {
