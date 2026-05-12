@@ -87,37 +87,6 @@ impl MockNotificationRepo {
         None
     }
 
-    pub fn mark_read(&self, user_id: Uuid, notification_id: Uuid) -> bool {
-        let mut buckets = self.buckets.lock().unwrap();
-        for ((uid, _), notifs) in buckets.iter_mut() {
-            if *uid == user_id {
-                for n in notifs.iter_mut() {
-                    if n.notification_id == notification_id {
-                        n.is_read = true;
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
-
-    pub fn mark_all_read(&self, user_id: Uuid) -> usize {
-        let mut count = 0;
-        let mut buckets = self.buckets.lock().unwrap();
-        for ((uid, _), notifs) in buckets.iter_mut() {
-            if *uid == user_id {
-                for n in notifs.iter_mut() {
-                    if !n.is_read {
-                        n.is_read = true;
-                        count += 1;
-                    }
-                }
-            }
-        }
-        count
-    }
-
     pub fn list_for_user(&self, user_id: Uuid, limit: usize, offset: usize) -> (Vec<NotificationDocument>, usize) {
         let buckets = self.buckets.lock().unwrap();
         let mut all: Vec<NotificationDocument> = buckets
@@ -268,15 +237,6 @@ async fn setup_test_app(_db: DatabaseConnection) -> Router {
         .route("/api/v1/notifications",
             get(zent_be::handlers::v1::notifications::list),
         )
-        .route("/api/v1/notifications/{id}",
-            get(zent_be::handlers::v1::notifications::get_detail),
-        )
-        .route("/api/v1/notifications/{id}/read",
-            post(zent_be::handlers::v1::notifications::mark_read),
-        )
-        .route("/api/v1/notifications/read-all",
-            post(zent_be::handlers::v1::notifications::mark_all_read),
-        )
         .route("/api/v1/notifications/outbox/sync",
             post(zent_be::handlers::v1::notifications::sync_outbox),
         )
@@ -418,32 +378,6 @@ async fn test_in_app_notification_full_lifecycle() {
     // (Only first 2 due to limit)
     let (_page, _) = repo.list_for_user(user_id, 20, 0);
 
-    // ── Get detail ────────────────────────────────────────────────
-    let uri = format!("/api/v1/notifications/{}", notif_ids[0]);
-    let r = app.clone().oneshot(empty_req(http::Method::GET, &uri)).await.unwrap();
-    assert!(r.status() == StatusCode::OK || r.status() == StatusCode::NOT_FOUND);
-
-    // ── Mark one read ─────────────────────────────────────────────
-    let uri = format!("/api/v1/notifications/{}/read", notif_ids[0]);
-    let r = app.clone().oneshot(empty_req(http::Method::POST, &uri)).await.unwrap();
-    assert!(r.status() == StatusCode::OK || r.status() == StatusCode::NOT_FOUND);
-
-    // ── Mark all read ─────────────────────────────────────────────
-    let r = app.clone().oneshot(empty_req(http::Method::POST, "/api/v1/notifications/read-all")).await.unwrap();
-    assert_eq!(r.status(), StatusCode::OK);
-
-    // ── Cross-user access → 404 ───────────────────────────────────
-    let other_id = Uuid::new_v4();
-    let uri = format!("/api/v1/notifications/{}", other_id);
-    let r = app.clone().oneshot(empty_req(http::Method::GET, &uri)).await.unwrap();
-    assert_eq!(r.status(), StatusCode::NOT_FOUND);
-
-    // ── Unauthenticated → 401 ─────────────────────────────────────
-    let req = Request::builder().method(http::Method::GET).uri("/api/v1/notifications")
-        .header(http::header::CONTENT_TYPE, "application/json")
-        .body(Body::empty()).unwrap();
-    let r = app.clone().oneshot(req).await.unwrap();
-    assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
 
 // =====================================================================

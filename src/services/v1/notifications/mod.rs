@@ -2,9 +2,6 @@ pub mod list_categories;
 pub mod get_preferences;
 pub mod update_preference;
 pub mod list;
-pub mod get_detail;
-pub mod mark_read;
-pub mod mark_all_read;
 pub mod sync_outbox;
 pub mod cleanup_outbox;
 

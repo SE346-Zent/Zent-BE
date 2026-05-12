@@ -49,7 +49,6 @@ use crate::model::{
         },
         notifications::{
             notification_category_response::NotificationCategoryResponse,
-            notification_detail_response::NotificationDetailResponse,
             notification_list_response::NotificationListItem,
             preference_response::NotificationPreferenceResponse,
         },
@@ -86,9 +85,6 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
         work_orders::deny_refusal,
         work_orders::history,
         notifications::list::list,
-        notifications::get_detail::get_detail,
-        notifications::mark_read::mark_read,
-        notifications::mark_all_read::mark_all_read,
         notifications::get_preferences::get_preferences,
         notifications::update_preferences::update_preferences,
         notifications::list_categories::list_categories,
@@ -131,7 +127,6 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
             NotificationListQuery,
             UpdateNotificationPreferenceRequest,
             NotificationCategoryResponse,
-            NotificationDetailResponse,
             NotificationListItem,
             NotificationPreferenceResponse,
         )
