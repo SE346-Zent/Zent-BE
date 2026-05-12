@@ -12,7 +12,7 @@ pub mod part_status;
 pub mod parts;
 pub mod part_condition;
 pub mod policy;
-pub use user::{seed_users, UserSeedConfig};
+pub use user::{seed_system_user, seed_users, UserSeedConfig};
 pub use role::seed_roles;
 pub use account_status::seed_account_statuses;
 pub use work_order_status::seed_work_order_statuses;

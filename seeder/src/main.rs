@@ -5,7 +5,7 @@ use sea_orm::Database;
 use seeder::{
     UserSeedConfig, seed_account_statuses, seed_product_models, 
     seed_random_products, seed_random_warranties, seed_random_work_orders, seed_roles,
-    seed_users, seed_work_order_closing_forms, seed_work_order_statuses,
+    seed_system_user, seed_users, seed_work_order_closing_forms, seed_work_order_statuses,
     seed_parts_and_catalogs, seed_part_statuses, seed_work_order_symptoms, seed_part_conditions,
     seed_policies
 };
@@ -115,9 +115,14 @@ async fn main() -> Result<()> {
     println!("\n--- Seeding Policies ---");
     let _policies = seed_policies(&db).await?;
 
+    // -----------------------------------------------------------------------
+    // Step 2: seed system user (used by auto-assign / background tasks)
+    // -----------------------------------------------------------------------
+    println!("\n--- Seeding System User ---");
+    let _system_user_id = seed_system_user(&db, &roles, &statuses).await?;
 
     // -----------------------------------------------------------------------
-    // Step 2: seed users FIRST (products & warranties need customer_id)
+    // Step 3: seed users FIRST (products & warranties need customer_id)
     // -----------------------------------------------------------------------
     println!("\n--- Seeding Users ({}) ---", num_users);
     let records = seed_users(
@@ -149,7 +154,7 @@ async fn main() -> Result<()> {
         .collect();
 
     // -----------------------------------------------------------------------
-    // Step 3: seed products (needs users, product_status, product_models)
+    // Step 4: seed products (needs users, product_status, product_models)
     // -----------------------------------------------------------------------
     let mut product_ids = Vec::new();
     if num_products > 0 {
@@ -168,7 +173,7 @@ async fn main() -> Result<()> {
     }
 
     // -----------------------------------------------------------------------
-    // Step 4: seed work orders
+    // Step 5: seed work orders
     // -----------------------------------------------------------------------
     let mut work_order_ids = Vec::new();
     if num_work_orders > 0 {
@@ -187,7 +192,7 @@ async fn main() -> Result<()> {
     }
 
     // -----------------------------------------------------------------------
-    // Step 5: seed work order closing forms
+    // Step 6: seed work order closing forms
     // -----------------------------------------------------------------------
     let mut _closing_form_ids = Vec::new();
     if num_closing_forms > 0 {
@@ -199,7 +204,7 @@ async fn main() -> Result<()> {
     }
 
     // -----------------------------------------------------------------------
-    // Step 6: seed warranties (needs users + products)
+    // Step 7: seed warranties (needs users + products)
     // -----------------------------------------------------------------------
     if num_warranties > 0 {
         println!("\n--- Seeding Warranties ({}) ---", num_warranties);
