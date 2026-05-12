@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use sea_orm::DatabaseConnection;
 use lapin::Connection;
+use mongodb::Database as MongoDatabase;
 
 use crate::core::lookup_tables::LookupTables;
 use crate::infrastructure::cache::ValkeyClient;
@@ -20,6 +21,7 @@ pub struct SessionDefaultTTLSeconds(pub i64);
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<DatabaseConnection>,
+    pub mongodb: Arc<MongoDatabase>,
     pub valkey: Option<Arc<ValkeyClient>>,
     pub rabbitmq: Option<Arc<Connection>>,
     pub templates: Arc<HashMap<String, String>>,
@@ -35,6 +37,7 @@ impl AppState {
         secret: &[u8],
         lookup_tables: LookupTables,
         db: DatabaseConnection,
+        mongodb: MongoDatabase,
         valkey: Option<Arc<ValkeyClient>>,
         rabbitmq: Option<Arc<Connection>>,
         templates: HashMap<String, String>,
@@ -43,6 +46,7 @@ impl AppState {
     ) -> Self {
         Self {
             db: Arc::new(db),
+            mongodb: Arc::new(mongodb),
             valkey,
             rabbitmq,
             templates: Arc::new(templates),
@@ -106,5 +110,11 @@ impl FromRef<AppState> for AccessTokenDefaultTTLSeconds {
 impl FromRef<AppState> for SessionDefaultTTLSeconds {
     fn from_ref(state: &AppState) -> Self {
         state.session_ttl
+    }
+}
+
+impl FromRef<AppState> for Arc<MongoDatabase> {
+    fn from_ref(state: &AppState) -> Self {
+        state.mongodb.clone()
     }
 }

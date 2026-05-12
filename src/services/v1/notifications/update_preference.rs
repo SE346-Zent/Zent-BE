@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn test_all_valid_ids_accepted() {
-        for id in 1..=8 {
+        for id in 1..=4 {
             let result = apply(id, id % 2 == 0).unwrap();
             assert_eq!(result.len(), 1);
             assert_eq!(*result.get(&id).unwrap(), id % 2 == 0);
@@ -76,9 +76,9 @@ mod tests {
 
     #[test]
     fn test_id_just_above_max_rejected() {
-        let err = apply(9, true).unwrap_err();
+        let err = apply(5, true).unwrap_err();
         match err {
-            AppError::BadRequest(msg) => assert!(msg.contains("9")),
+            AppError::BadRequest(msg) => assert!(msg.contains("5")),
             _ => panic!("Expected BadRequest"),
         }
     }
@@ -135,23 +135,23 @@ mod tests {
     #[test]
     fn test_three_state_flip() {
         let mut prefs = HashMap::new();
-        update_preference(5, true, &mut prefs).unwrap();
-        update_preference(5, false, &mut prefs).unwrap();
-        update_preference(5, true, &mut prefs).unwrap();
-        assert!(prefs.get(&5).copied().unwrap_or(false));
+        update_preference(3, true, &mut prefs).unwrap();
+        update_preference(3, false, &mut prefs).unwrap();
+        update_preference(3, true, &mut prefs).unwrap();
+        assert!(prefs.get(&3).copied().unwrap_or(false));
     }
 
     #[test]
     fn test_insert_many_categories() {
         let mut prefs = HashMap::new();
-        for id in 1..=8 {
-            update_preference(id, id > 4, &mut prefs).unwrap();
-        }
-        assert_eq!(prefs.len(), 8);
         for id in 1..=4 {
+            update_preference(id, id > 2, &mut prefs).unwrap();
+        }
+        assert_eq!(prefs.len(), 4);
+        for id in 1..=2 {
             assert!(!prefs.get(&id).copied().unwrap_or(true));
         }
-        for id in 5..=8 {
+        for id in 3..=4 {
             assert!(prefs.get(&id).copied().unwrap_or(false));
         }
     }
@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn test_last_category_id_works() {
         let mut prefs = HashMap::new();
-        update_preference(8, false, &mut prefs).unwrap();
-        assert!(!prefs.get(&8).copied().unwrap_or(true));
+        update_preference(4, false, &mut prefs).unwrap();
+        assert!(!prefs.get(&4).copied().unwrap_or(true));
     }
 }

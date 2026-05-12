@@ -16,6 +16,8 @@ pub struct Model {
     pub password_hash: String,
     pub phone_number: String,
     pub province: Option<String>,
+    pub fcm_token: Option<String>,
+    pub installation_id: Option<String>,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,

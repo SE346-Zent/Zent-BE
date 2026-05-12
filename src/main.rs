@@ -25,6 +25,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize database (MySQL) via infrastructure layer
     let db: DatabaseConnection = infrastructure::database::init_database(cfg).await?;
 
+    // Initialize MongoDB via infrastructure layer
+    let mongodb_client = infrastructure::mongodb::init_mongodb(cfg).await?;
+    let db_name = mongodb_client
+        .default_database()
+        .map(|db| db.name().to_string())
+        .ok_or("MongoDB connection string must include a database name")?;
+    let mongodb_database = mongodb_client.database(&db_name);
+
+    // Run MongoDB migrations
+    mongodb_migration::run_migrations(&mongodb_database).await?;
+
     // Initialize Valkey cache via infrastructure layer
     let valkey: Option<Arc<ValkeyClient>> = infrastructure::cache::init_cache(cfg).await
         .map(Arc::new)
@@ -57,6 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cfg.jwt_sign_key.as_bytes(),
         lookup_tables.clone(),
         db.clone(),
+        mongodb_database.clone(),
         valkey.clone(),
         rabbitmq.clone(),
         templates.clone(),

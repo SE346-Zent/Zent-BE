@@ -106,11 +106,11 @@ mod tests {
     }
 
     #[test]
-    fn test_account_locked_is_last() {
+    fn test_add_new_part_is_last() {
         let result = sut();
         let last = result.last().unwrap();
-        assert_eq!(last.slug, "account_locked");
-        assert_eq!(last.name, "Account Locked");
+        assert_eq!(last.slug, "add_new_part");
+        assert_eq!(last.name, "Add New Part");
     }
 
     #[test]

@@ -28,6 +28,14 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(OutboxRecords::NotificationId).uuid().not_null())
                     .col(ColumnDef::new(OutboxRecords::CreatedAt).timestamp().not_null())
                     .col(ColumnDef::new(OutboxRecords::Delivered).boolean().not_null().default(false))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_outbox_records_user_id")
+                            .from(OutboxRecords::Table, OutboxRecords::UserId)
+                            .to(Users::Table, Users::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -70,6 +78,7 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 enum Users {
     Table,
+    Id,
     FcmToken,
     InstallationId,
 }
