@@ -28,6 +28,13 @@ use crate::model::{
         work_orders::{
             create_work_order_request::CreateWorkOrderRequest,
             list_query::WorkOrderQuery,
+            start_request::StartWorkOrderRequest,
+            approve_refusal_request::ApproveRefusalRequest,
+            refuse_request::{RefuseWorkOrderRequest, RefuseWorkOrderMultipart},
+        },
+        notifications::{
+            list_query::NotificationListQuery,
+            update_preference_request::UpdateNotificationPreferenceRequest,
         },
         pagination::PaginationRequest,
     },
@@ -36,8 +43,14 @@ use crate::model::{
         auth::verify_forgot_password_otp_response::VerifyForgotPasswordOtpResponseData,
         work_orders::{
             create_response::WorkOrderResponseData,
-            list_response::{WorkOrderListItem, WorkOrderListResponse},
+            list_response::WorkOrderListItem,
             details_response::WorkOrderDetails,
+            history_response::WorkOrderStateHistoryEntry,
+        },
+        notifications::{
+            notification_category_response::NotificationCategoryResponse,
+            notification_list_response::NotificationListItem,
+            preference_response::NotificationPreferenceResponse,
         },
         base::MessageOnlyResponse,
         pagination::PaginationResponse,
@@ -46,7 +59,7 @@ use crate::model::{
 
 use crate::core::errors::ErrorResponse;
 
-use crate::handlers::v1::{auth, work_orders};
+use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -63,6 +76,22 @@ use crate::handlers::v1::{auth, work_orders};
         work_orders::create,
         work_orders::list,
         work_orders::get_details,
+        work_orders::assign,
+        work_orders::complete,
+        work_orders::refuse,
+        work_orders::start,
+        inventory::add_parts::add_parts,
+        work_orders::approve_refusal,
+        work_orders::deny_refusal,
+        work_orders::history,
+        notifications::list::list,
+        notifications::get_preferences::get_preferences,
+        notifications::update_preferences::update_preferences,
+        notifications::list_categories::list_categories,
+        notifications::sync_outbox::sync_outbox,
+        media::upload_closing_form_photo,
+        media::update_closing_form_photo,
+        media::upload_closing_form_signature,
     ),
     components(
         schemas(
@@ -77,21 +106,38 @@ use crate::handlers::v1::{auth, work_orders};
             LogoutRequest,
             CreateWorkOrderRequest,
             WorkOrderQuery,
+            crate::model::requests::work_orders::assign_request::AssignWorkOrderRequest,
+            crate::model::requests::work_orders::complete_request::CompleteWorkOrderRequest,
+            crate::model::requests::work_orders::complete_request::PartChangeInput,
             LoginResponseData,
             VerifyForgotPasswordOtpResponseData,
             WorkOrderResponseData,
             WorkOrderListItem,
-            WorkOrderListResponse,
             WorkOrderDetails,
             MessageOnlyResponse,
             PaginationRequest,
             PaginationResponse,
             ErrorResponse,
+            RefuseWorkOrderRequest,
+            RefuseWorkOrderMultipart,
+            StartWorkOrderRequest,
+            ApproveRefusalRequest,
+            crate::model::requests::inventory::add_parts_request::AddPartsRequest,
+            WorkOrderStateHistoryEntry,
+            NotificationListQuery,
+            UpdateNotificationPreferenceRequest,
+            NotificationCategoryResponse,
+            NotificationListItem,
+            NotificationPreferenceResponse,
         )
     ),
     modifiers(&SecurityAddon),
     tags(
-        (name = "Zent-BE", description = "Zent Backend API endpoints")
+        (name = "auth", description = "Authentication endpoints"),
+        (name = "work_orders", description = "Work order management"),
+        (name = "inventory", description = "Inventory management"),
+        (name = "notifications", description = "Notification management"),
+        (name = "media", description = "Media/OCI endpoints"),
     )
 )]
 pub struct ApiDoc;

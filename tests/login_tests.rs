@@ -46,6 +46,7 @@ fn create_mock_user(email: &str, password_hash: &str, status: AccountStatusEnum)
         phone_number: "+1234567890".to_string(),
         account_status: i32::from(status),
         role_id: 1, // References the mocked `role` inserted in setup logic
+        province: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
         deleted_at: None,
@@ -107,6 +108,7 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>
             phone_number: Set(u.phone_number),
             account_status: Set(u.account_status),
             role_id: Set(u.role_id),
+            province: Set(None),
             created_at: Set(u.created_at),
             updated_at: Set(u.updated_at),
             deleted_at: Set(u.deleted_at),
@@ -114,26 +116,15 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>
         active_user.insert(&db).await.unwrap();
     }
 
-    let auth_service = zent_be::services::v1::auth::AuthService::new(
+    let state = AppState::new(
+        b"integration_test_secret_for_tokens",
+        LookupTables::empty(),
         db.clone(),
         None,
         None,
-        std::sync::Arc::new(std::collections::HashMap::new()),
+        std::collections::HashMap::new(),
         zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
         zent_be::core::state::SessionDefaultTTLSeconds(3600),
-        jsonwebtoken::EncodingKey::from_secret(b"integration_test_secret_for_tokens"),
-    );
-
-    let luts = std::sync::Arc::new(LookupTables::empty());
-    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(db.clone(), luts, None, None);
-    let media_service = zent_be::services::v1::core::media::MediaService::new(db.clone(), None, None);
-
-    let state = AppState::new(
-        b"integration_test_secret_for_tokens", 
-        LookupTables::empty(),
-        auth_service,
-        work_order_service,
-        media_service,
     );
 
     // Provide the application endpoints explicitly for tests
@@ -341,6 +332,7 @@ async fn test_cat2_fk_constraint_blocks_unknown_status() {
         phone_number: Set(u.phone_number),
         account_status: Set(u.account_status),
         role_id: Set(999), // Invalid role
+        province: Set(None),
         created_at: Set(u.created_at),
         updated_at: Set(u.updated_at),
         deleted_at: Set(u.deleted_at),
@@ -372,6 +364,7 @@ async fn test_cat2_unknown_status_legacy_data() {
         phone_number: Set(u.phone_number),
         account_status: Set(u.account_status),
         role_id: Set(999), // Invalid role
+        province: Set(None),
         created_at: Set(u.created_at),
         updated_at: Set(u.updated_at),
         deleted_at: Set(u.deleted_at),
@@ -381,26 +374,15 @@ async fn test_cat2_unknown_status_legacy_data() {
     // Re-enable FK for normal application flow execution
     db.execute_unprepared("PRAGMA foreign_keys = ON;").await.unwrap();
 
-    let auth_service = zent_be::services::v1::auth::AuthService::new(
+    let state = AppState::new(
+        b"integration_test_secret_for_tokens",
+        LookupTables::empty(),
         db.clone(),
         None,
         None,
-        std::sync::Arc::new(std::collections::HashMap::new()),
+        std::collections::HashMap::new(),
         zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
         zent_be::core::state::SessionDefaultTTLSeconds(3600),
-        jsonwebtoken::EncodingKey::from_secret(b"integration_test_secret_for_tokens"),
-    );
-
-    let luts = std::sync::Arc::new(LookupTables::empty());
-    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(db.clone(), luts, None, None);
-    let media_service = zent_be::services::v1::core::media::MediaService::new(db.clone(), None, None);
-
-    let state = AppState::new(
-        b"integration_test_secret_for_tokens", 
-        LookupTables::empty(),
-        auth_service,
-        work_order_service,
-        media_service,
     );
     let app = Router::new()
         .route("/login", post(login_handler))
@@ -514,6 +496,7 @@ async fn test_cat3_12_13_zero_ttl() {
         phone_number: Set(u.phone_number),
         account_status: Set(u.account_status),
         role_id: Set(u.role_id),
+        province: Set(None),
         created_at: Set(u.created_at),
         updated_at: Set(u.updated_at),
         deleted_at: Set(None),
@@ -521,26 +504,15 @@ async fn test_cat3_12_13_zero_ttl() {
     active_user.insert(&db).await.unwrap();
 
 
-    let auth_service = zent_be::services::v1::auth::AuthService::new(
+    let state = AppState::new(
+        b"secret",
+        LookupTables::empty(),
         db.clone(),
         None,
         None,
-        std::sync::Arc::new(std::collections::HashMap::new()),
+        std::collections::HashMap::new(),
         AccessTokenDefaultTTLSeconds(0),
         SessionDefaultTTLSeconds(0),
-        jsonwebtoken::EncodingKey::from_secret(b"secret"),
-    );
-
-    let luts = std::sync::Arc::new(LookupTables::empty());
-    let work_order_service = zent_be::services::v1::work_orders::WorkOrderService::new(db.clone(), luts, None, None);
-    let media_service = zent_be::services::v1::core::media::MediaService::new(db.clone(), None, None);
-
-    let state = AppState::new(
-        b"secret", 
-        LookupTables::empty(),
-        auth_service,
-        work_order_service,
-        media_service,
     ); // 0 TTLs
     let app = Router::new()
         .route("/login", post(login_handler))

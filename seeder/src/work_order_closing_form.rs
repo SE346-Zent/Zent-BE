@@ -47,7 +47,7 @@ pub async fn seed_work_order_closing_forms(
                 mtm: Set(format!("MTM-{:04}-{:04}", (i % 9999) + 1, (i * 7 % 9999) + 1)),
                 serial_number: Set(format!("SN-CF-{:06}", i + 1)),
                 diagnosis: Set(Sentence(5..12).fake_with_rng(&mut rng)),
-                signature_url: Set("".to_string()),
+                signature_file_name: Set("".to_string()),
                 created_at: Set(now),
                 updated_at: Set(now),
             }

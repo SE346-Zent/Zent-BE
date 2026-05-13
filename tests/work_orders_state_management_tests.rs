@@ -22,7 +22,7 @@ use zent_be::entities::{account_status, roles};
 
 #[path = "common/mod.rs"]
 mod common;
-use common::{seed_test_db, WorkOrderTestState};
+use common::seed_test_db;
 
 async fn mock_db() -> DatabaseConnection {
     Database::connect("sqlite::memory:").await.unwrap()
@@ -37,26 +37,18 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
 
-    let luts = std::sync::Arc::new(zent_be::core::lookup_tables::LookupTables::empty());
+    let luts = zent_be::core::lookup_tables::LookupTables::empty();
 
-    let work_order_service =
-        std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
-            db.clone(),
-            luts.clone(),
-            None,
-            None,
-        ));
-
-    let media_service = std::sync::Arc::new(zent_be::services::v1::core::media::MediaService::new(
+    let state = zent_be::core::state::AppState::new(
+        b"test_secret",
+        luts,
         db.clone(),
         None,
         None,
-    ));
-
-    let state = WorkOrderTestState {
-        work_order_service,
-        media_service,
-    };
+        std::collections::HashMap::new(),
+        zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
+        zent_be::core::state::SessionDefaultTTLSeconds(3600),
+    );
 
     Router::new()
         // Core status transitions endpoints
@@ -155,7 +147,15 @@ mod state_management_tests {
         let req_complete = create_json_request(
             http::Method::POST,
             &uri_complete,
-            &json!({ "evidence_image_ids": ["img_1"], "signature_id": "sig_1" }),
+            &json!({
+                "mtm": "82K2",
+                "serialNumber": "PF3B1234",
+                "partChanges": [],
+                "diagnosis": "Repaired screen.",
+                "latitude": 10.762622,
+                "longitude": 106.660172,
+                "signatureFileName": "sig.png"
+            }),
         );
         let r_complete = app.clone().oneshot(req_complete).await.unwrap();
         assert_eq!(r_complete.status(), StatusCode::OK);
@@ -171,7 +171,15 @@ mod state_management_tests {
         let req_complete = create_json_request(
             http::Method::POST,
             &uri_complete,
-            &json!({ "evidence_image_ids": ["img_1"], "signature_id": "sig_1" }),
+            &json!({
+                "mtm": "82K2",
+                "serialNumber": "PF3B1234",
+                "partChanges": [],
+                "diagnosis": "Repaired screen.",
+                "latitude": 10.762622,
+                "longitude": 106.660172,
+                "signatureFileName": "sig.png"
+            }),
         );
         let r_complete = app.clone().oneshot(req_complete).await.unwrap();
         // This expects to be handled by the endpoint logically, we just check routing

@@ -13,15 +13,13 @@ pub struct Model {
     pub mtm: String,
     pub serial_number: String,
     pub diagnosis: String,
-    pub signature_url: String,
+    pub signature_file_name: String,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::closing_form_image_links::Entity")]
-    ClosingFormImageLinks,
     #[sea_orm(has_many = "super::part_changes::Entity")]
     PartChanges,
     #[sea_orm(
@@ -42,12 +40,6 @@ pub enum Relation {
     WorkOrders,
 }
 
-impl Related<super::closing_form_image_links::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::ClosingFormImageLinks.def()
-    }
-}
-
 impl Related<super::part_changes::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::PartChanges.def()
@@ -63,19 +55,6 @@ impl Related<super::products::Entity> for Entity {
 impl Related<super::work_orders::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::WorkOrders.def()
-    }
-}
-
-impl Related<super::images::Entity> for Entity {
-    fn to() -> RelationDef {
-        super::closing_form_image_links::Relation::Images.def()
-    }
-    fn via() -> Option<RelationDef> {
-        Some(
-            super::closing_form_image_links::Relation::WorkOrderClosingForms
-                .def()
-                .rev(),
-        )
     }
 }
 

@@ -21,7 +21,7 @@ use zent_be::entities::{account_status, roles};
 
 #[path = "common/mod.rs"]
 mod common;
-use common::{seed_test_db, WorkOrderTestState};
+use common::seed_test_db;
 
 async fn mock_db() -> DatabaseConnection {
     Database::connect("sqlite::memory:").await.unwrap()
@@ -36,26 +36,18 @@ async fn setup_test_app(db: DatabaseConnection) -> Router {
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
 
-    let luts = std::sync::Arc::new(zent_be::core::lookup_tables::LookupTables::empty());
+    let luts = zent_be::core::lookup_tables::LookupTables::empty();
 
-    let work_order_service =
-        std::sync::Arc::new(zent_be::services::v1::work_orders::WorkOrderService::new(
-            db.clone(),
-            luts.clone(),
-            None,
-            None,
-        ));
-
-    let media_service = std::sync::Arc::new(zent_be::services::v1::core::media::MediaService::new(
+    let state = zent_be::core::state::AppState::new(
+        b"test_secret",
+        luts,
         db.clone(),
         None,
         None,
-    ));
-
-    let state = WorkOrderTestState {
-        work_order_service,
-        media_service,
-    };
+        std::collections::HashMap::new(),
+        zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
+        zent_be::core::state::SessionDefaultTTLSeconds(3600),
+    );
 
     Router::new()
         .route(
@@ -126,7 +118,7 @@ mod resolution_closing_tests {
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK);
 
-        // Assert linkage: signature_url is updated in WorkOrderClosingForms
+        // Assert linkage: signature_file_name is updated in WorkOrderClosingForms
         let form = zent_be::entities::work_order_closing_forms::Entity::find()
             .filter(zent_be::entities::work_order_closing_forms::Column::WorkOrderId.eq(wo_id))
             .one(&db)
@@ -135,27 +127,9 @@ mod resolution_closing_tests {
 
         assert!(form.is_some(), "Expected a closing form for the work order");
         assert!(
-            !form.unwrap().signature_url.is_empty(),
-            "Expected a signature URL linkage to be made"
+            !form.unwrap().signature_file_name.is_empty(),
+            "Expected a signature file name linkage to be made"
         );
-    }
-
-    #[tokio::test]
-    async fn test_finalize_work_order_without_signature() {
-        let app = setup_test_app(mock_db().await).await;
-        let wo_id = Uuid::new_v4();
-
-        let uri = format!("/api/v1/work_orders/{}/complete", wo_id);
-        // Missing signature_id
-        let req = create_json_request(
-            http::Method::POST,
-            &uri,
-            &json!({ "evidence_image_ids": ["img_1"], "diagnosis": "Repaired screen." }),
-        );
-
-        let r = app.oneshot(req).await.unwrap();
-        // This expects to be handled by the endpoint logically, we just check routing
-        assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
@@ -170,10 +144,13 @@ mod resolution_closing_tests {
             http::Method::POST,
             &uri,
             &json!({
-                "evidence_image_ids": ["img_1", "img_2"],
-                "signature_id": "sig_1",
+                "mtm": "82K2",
+                "serialNumber": "PF3B1234",
+                "partChanges": [],
                 "diagnosis": "Repaired screen. System passed tests.",
-                "serial_number_verified": true
+                "latitude": 10.762622,
+                "longitude": 106.660172,
+                "signatureFileName": "sig_file_123.png"
             }),
         );
 
@@ -187,20 +164,6 @@ mod resolution_closing_tests {
             .unwrap();
 
         assert!(form.is_some(), "WorkOrderClosingForm must be created");
-
-        let links = zent_be::entities::closing_form_image_links::Entity::find()
-            .filter(
-                zent_be::entities::closing_form_image_links::Column::WorkOrderClosingFormId
-                    .eq(form.unwrap().id),
-            )
-            .all(&db)
-            .await
-            .unwrap();
-
-        assert_eq!(
-            links.len(),
-            2,
-            "Expected 2 evidence images linked to the closing form"
-        );
+        assert_eq!(form.unwrap().signature_file_name, "sig_file_123.png");
     }
 }

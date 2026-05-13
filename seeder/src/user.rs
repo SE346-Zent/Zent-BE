@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use argon2::{
     Argon2,
     password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
@@ -14,7 +14,7 @@ use fake::{
     },
 };
 use rayon::prelude::*;
-use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, Set};
 use serde::Serialize;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -208,4 +208,68 @@ pub async fn seed_users(
     println!("  Inserted {} users. Total in DB: {}", records.len(), total);
 
     Ok(records)
+}
+
+/// Seed the system user with `id = Uuid::nil()` (`00000000-0000-0000-0000-000000000000`).
+///
+/// This user is used by background tasks (auto-assign, cleanups) as the
+/// `changed_by_id` in `work_order_state_history`. The function is idempotent
+/// — if the system user already exists it's skipped.
+///
+/// Returns the `Uuid` of the system user (always `Uuid::nil()`).
+pub async fn seed_system_user(
+    db: &DatabaseConnection,
+    roles: &HashMap<String, i32>,
+    account_statuses: &HashMap<String, i32>,
+) -> Result<Uuid> {
+    let system_id = Uuid::nil();
+
+    // Idempotent: skip if already exists
+    let existing = users::Entity::find()
+        .filter(users::Column::Id.eq(system_id))
+        .one(db)
+        .await?;
+
+    if existing.is_some() {
+        println!("  System user already exists (id={})", system_id);
+        return Ok(system_id);
+    }
+
+    // Resolve role and status IDs
+    let role_id = *roles
+        .get("SuperAdmin")
+        .or_else(|| roles.get("Admin"))
+        .context("No Admin/SuperAdmin role found — seed roles first")?;
+
+    let status_id = *account_statuses
+        .get("Active")
+        .context("No Active account status found — seed account_statuses first")?;
+
+    let now = Utc::now();
+
+    // Compute a simple Argon2 hash for a known system password
+    let salt = SaltString::generate(&mut OsRng);
+    let password_hash = Argon2::default()
+        .hash_password(b"system", &salt)
+        .context("Argon2 hashing failed for system user")?
+        .to_string();
+
+    let model = users::ActiveModel {
+        id: Set(system_id),
+        full_name: Set("System".to_string()),
+        email: Set("system@zent.local".to_string()),
+        password_hash: Set(password_hash),
+        phone_number: Set("0000000000".to_string()),
+        account_status: Set(status_id),
+        role_id: Set(role_id),
+        province: Set(None),
+        created_at: Set(now),
+        updated_at: Set(now),
+        deleted_at: Set(None),
+    };
+
+    model.insert(db).await?;
+    println!("  Created system user (id={})", system_id);
+
+    Ok(system_id)
 }

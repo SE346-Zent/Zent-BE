@@ -7,8 +7,12 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub approver_id: Uuid,
+    pub approver_id: Option<Uuid>,
     pub approved: bool,
+    pub reason: String,
+    pub explanation: String,
+    pub created_at: Option<DateTimeUtc>,
+    pub updated_at: Option<DateTimeUtc>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -23,6 +27,8 @@ pub enum Relation {
     Users,
     #[sea_orm(has_many = "super::work_orders::Entity")]
     WorkOrders,
+    #[sea_orm(has_many = "super::work_order_reject_form_image_links::Entity")]
+    WorkOrderRejectFormImageLinks,
 }
 
 impl Related<super::users::Entity> for Entity {
@@ -34,6 +40,25 @@ impl Related<super::users::Entity> for Entity {
 impl Related<super::work_orders::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::WorkOrders.def()
+    }
+}
+
+impl Related<super::work_order_reject_form_image_links::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrderRejectFormImageLinks.def()
+    }
+}
+
+impl Related<super::images::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::work_order_reject_form_image_links::Relation::Images.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::work_order_reject_form_image_links::Relation::WorkOrderRejectForms
+                .def()
+                .rev(),
+        )
     }
 }
 

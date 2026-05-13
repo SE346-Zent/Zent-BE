@@ -1,5 +1,112 @@
-use sea_orm::DatabaseConnection;
+use chrono::Utc;
+use sea_orm::Set;
+use uuid::Uuid;
+use crate::{
+    core::errors::AppError,
+    entities::{
+        work_orders,
+        work_order_closing_forms,
+        images,
+        work_order_image_links,
+        part_changes,
+        parts,
+        work_order_state_history,
+    },
+    model::requests::work_orders::complete_request::CompleteWorkOrderRequest,
+};
 
-pub async fn handle_complete(_db: &DatabaseConnection) -> Result<(), ()> {
-    unimplemented!()
+pub struct CompleteWorkOrderEffect {
+    pub closing_form_id: Uuid,
+    pub closing_form: work_order_closing_forms::ActiveModel,
+    pub images: Vec<images::ActiveModel>,
+    pub image_links: Vec<work_order_image_links::ActiveModel>,
+    pub part_changes: Vec<part_changes::ActiveModel>,
+    pub part_updates: Vec<parts::ActiveModel>,
+    pub work_order: work_orders::ActiveModel,
+    pub state_history: work_order_state_history::ActiveModel,
+    /// Checklist JSON to write to disk (serialized bytes, ready for tokio::fs::write)
+    pub checklist_json: Option<Vec<u8>>,
+}
+
+pub fn decide_complete_work_order(
+    req: CompleteWorkOrderRequest,
+    work_order: work_orders::Model,
+    completed_status_id: i32,
+    technician_id: Uuid,
+) -> Result<CompleteWorkOrderEffect, AppError> {
+    let now = Utc::now();
+    let closing_form_id = Uuid::new_v4();
+
+    // 1. Prepare Closing Form
+    let closing_form = work_order_closing_forms::ActiveModel {
+        id: Set(closing_form_id),
+        product_id: Set(work_order.product_id),
+        work_order_id: Set(work_order.id),
+        mtm: Set(req.mtm),
+        serial_number: Set(req.serial_number),
+        diagnosis: Set(req.diagnosis),
+        signature_file_name: Set(req.signature_file_name),
+        created_at: Set(now),
+        updated_at: Set(now),
+    };
+
+    // 2. Prepare Part Changes and Updates
+    let mut part_changes_models = Vec::new();
+    let mut part_updates = Vec::new();
+    for pc in req.part_changes {
+        part_changes_models.push(part_changes::ActiveModel {
+            part_id: Set(pc.part_id),
+            work_order_closing_form_id: Set(closing_form_id),
+            change_type: Set(pc.change_type.clone()),
+            created_at: Set(now),
+            updated_at: Set(now),
+            ..Default::default()
+        });
+
+        let mut part_update = parts::ActiveModel {
+            id: Set(pc.part_id),
+            ..Default::default()
+        };
+
+        if pc.change_type == "installed" {
+            part_update.product_id = Set(Some(work_order.product_id));
+            part_update.installation_date = Set(Some(now));
+        } else if pc.change_type == "uninstalled" {
+            part_update.product_id = Set(None);
+            part_update.removal_date = Set(Some(now));
+        }
+        part_updates.push(part_update);
+    }
+
+    // 4. Prepare Checklist as JSON for disk storage
+    let checklist_json = req.checklist.map(|items| {
+        serde_json::to_vec_pretty(&items).unwrap_or_else(|_| b"[]".to_vec())
+    });
+
+    // 5. Update Work Order
+    let mut active_wo: work_orders::ActiveModel = work_order.clone().into();
+    active_wo.work_order_status_id = Set(completed_status_id);
+    active_wo.complete_form_id = Set(Some(closing_form_id));
+    active_wo.updated_at = Set(now);
+
+    let state_history = work_order_state_history::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        work_order_id: Set(work_order.id),
+        from_status_id: Set(Some(work_order.work_order_status_id)),
+        to_status_id: Set(completed_status_id),
+        changed_by_id: Set(technician_id),
+        changed_at: Set(now),
+    };
+
+    Ok(CompleteWorkOrderEffect {
+        closing_form_id,
+        closing_form,
+        images: Vec::new(),
+        image_links: Vec::new(),
+        part_changes: part_changes_models,
+        part_updates,
+        work_order: active_wo,
+        state_history,
+        checklist_json,
+    })
 }

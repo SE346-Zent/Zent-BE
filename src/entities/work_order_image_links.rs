@@ -2,13 +2,17 @@
 
 use sea_orm::entity::prelude::*;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "work_order_image_links")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub image_id: Uuid,
     #[sea_orm(primary_key, auto_increment = false)]
     pub work_order_id: Uuid,
+    pub phase: String,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub is_verified: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

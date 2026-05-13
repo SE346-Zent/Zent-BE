@@ -11,6 +11,12 @@ pub struct AppConfig {
     pub rabbitmq_url: String,
     pub valkey_url: String,
 
+    #[serde(rename = "nominatim_user_agent")]
+    pub nominatim_user_agent: String,
+
+    pub par_write_work_orders: String,
+    pub par_read_work_orders: String,
+
     #[serde(rename = "docs_username")]
     pub docs_username: String,
 
@@ -19,6 +25,8 @@ pub struct AppConfig {
 
     #[serde(default = "default_app_stage")]
     pub app_stage: String,
+
+    pub system_user_id: uuid::Uuid,
 
     #[serde(default = "default_access_token_ttl")]
     pub access_token_ttl_seconds: i64,
@@ -87,7 +95,7 @@ impl AppConfig {
     /// Initializes the application configuration reading natively from the environment using Envy structurally.
     pub fn init() {
         dotenvy::dotenv().ok();
-        
+
         CONFIG.get_or_init(|| {
             envy::from_env::<AppConfig>()
                 .expect("Failed to parse configuration variables from environment!")

@@ -207,7 +207,7 @@ async fn seed_image(db: &DatabaseConnection) -> Result<Uuid> {
 
     images::ActiveModel {
         id: Set(id),
-        image_url: Set(url),
+        object_name: Set(url),
         created_at: Set(Utc::now()),
         updated_at: Set(Utc::now()),
         deleted_at: Set(None),

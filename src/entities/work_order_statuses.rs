@@ -12,16 +12,8 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::work_order_state_history::Entity")]
-    WorkOrderStateHistory,
     #[sea_orm(has_many = "super::work_orders::Entity")]
     WorkOrders,
-}
-
-impl Related<super::work_order_state_history::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::WorkOrderStateHistory.def()
-    }
 }
 
 impl Related<super::work_orders::Entity> for Entity {

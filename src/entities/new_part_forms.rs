@@ -12,6 +12,7 @@ pub struct Model {
     pub model_code: Option<String>,
     pub serial_number: String,
     pub description: Option<String>,
+    pub work_order_id: Uuid,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
@@ -37,6 +38,14 @@ pub enum Relation {
         on_delete = "Restrict"
     )]
     ProductModels,
+    #[sea_orm(
+        belongs_to = "super::work_orders::Entity",
+        from = "Column::WorkOrderId",
+        to = "super::work_orders::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    WorkOrders,
 }
 
 impl Related<super::new_part_form_image_links::Entity> for Entity {
@@ -54,6 +63,12 @@ impl Related<super::part_types::Entity> for Entity {
 impl Related<super::product_models::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ProductModels.def()
+    }
+}
+
+impl Related<super::work_orders::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrders.def()
     }
 }
 

@@ -1,7 +1,9 @@
 pub mod auth;
 pub mod api_docs;
 pub mod media;
+pub mod notifications;
 pub mod work_orders;
+pub mod inventory;
 
 use axum::{Router, middleware};
 use crate::core::state::AppState;
@@ -12,32 +14,29 @@ pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .nest("/auth", auth::router())
         .nest("/docs", api_docs::router())
-        .nest("/work_orders", work_orders_router(state))
-        .nest("/media", media_router())
+        .nest("/work_orders", work_orders_router(state.clone()))
+        .nest("/inventory", inventory::router(state.clone()))
+        .nest("/notifications", notifications::router())
+        .nest("/media", media::media_router(state))
 }
 
 fn work_orders_router(state: AppState) -> Router<AppState> {
-    // 1. Customer Routes
     let customer_routes = Router::new()
         .route("/", axum::routing::post(work_orders::create))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_role::<AppState>(Role::Customer),
+            require_role::<AppState>(&[Role::Customer]),
         ));
 
-    // 2. Technician Routes
     let tech_routes = Router::new()
-        .route("/{id}/schedule", axum::routing::post(work_orders::schedule))
         .route("/{id}/start", axum::routing::post(work_orders::start))
         .route("/{id}/refuse", axum::routing::post(work_orders::refuse))
         .route("/{id}/complete", axum::routing::post(work_orders::complete))
-        .route("/{id}/parts", axum::routing::post(work_orders::add_parts))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_role::<AppState>(Role::Technician),
+            require_role::<AppState>(&[Role::Technician]),
         ));
 
-    // 3. Admin Routes
     let admin_routes = Router::new()
         .route("/{id}/assign", axum::routing::post(work_orders::assign))
         .route("/{id}/cancel", axum::routing::post(work_orders::cancel))
@@ -45,14 +44,12 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/refusal/deny", axum::routing::post(work_orders::deny_refusal))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_role::<AppState>(Role::Admin),
+            require_role::<AppState>(&[Role::Admin]),
         ));
 
-    // 4. Unified List Route (Shared by all roles - Auth checked inside handler)
     let list_route = Router::new()
         .route("/", axum::routing::get(work_orders::list));
 
-    // 5. Shared/Open Routes
     Router::new()
         .route("/{id}", axum::routing::get(work_orders::get_details))
         .route("/{id}/history", axum::routing::get(work_orders::history))
@@ -60,12 +57,4 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .merge(customer_routes)
         .merge(tech_routes)
         .merge(admin_routes)
-}
-
-fn media_router() -> Router<AppState> {
-    Router::new()
-        .route("/photos/work_orders/{id}/upload", axum::routing::post(media::upload_work_order_photo))
-        .route("/photos/work_orders/{id}", axum::routing::get(media::get_work_order_photo))
-        .route("/photos/work_orders", axum::routing::get(media::list_work_order_photos))
-        .route("/signatures/work_orders/{id}/upload", axum::routing::post(media::upload_work_order_signature))
 }

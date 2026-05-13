@@ -9,7 +9,18 @@ mod m20260426_050036_policy;
 mod m20260504_100000_add_wo_number_index;
 mod m20260504_110000_add_user_state;
 mod m20260505_035658_update_field;
-
+mod m20260505_215000_overtimes_and_phases;
+mod m20260506_090000_update_reject_form;
+mod m20260506_100000_geofencing;
+mod m20260507_012900_rename_image_url;
+mod m20260507_102900_update_new_part_forms_and_reject_forms;
+mod m20260508_090000_refactor_image_links;
+mod m20260508_100000_make_approver_nullable;
+mod m20260507_122648_rename_signature_field;
+mod m20260509_100000_refactor_state_history;
+mod m20260510_100000_add_checklist;
+mod m20260511_100000_drop_checklist_tables;
+mod m20260512_100000_drop_overtimes;
 
 pub struct Migrator;
 
@@ -26,6 +37,18 @@ impl MigratorTrait for Migrator {
             Box::new(m20260504_100000_add_wo_number_index::Migration),
             Box::new(m20260504_110000_add_user_state::Migration),
             Box::new(m20260505_035658_update_field::Migration),
+            Box::new(m20260505_215000_overtimes_and_phases::Migration),
+            Box::new(m20260506_090000_update_reject_form::Migration),
+            Box::new(m20260506_100000_geofencing::Migration),
+            Box::new(m20260507_012900_rename_image_url::Migration),
+            Box::new(m20260507_102900_update_new_part_forms_and_reject_forms::Migration),
+            Box::new(m20260508_090000_refactor_image_links::Migration),
+            Box::new(m20260508_100000_make_approver_nullable::Migration),
+            Box::new(m20260507_122648_rename_signature_field::Migration),
+            Box::new(m20260509_100000_refactor_state_history::Migration),
+            Box::new(m20260510_100000_add_checklist::Migration),
+            Box::new(m20260511_100000_drop_checklist_tables::Migration),
+            Box::new(m20260512_100000_drop_overtimes::Migration),
         ]
     }
 }

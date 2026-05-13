@@ -8,7 +8,8 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub work_order_id: Uuid,
-    pub work_order_status_id: i32,
+    pub from_status_id: Option<i32>,
+    pub to_status_id: i32,
     pub changed_by_id: Uuid,
     pub changed_at: DateTimeUtc,
 }
@@ -25,12 +26,20 @@ pub enum Relation {
     Users,
     #[sea_orm(
         belongs_to = "super::work_order_statuses::Entity",
-        from = "Column::WorkOrderStatusId",
+        from = "Column::FromStatusId",
         to = "super::work_order_statuses::Column::Id",
         on_update = "Cascade",
         on_delete = "Restrict"
     )]
-    WorkOrderStatuses,
+    FromWorkOrderStatus,
+    #[sea_orm(
+        belongs_to = "super::work_order_statuses::Entity",
+        from = "Column::ToStatusId",
+        to = "super::work_order_statuses::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Restrict"
+    )]
+    ToWorkOrderStatus,
     #[sea_orm(
         belongs_to = "super::work_orders::Entity",
         from = "Column::WorkOrderId",
@@ -44,12 +53,6 @@ pub enum Relation {
 impl Related<super::users::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Users.def()
-    }
-}
-
-impl Related<super::work_order_statuses::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::WorkOrderStatuses.def()
     }
 }
 

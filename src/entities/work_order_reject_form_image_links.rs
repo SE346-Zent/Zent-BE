@@ -3,12 +3,12 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "closing_form_image_links")]
+#[sea_orm(table_name = "work_order_reject_form_image_links")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub image_id: Uuid,
     #[sea_orm(primary_key, auto_increment = false)]
-    pub work_order_closing_form_id: Uuid,
+    pub work_order_reject_form_id: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -22,13 +22,13 @@ pub enum Relation {
     )]
     Images,
     #[sea_orm(
-        belongs_to = "super::work_order_closing_forms::Entity",
-        from = "Column::WorkOrderClosingFormId",
-        to = "super::work_order_closing_forms::Column::Id",
+        belongs_to = "super::work_order_reject_forms::Entity",
+        from = "Column::WorkOrderRejectFormId",
+        to = "super::work_order_reject_forms::Column::Id",
         on_update = "Cascade",
         on_delete = "Cascade"
     )]
-    WorkOrderClosingForms,
+    WorkOrderRejectForms,
 }
 
 impl Related<super::images::Entity> for Entity {
@@ -37,9 +37,9 @@ impl Related<super::images::Entity> for Entity {
     }
 }
 
-impl Related<super::work_order_closing_forms::Entity> for Entity {
+impl Related<super::work_order_reject_forms::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::WorkOrderClosingForms.def()
+        Relation::WorkOrderRejectForms.def()
     }
 }
 

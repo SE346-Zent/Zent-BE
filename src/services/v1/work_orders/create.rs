@@ -1,7 +1,7 @@
 use sea_orm::Set;
 use crate::{
     core::errors::AppError,
-    entities::work_orders,
+    entities::{work_orders, work_order_state_history},
     model::requests::work_orders::create_work_order_request::CreateWorkOrderRequest,
 };
 use uuid::Uuid;
@@ -9,6 +9,7 @@ use chrono::Utc;
 
 pub struct CreateWorkOrderEffect {
     pub work_order: work_orders::ActiveModel,
+    pub state_history: work_order_state_history::ActiveModel,
 }
 
 pub fn decide_create_work_order(
@@ -17,7 +18,7 @@ pub fn decide_create_work_order(
     pending_status_id: i32,
 ) -> Result<CreateWorkOrderEffect, AppError> {
     // 1. Location Policy Validation
-    if req.city != "HCM" || req.province != "HN" {
+    if req.city != "HCM" && req.city != "HN" {
         return Err(AppError::BadRequest("Only HCM and HN are supported at this time".to_string()));
     }
 
@@ -51,5 +52,14 @@ pub fn decide_create_work_order(
         ..Default::default()
     };
 
-    Ok(CreateWorkOrderEffect { work_order })
+    let state_history = work_order_state_history::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        work_order_id: Set(wo_id),
+        from_status_id: Set(None), // Initial creation — no previous status
+        to_status_id: Set(pending_status_id),
+        changed_by_id: Set(customer_id),
+        changed_at: Set(now),
+    };
+
+    Ok(CreateWorkOrderEffect { work_order, state_history })
 }

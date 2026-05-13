@@ -6,11 +6,19 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // SQLite: one ALTER per statement
         manager
             .alter_table(
                 Table::alter()
                     .table(Users::Table)
                     .drop_column(Users::State)
+                    .to_owned()
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(Users::Table)
                     .add_column(ColumnDef::new(Users::Province).string().null())
                     .to_owned()
             )
@@ -21,6 +29,13 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(WorkOrders::Table)
                     .drop_column(WorkOrders::State)
+                    .to_owned()
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(WorkOrders::Table)
                     .add_column(ColumnDef::new(WorkOrders::Province).string().null())
                     .to_owned()
             )
@@ -33,6 +48,13 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(Users::Table)
                     .drop_column(Users::Province)
+                    .to_owned()
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(Users::Table)
                     .add_column(ColumnDef::new(Users::State).string().null())
                     .to_owned()
             )
@@ -43,6 +65,13 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(WorkOrders::Table)
                     .drop_column(WorkOrders::Province)
+                    .to_owned()
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(WorkOrders::Table)
                     .add_column(ColumnDef::new(WorkOrders::State).string().null())
                     .to_owned()
             )

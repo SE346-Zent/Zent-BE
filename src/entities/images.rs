@@ -7,7 +7,7 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub image_url: String,
+    pub object_name: String,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
@@ -15,8 +15,6 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::closing_form_image_links::Entity")]
-    ClosingFormImageLinks,
     #[sea_orm(has_many = "super::new_part_form_image_links::Entity")]
     NewPartFormImageLinks,
     #[sea_orm(has_many = "super::part_catalog_image_links::Entity")]
@@ -29,12 +27,8 @@ pub enum Relation {
     ProductModelImageLinks,
     #[sea_orm(has_many = "super::work_order_image_links::Entity")]
     WorkOrderImageLinks,
-}
-
-impl Related<super::closing_form_image_links::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::ClosingFormImageLinks.def()
-    }
+    #[sea_orm(has_many = "super::work_order_reject_form_image_links::Entity")]
+    WorkOrderRejectFormImageLinks,
 }
 
 impl Related<super::new_part_form_image_links::Entity> for Entity {
@@ -130,13 +124,13 @@ impl Related<super::products::Entity> for Entity {
     }
 }
 
-impl Related<super::work_order_closing_forms::Entity> for Entity {
+impl Related<super::work_order_reject_forms::Entity> for Entity {
     fn to() -> RelationDef {
-        super::closing_form_image_links::Relation::WorkOrderClosingForms.def()
+        super::work_order_reject_form_image_links::Relation::WorkOrderRejectForms.def()
     }
     fn via() -> Option<RelationDef> {
         Some(
-            super::closing_form_image_links::Relation::Images
+            super::work_order_reject_form_image_links::Relation::Images
                 .def()
                 .rev(),
         )

@@ -1,4 +1,4 @@
-use crate::model::responses::work_orders::list_response::{WorkOrderListItem, WorkOrderListResponse};
+use crate::model::responses::work_orders::list_response::WorkOrderListItem;
 use crate::model::responses::pagination::PaginationResponse;
 use crate::model::requests::pagination::PaginationRequest;
 use crate::entities::{work_orders, products, work_order_symptoms, work_order_statuses};
@@ -7,18 +7,17 @@ use crate::core::lookup_tables::LookupTables;
 pub fn map_to_list_item(
     wo: work_orders::Model,
     product: Option<products::Model>,
-    symptom: Option<work_order_symptoms::Model>,
+    _symptom: Option<work_order_symptoms::Model>,
     status: Option<work_order_statuses::Model>,
 ) -> WorkOrderListItem {
     WorkOrderListItem {
         id: wo.id,
-        work_order_number: wo.work_order_number,
+        work_order_num: wo.work_order_number,
         status: status.map(|s| s.name).unwrap_or_else(|| "Unknown".to_string()),
         customer_name: format!("{} {}", wo.first_name, wo.last_name),
         product_name: product.map(|p| p.product_name).unwrap_or_else(|| "Unknown Product".to_string()),
-        symptom_name: symptom.map(|s| s.name).unwrap_or_else(|| "General Service".to_string()),
-        city: wo.city,
-        province: wo.province,
+        address: format!("{}, {}, {}", wo.address, wo.city, wo.province),
+        appointment: Some(wo.appointment),
         created_at: wo.created_at,
     }
 }
@@ -28,7 +27,7 @@ pub fn decide_list(
     lookup_tables: &LookupTables,
     pagination: &PaginationRequest,
     total_records: u64,
-) -> WorkOrderListResponse {
+) -> (Vec<WorkOrderListItem>, PaginationResponse) {
     let data = models
         .into_iter()
         .map(|(wo, product, symptom)| {
@@ -41,8 +40,8 @@ pub fn decide_list(
         })
         .collect();
 
-    WorkOrderListResponse {
+    (
         data,
-        pagination: PaginationResponse::new(pagination.limit, pagination.page, total_records),
-    }
+        PaginationResponse::new(pagination.limit, pagination.page, total_records),
+    )
 }
