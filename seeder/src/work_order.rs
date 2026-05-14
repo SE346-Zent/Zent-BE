@@ -93,6 +93,7 @@ pub async fn seed_random_work_orders(
                 reject_form_id: Set(None),
                 work_order_symptom_id: Set(*symptom_ids.choose(&mut rng).unwrap_or(&1)),
                 product_id: Set(*product_ids.choose(&mut rng).unwrap()),
+                about_to_start_notified: Set(false),
             }
         })
         .collect();

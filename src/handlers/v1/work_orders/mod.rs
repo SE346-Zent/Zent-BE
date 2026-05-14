@@ -325,6 +325,7 @@ pub async fn run_cleanup(
 
 pub(crate) async fn try_auto_assign_single(
     db: Arc<DatabaseConnection>,
+    mongodb: Arc<mongodb::Database>,
     luts: Arc<LookupTables>,
     wo: work_orders_ent::Model,
     valkey_client: Option<Arc<ValkeyClient>>,
@@ -370,9 +371,45 @@ pub(crate) async fn try_auto_assign_single(
     })).await { tracing::error!("Auto-assign tx failed for WO {}: {}", wo.work_order_number, e); return false; }
 
     tracing::info!("Auto-assigned WO {} to {}", wo.work_order_number, assigned_tech_id);
+
+    // Send push + in-app notifications to both technician and customer
+    // (mongodb needed — we borrow from the state passed via the closure)
+    let cust = users::Entity::find_by_id(wo.customer_id).one(db.as_ref()).await.unwrap_or_default();
+    let tech = users::Entity::find_by_id(assigned_tech_id).one(db.as_ref()).await.unwrap_or_default();
+    if let (Some(c), Some(t)) = (cust.as_ref(), tech.as_ref()) {
+        let notification_data = serde_json::json!({
+            "workOrderId": wo.id,
+            "workOrderNumber": wo.work_order_number,
+            "technicianName": t.full_name,
+            "appointment": wo.appointment.to_string(),
+        });
+
+        // Notify technician
+        let _ = crate::services::v1::notifications::send_notification::send_notification(
+            mongodb.as_ref(),
+            valkey_client.clone(),
+            db.as_ref(),
+            t.id,
+            "work_order_assigned",
+            "New Work Order Assigned",
+            &format!("You have been assigned to work order {}", wo.work_order_number),
+            notification_data.clone(),
+        ).await;
+
+        // Notify customer
+        let _ = crate::services::v1::notifications::send_notification::send_notification(
+            mongodb.as_ref(),
+            valkey_client.clone(),
+            db.as_ref(),
+            c.id,
+            "work_order_assigned",
+            "Work Order Assigned",
+            &format!("Your work order {} has been assigned to technician {}", wo.work_order_number, t.full_name),
+            notification_data,
+        ).await;
+    }
+
     if let (Some(rmq), Some(tmpl)) = (rabbitmq_opt.as_ref(), templates.as_ref()) {
-        let cust = users::Entity::find_by_id(wo.customer_id).one(db.as_ref()).await.unwrap_or_default();
-        let tech = users::Entity::find_by_id(assigned_tech_id).one(db.as_ref()).await.unwrap_or_default();
         if let (Some(c), Some(t)) = (cust, tech) {
             let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(rmq, tmpl, &c.email, &c.full_name, &wo.work_order_number, &t.full_name, &wo.appointment.to_string()).await;
         }

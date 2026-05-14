@@ -4,6 +4,8 @@ use lapin::{
 
 pub mod email;
 pub mod work_order;
+pub mod fcm;
+pub mod notification;
 
 /// Append `heartbeat=60` to the AMQP URL if not already present.
 /// Lapin 2.x reads heartbeat from the URI query parameter.

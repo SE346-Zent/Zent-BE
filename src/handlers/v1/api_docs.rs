@@ -86,7 +86,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
         notifications::list::list,
         notifications::get_preferences::get_preferences,
         notifications::update_preferences::update_preferences,
-        notifications::sync_outbox::sync_outbox,
+        notifications::unread_count::get_unread_noti_count,
         media::upload_closing_form_photo,
         media::update_closing_form_photo,
         media::upload_closing_form_signature,

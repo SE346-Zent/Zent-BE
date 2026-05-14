@@ -11,6 +11,11 @@ pub struct Model {
     pub user_id: Uuid,
     /// References the MongoDB notification document ID (stored as UUID string).
     pub notification_id: Uuid,
+    pub category_id: i32,
+    pub title: String,
+    pub body: String,
+    /// JSON payload stored as TEXT.
+    pub data: String,
     pub created_at: DateTimeUtc,
     pub delivered: bool,
 }

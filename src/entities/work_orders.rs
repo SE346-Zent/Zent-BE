@@ -29,6 +29,7 @@ pub struct Model {
     pub complete_form_id: Option<Uuid>,
     pub work_order_number: String,
     pub reject_form_id: Option<Uuid>,
+    pub about_to_start_notified: bool,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,

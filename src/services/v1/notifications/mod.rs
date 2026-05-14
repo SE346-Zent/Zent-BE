@@ -1,8 +1,7 @@
 pub mod get_preferences;
 pub mod update_preference;
 pub mod list;
-pub mod sync_outbox;
-pub mod cleanup_outbox;
+pub mod send_notification;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -56,12 +55,4 @@ pub fn is_valid_category_id(id: i32) -> bool {
     id >= 1 && id <= NOTIFICATION_CATEGORIES.len() as i32
 }
 
-/// An outbox entry — a pending notification delivery.
-#[derive(Debug, Clone)]
-pub struct OutboxRecord {
-    pub outbox_id: Uuid,
-    pub user_id: Uuid,
-    pub notification_id: Uuid,
-    pub created_at: DateTime<Utc>,
-    pub delivered: bool,
-}
+

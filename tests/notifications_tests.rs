@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     http::{self, Request, StatusCode},
-    routing::{get, post},
+    routing::get,
     Router,
 };
 use chrono::{DateTime, Utc};
@@ -216,14 +216,11 @@ async fn setup_test_app(_db: DatabaseConnection) -> Router {
 
     Router::new()
         .route("/api/v1/notifications/preferences",
-            get(zent_be::handlers::v1::notifications::get_preferences)
-                .put(zent_be::handlers::v1::notifications::update_preferences),
+            get(zent_be::handlers::v1::notifications::get_preferences::get_preferences)
+                .put(zent_be::handlers::v1::notifications::update_preferences::update_preferences),
         )
         .route("/api/v1/notifications",
-            get(zent_be::handlers::v1::notifications::list),
-        )
-        .route("/api/v1/notifications/outbox/sync",
-            post(zent_be::handlers::v1::notifications::sync_outbox),
+            get(zent_be::handlers::v1::notifications::list::list),
         )
         .with_state(state)
 }

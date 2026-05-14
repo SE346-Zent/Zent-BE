@@ -57,6 +57,15 @@ pub struct AppConfig {
     pub otel_exporter_otlp_headers: Option<String>,
     pub otel_service_name: Option<String>,
 
+    /// Path to Firebase service account JSON credentials.
+    /// Used by the FCM consumer to authenticate via the Firebase Admin SDK v1 API.
+    /// This is the same as the `GOOGLE_APPLICATION_CREDENTIALS` env var.
+    pub google_application_credentials: Option<String>,
+
+    /// Path to save completed checklists.
+    #[serde(default = "default_checklist_save_path")]
+    pub checklist_save_path: String,
+
     /// TTL (seconds) for the short-lived idempotency claim while the DB write is in-flight.
     #[serde(default = "default_idempotency_claim_ttl")]
     pub idempotency_claim_ttl_seconds: u64,
@@ -84,6 +93,8 @@ fn default_db_connect_timeout() -> u64 { 30 }
 fn default_db_acquire_timeout() -> u64 { 30 }
 fn default_db_idle_timeout() -> u64 { 600 }
 fn default_db_max_lifetime() -> u64 { 1800 }
+
+fn default_checklist_save_path() -> String { "zent_checklist".to_string() }
 
 fn default_idempotency_claim_ttl() -> u64 { 30 }
 fn default_idempotency_final_ttl() -> u64 { 3600 }

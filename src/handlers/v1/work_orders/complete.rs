@@ -56,7 +56,8 @@ pub async fn complete(
     })).await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 
     if let Some(bytes) = effect.checklist_json {
-        let dir = format!("zent_checklist/{}", effect.closing_form_id);
+        let cfg = crate::core::config::AppConfig::get();
+        let dir = format!("{}/{}", cfg.checklist_save_path, effect.closing_form_id);
         tokio::fs::create_dir_all(&dir).await.map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create checklist dir: {}", e)))?;
         tokio::fs::write(format!("{}/checklist.json", dir), &bytes).await.map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to write checklist: {}", e)))?;
     }

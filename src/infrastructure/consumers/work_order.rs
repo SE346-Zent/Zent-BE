@@ -90,8 +90,10 @@ pub async fn start_work_order_consumer(state: AppState) {
                                         if let Ok(id) = uuid::Uuid::parse_str(id_str) {
                                             info!("Processing auto-assign for WO {}", id);
                                             if let Ok(Some(wo)) = work_orders_ent::Entity::find_by_id(id).one(db.as_ref()).await {
+                                                let mongodb = state.mongodb.clone();
                                                 let _ = crate::handlers::v1::work_orders::try_auto_assign_single(
                                                     db.clone(),
+                                                    mongodb,
                                                     luts.clone(),
                                                     wo,
                                                     valkey.clone(),

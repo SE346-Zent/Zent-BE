@@ -11,29 +11,20 @@ use super::NotificationRecord;
 ///
 /// Results are sorted newest-first.  Ownership is NOT checked here —
 /// the caller must filter by `user_id` before passing `notifs`.
-///
-/// `disabled_category_ids` is the set of categories for which the user
-/// has OS / in-app delivery disabled.  Notifications in these categories
-/// are excluded from the result.  Pass an empty slice for non-customer
-/// users who don't filter by preferences.
 pub fn list_notifications(
     notifs: &[NotificationRecord],
     query: &NotificationListQuery,
-    disabled_category_ids: &[i32],
 ) -> (Vec<NotificationListItem>, PaginationResponse) {
     let page = query.page.unwrap_or(1);
     let limit = query.limit.unwrap_or(20);
     
     let mut filtered: Vec<_> = notifs.iter()
         .filter(|n| {
-            // Apply category-id query filter if present
             if let Some(cat_id) = query.category_id {
-                if n.category_id != cat_id {
-                    return false;
-                }
+                n.category_id == cat_id
+            } else {
+                true
             }
-            // Exclude categories the user has disabled (customer filtering)
-            !disabled_category_ids.contains(&n.category_id)
         })
         .collect();
 

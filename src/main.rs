@@ -79,6 +79,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start background asynchronous AMQP work order consumer pool
     infrastructure::consumers::work_order::start_work_order_consumer(state.clone()).await;
 
+    // Start background FCM push notification consumer
+    infrastructure::consumers::fcm::start_fcm_consumer(rabbitmq.clone(), db.clone()).await;
+
+    // Start background notification consumer (Phase 2 of outbox pattern)
+    infrastructure::consumers::notification::start_notification_consumer(state.clone()).await;
+
     // Start background cron scheduler for maintenance tasks using pre-loaded LUT
     let app_scheduler: AppScheduler = infrastructure::scheduler::AppScheduler::new()
         .await
@@ -120,6 +126,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     app_scheduler.register_job(auto_assign_job)
         .await
         .expect("Failed to register auto assign job");
+
+    let outbox_cleanup_job = infrastructure::cron_tasks::cleanup_outbox::clean_up_outbox_job(
+        db.clone(),
+    ).expect("Failed to build outbox cleanup job");
+
+    app_scheduler.register_job(outbox_cleanup_job)
+        .await
+        .expect("Failed to register outbox cleanup job");
+
+    // Register outbox relay job (runs every 10 seconds)
+    let relay_job = infrastructure::cron_tasks::relay_outbox::relay_outbox_job(
+        db.clone(),
+        rabbitmq.clone(),
+    ).expect("Failed to build outbox relay job");
+
+    app_scheduler.register_job(relay_job)
+        .await
+        .expect("Failed to register outbox relay job");
         
     app_scheduler.start()
         .await

@@ -29,100 +29,125 @@ pub async fn list(
     let collection = state.mongodb
         .collection::<mongodb::bson::Document>("notifications");
 
+    // Bucket-pattern: each document holds a `notifications` array.
+    // Flatten all buckets for this user into a single list.
     let filter = doc! { "user_id": auth.user.id.to_string() };
-    let options = mongodb::options::FindOptions::builder()
-        .sort(doc! { "created_at": -1 })
-        .build();
 
     let cursor = collection
         .find(filter)
-        .with_options(options)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
-    let docs: Vec<mongodb::bson::Document> = cursor
+    let bucket_docs: Vec<mongodb::bson::Document> = cursor
         .try_collect()
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
-    // Convert BSON documents to NotificationRecords
-    let records: Vec<NotificationRecord> = docs.iter()
-        .filter_map(|doc| {
-            let notification_id = doc.get_str("notification_id").ok()?.parse().ok()?;
-            let user_id = doc.get_str("user_id").ok()?.parse().ok()?;
-            let category_id = doc.get_i32("category_id").ok()?;
-            let title = doc.get_str("title").ok()?.to_string();
-            let body = doc.get_str("body").ok()?.to_string();
-            let data = doc.get("data")
-                .and_then(|d| {
-                    let bson_val: mongodb::bson::Bson = d.clone();
-                    let json_val: serde_json::Value = mongodb::bson::from_bson(bson_val).ok()?;
-                    Some(json_val)
-                })
-                .unwrap_or(serde_json::Value::Null);
-            let is_read = doc.get_bool("is_read").unwrap_or(false);
-            let os_notification_id = doc.get_str("os_notification_id")
+    // Flatten bucket documents to NotificationRecords
+    let records: Vec<NotificationRecord> = bucket_docs
+        .iter()
+        .flat_map(|bucket_doc| {
+            let bucket_user_id = bucket_doc
+                .get_str("user_id")
                 .ok()
                 .and_then(|s| s.parse::<uuid::Uuid>().ok());
-            let created_at = doc.get_datetime("created_at")
-                .ok()
-                .map(|dt| {
-                    let millis = dt.timestamp_millis();
-                    chrono::DateTime::<chrono::Utc>::from_timestamp_millis(millis)
-                        .unwrap_or_default()
-                })?;
 
-            Some(NotificationRecord {
-                notification_id,
-                user_id,
-                category_id,
-                title,
-                body,
-                data,
-                is_read,
-                os_notification_id,
-                created_at,
-            })
+            let notifs_array = bucket_doc.get_array("notifications").ok();
+
+            match (bucket_user_id, notifs_array) {
+                (Some(uid), Some(arr)) => {
+                    // Collect into Vec to satisfy the iterator bound
+                    arr.iter()
+                        .filter_map(|item| {
+                            let notif_doc = item.as_document()?;
+                            let notification_id =
+                                notif_doc.get_str("notification_id").ok()?.parse().ok()?;
+                            let category_id = notif_doc.get_i32("category_id").ok()?;
+                            let title = notif_doc.get_str("title").ok()?.to_string();
+                            let body = notif_doc.get_str("body").ok()?.to_string();
+                            let data = notif_doc
+                                .get("data")
+                                .and_then(|d| {
+                                    let bson_val: mongodb::bson::Bson = d.clone();
+                                    mongodb::bson::from_bson(bson_val).ok()
+                                })
+                                .unwrap_or(serde_json::Value::Null);
+                            let is_read = notif_doc.get_bool("is_read").unwrap_or(false);
+                            let os_notification_id = notif_doc
+                                .get_str("os_notification_id")
+                                .ok()
+                                .and_then(|s| s.parse::<uuid::Uuid>().ok());
+                            let created_at = notif_doc
+                                .get_datetime("created_at")
+                                .ok()
+                                .map(|dt| {
+                                    let millis = dt.timestamp_millis();
+                                    chrono::DateTime::<chrono::Utc>::from_timestamp_millis(millis)
+                                        .unwrap_or_default()
+                                })?;
+
+                            Some(NotificationRecord {
+                                notification_id,
+                                user_id: uid,
+                                category_id,
+                                title,
+                                body,
+                                data,
+                                is_read,
+                                os_notification_id,
+                                created_at,
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                }
+                _ => Vec::new().into_iter(),
+            }
         })
         .collect();
 
-    // 2. If customer, fetch disabled category ids from preferences
-    let is_customer = auth.role.name.to_lowercase() == "customer";
-    let disabled_category_ids: Vec<i32> = if is_customer {
-        let prefs_collection = state.mongodb
-            .collection::<mongodb::bson::Document>("user_preferences");
-        let pref_doc = prefs_collection
-            .find_one(doc! { "_id": auth.user.id.to_string() })
-            .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
-
-        let mut disabled = Vec::new();
-        if let Some(d) = pref_doc {
-            if let Ok(prefs_array) = d.get_array("preferences") {
-                for item in prefs_array {
-                    if let Some(obj) = item.as_document() {
-                        if let (Ok(cat_id), Ok(os_enabled)) =
-                            (obj.get_i32("category_id"), obj.get_bool("os_enabled"))
-                        {
-                            if !os_enabled {
-                                disabled.push(cat_id);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        disabled
-    } else {
-        vec![]
-    };
-
-    // 3. Pass to pure service logic
+    // 2. Pass to pure service logic (no preference filtering — all notifications shown)
     let (data, meta) = crate::services::v1::notifications::list::list_notifications(
         &records,
         &query,
-        &disabled_category_ids,
     );
+
+    // 3. Mark returned notifications as read in MongoDB and decrement Valkey cache
+    let unread_ids: Vec<String> = data
+        .iter()
+        .filter(|item| !item.is_read)
+        .map(|item| item.notification_id.clone())
+        .collect();
+
+    let unread_count = unread_ids.len();
+
+    if !unread_ids.is_empty() {
+        // Mark as read in MongoDB using arrayFilters
+        let _ = collection
+            .update_many(
+                doc! {
+                    "user_id": auth.user.id.to_string(),
+                    "notifications.notification_id": { "$in": &unread_ids },
+                },
+                doc! {
+                    "$set": { "notifications.$[elem].is_read": true },
+                },
+            )
+            .array_filters(vec![
+                doc! { "elem.notification_id": { "$in": &unread_ids } },
+            ])
+            .await;
+
+        // Decrement Valkey unread counter
+        if let Some(valkey) = &state.valkey {
+            let mut conn = valkey.get_connection();
+            let _ = redis::cmd("DECRBY")
+                .arg(format!("unread:{}", auth.user.id))
+                .arg(unread_count as i64)
+                .query_async::<()>(&mut conn)
+                .await;
+        }
+    }
 
     Ok(Json(ApiResponse::success_with_meta(200, "Notifications retrieved", data, meta)))
 }

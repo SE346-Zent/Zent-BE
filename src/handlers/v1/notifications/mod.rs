@@ -1,7 +1,7 @@
 pub mod get_preferences;
 pub mod update_preferences;
 pub mod list;
-pub mod sync_outbox;
+pub mod unread_count;
 
 use axum::{Router, middleware};
 use crate::core::state::AppState;
@@ -18,6 +18,6 @@ pub fn router(state: AppState) -> Router<AppState> {
 
     Router::new()
         .route("/", axum::routing::get(list::list))
+        .route("/unread-count", axum::routing::get(unread_count::get_unread_noti_count))
         .nest("/preferences", pref_routes)
-        .route("/outbox/sync", axum::routing::post(sync_outbox::sync_outbox))
 }
