@@ -65,9 +65,12 @@ pub async fn login_handler(
     active_session.insert(db.as_ref()).await?;
 
     if let Some(client) = valkey_client {
-        let mut conn = client.get_connection();
-        let whitelist_key = format!("whitelist:session:{}", effect.session_id);
-        let _: () = redis::AsyncCommands::set_ex(&mut conn, &whitelist_key, &effect.refresh_token_hash, session_ttl.0 as u64).await?;
+        if let Ok(mut conn) = client.get_connection().await {
+            let whitelist_key = format!("whitelist:session:{}", effect.session_id);
+            let _: () = redis::AsyncCommands::set_ex(&mut conn, &whitelist_key, &effect.refresh_token_hash, session_ttl.0 as u64).await.unwrap_or_default();
+        } else {
+            tracing::warn!("Valkey unavailable — session whitelist not set");
+        }
     }
 
     Ok(Json(ApiResponse::success(200, "Login successful", effect.response_data)))

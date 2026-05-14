@@ -31,7 +31,7 @@ pub async fn reset_password_handler(
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
     let client = valkey_client.ok_or_else(|| AppError::Internal(anyhow::anyhow!("Valkey missing")))?;
-    let mut conn = client.get_connection();
+    let mut conn = client.get_connection().await?;
     let reset_token_key = format!("password_reset_token:{}", payload.reset_token);
     let email: Option<String> = conn.get(&reset_token_key).await?;
     let email = email.ok_or_else(|| AppError::BadRequest("Invalid or expired token".to_string()))?;

@@ -47,12 +47,13 @@ where
         
         // Try to get from Valkey cache first
         if let Some(client) = valkey.as_ref() {
-            let mut conn = client.get_connection();
-            let cache_key = format!("user_profile:{}", user_id);
-            
-            if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&cache_key).await {
-                if let Ok(auth_user) = serde_json::from_str::<AuthUser>(&cached_json) {
-                    return Ok(auth_user);
+            if let Ok(mut conn) = client.get_connection().await {
+                let cache_key = format!("user_profile:{}", user_id);
+                
+                if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&cache_key).await {
+                    if let Ok(auth_user) = serde_json::from_str::<AuthUser>(&cached_json) {
+                        return Ok(auth_user);
+                    }
                 }
             }
         }
@@ -79,12 +80,13 @@ where
 
         // Save to Valkey cache
         if let Some(client) = valkey {
-            let mut conn = client.get_connection();
-            let cache_key = format!("user_profile:{}", user_id);
-            if let Ok(json) = serde_json::to_string(&auth_user) {
-                let _: () = conn.set_ex(&cache_key, json, 900).await.unwrap_or_else(|e| {
-                    warn!("Failed to cache user profile in Valkey: {:?}", e);
-                });
+            if let Ok(mut conn) = client.get_connection().await {
+                let cache_key = format!("user_profile:{}", user_id);
+                if let Ok(json) = serde_json::to_string(&auth_user) {
+                    let _: () = conn.set_ex(&cache_key, json, 900).await.unwrap_or_else(|e| {
+                        warn!("Failed to cache user profile in Valkey: {:?}", e);
+                    });
+                }
             }
         }
 

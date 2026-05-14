@@ -1,22 +1,56 @@
-use crate::{
-    core::errors::AppError,
-    entities::{work_order_state_history, work_orders},
-};
+use chrono::{Duration, Utc};
+use sea_orm::Set;
 use uuid::Uuid;
 
-#[derive(Debug)]
+use crate::{
+    core::errors::AppError,
+    entities::{work_orders, work_order_state_history},
+};
+
 pub struct CancelWorkOrderEffect {
     pub work_order: work_orders::ActiveModel,
     pub state_history: work_order_state_history::ActiveModel,
 }
 
-pub fn decide_cancel(
-    _work_order: work_orders::Model,
-    _customer_id: Uuid,
-    _cancelled_status_id: i32,
-    _pending_status_id: i32,
+/// Pure logic: decide whether a customer can cancel their work order.
+///
+/// Rule: the customer can cancel only if there are more than 24 hours
+/// remaining before the appointment. If within 24 hours, the cancel is refused.
+pub fn decide_cancel_work_order(
+    work_order: work_orders::Model,
+    closed_status_id: i32,
+    customer_id: Uuid,
+    cancel_window_hours: i64,
 ) -> Result<CancelWorkOrderEffect, AppError> {
-    unimplemented!()
+    // Only the owner of the work order can cancel it
+    if work_order.customer_id != customer_id {
+        return Err(AppError::Forbidden("You can only cancel your own work orders".to_string()));
+    }
+
+    let now = Utc::now();
+    let cutoff = work_order.appointment - Duration::hours(cancel_window_hours);
+
+    if now >= cutoff {
+        return Err(AppError::BadRequest(format!(
+            "Cannot cancel within {} hours of the appointment. Please contact support for assistance.",
+            cancel_window_hours
+        )));
+    }
+
+    let mut active_wo: work_orders::ActiveModel = work_order.clone().into();
+    active_wo.work_order_status_id = Set(closed_status_id);
+    active_wo.updated_at = Set(now);
+
+    let state_history = work_order_state_history::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        work_order_id: Set(work_order.id),
+        from_status_id: Set(Some(work_order.work_order_status_id)),
+        to_status_id: Set(closed_status_id),
+        changed_by_id: Set(customer_id),
+        changed_at: Set(now),
+    };
+
+    Ok(CancelWorkOrderEffect { work_order: active_wo, state_history })
 }
 
 #[cfg(test)]

@@ -44,9 +44,12 @@ pub async fn logout_handler(
     session_active.update(db.as_ref()).await?;
 
     if let Some(client) = valkey_client {
-        let mut conn = client.get_connection();
-        let whitelist_key = format!("whitelist:session:{}", effect.session_id);
-        let _: () = conn.del(&whitelist_key).await.unwrap_or_default();
+        if let Ok(mut conn) = client.get_connection().await {
+            let whitelist_key = format!("whitelist:session:{}", effect.session_id);
+            let _: () = conn.del(&whitelist_key).await.unwrap_or_default();
+        } else {
+            tracing::warn!("Valkey unavailable — session whitelist not cleared");
+        }
     }
 
     Ok(Json(ApiResponse::message_only(200, "Logout successful")))
