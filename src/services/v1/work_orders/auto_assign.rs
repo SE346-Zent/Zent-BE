@@ -120,3 +120,136 @@ pub fn decide_auto_assign(
         Ok(None)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dummy_work_order(appointment: chrono::DateTime<Utc>) -> work_orders::Model {
+        work_orders::Model {
+            id: Uuid::new_v4(),
+            work_order_status_id: 1, // Pending
+            customer_id: Uuid::new_v4(),
+            product_id: Uuid::new_v4(),
+            reference_ticket_id: None,
+            work_order_symptom_id: 1,
+            description: "".to_string(),
+            first_name: "".to_string(),
+            last_name: "".to_string(),
+            email: None,
+            phone_number: None,
+            country: "".to_string(),
+            province: "".to_string(),
+            city: "".to_string(),
+            address: "".to_string(),
+            building: None,
+            appointment,
+            admin_id: None,
+            technician_id: None,
+            complete_form_id: None,
+            work_order_number: "".to_string(),
+            reject_form_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        }
+    }
+
+    fn dummy_technician(id: Uuid) -> users::Model {
+        users::Model {
+            id,
+            role_id: 3,
+            account_status: 1,
+            email: "".to_string(),
+            full_name: "".to_string(),
+            password_hash: "".to_string(),
+            phone_number: "".to_string(),
+            province: Some("".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        }
+    }
+
+    #[test]
+    fn test_decide_auto_assign_success_largest_gap() {
+        let mut policies = HashMap::new();
+        policies.insert("workday_start".to_string(), "8".to_string());
+        policies.insert("buffer".to_string(), "2".to_string());
+
+        let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap();
+        // Today at 12:00 PM local time
+        let appointment = tz_offset.with_ymd_and_hms(2023, 10, 10, 12, 0, 0).unwrap().with_timezone(&Utc);
+        let wo = dummy_work_order(appointment);
+
+        let tech1_id = Uuid::new_v4();
+        let tech2_id = Uuid::new_v4();
+        let technicians = vec![dummy_technician(tech1_id), dummy_technician(tech2_id)];
+
+        // Tech 1 has a job at 9:00 AM (finishes 11:00 AM, gap 1hr before 12:00 PM)
+        let t1_job_time = tz_offset.with_ymd_and_hms(2023, 10, 10, 9, 0, 0).unwrap().with_timezone(&Utc);
+        let t1_job = dummy_work_order(t1_job_time);
+
+        // Tech 2 has a job at 8:00 AM (finishes 10:00 AM, gap 2hrs before 12:00 PM) -> Larger gap!
+        let t2_job_time = tz_offset.with_ymd_and_hms(2023, 10, 10, 8, 0, 0).unwrap().with_timezone(&Utc);
+        let t2_job = dummy_work_order(t2_job_time);
+
+        let mut agendas = HashMap::new();
+        agendas.insert(tech1_id, vec![t1_job]);
+        agendas.insert(tech2_id, vec![t2_job]);
+
+        let result = decide_auto_assign(wo, technicians, agendas, &policies, 2, 4, Uuid::new_v4());
+        assert!(result.is_ok());
+        let effect = result.unwrap().unwrap();
+        assert_eq!(effect.work_order.technician_id, Set(Some(tech2_id)));
+    }
+
+    #[test]
+    fn test_decide_auto_assign_no_technicians() {
+        let mut policies = HashMap::new();
+        policies.insert("workday_start".to_string(), "8".to_string());
+
+        let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap();
+        let appointment = tz_offset.with_ymd_and_hms(2023, 10, 10, 12, 0, 0).unwrap().with_timezone(&Utc);
+        let wo = dummy_work_order(appointment);
+
+        let result = decide_auto_assign(wo, vec![], HashMap::new(), &policies, 2, 4, Uuid::new_v4());
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_decide_auto_assign_missing_policies() {
+        let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap();
+        let appointment = tz_offset.with_ymd_and_hms(2023, 10, 10, 12, 0, 0).unwrap().with_timezone(&Utc);
+        let wo = dummy_work_order(appointment);
+
+        let result = decide_auto_assign(wo, vec![], HashMap::new(), &HashMap::new(), 2, 4, Uuid::new_v4());
+        assert!(result.is_err()); // Missing workday_start
+    }
+
+    #[test]
+    fn test_decide_auto_assign_overlapping() {
+        let mut policies = HashMap::new();
+        policies.insert("workday_start".to_string(), "8".to_string());
+        policies.insert("buffer".to_string(), "2".to_string());
+
+        let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap();
+        let appointment = tz_offset.with_ymd_and_hms(2023, 10, 10, 12, 0, 0).unwrap().with_timezone(&Utc);
+        let wo = dummy_work_order(appointment);
+
+        let tech1_id = Uuid::new_v4();
+        let technicians = vec![dummy_technician(tech1_id)];
+
+        // Tech 1 has a job at 11:00 AM (finishes 1:00 PM, overlaps with 12:00 PM)
+        let t1_job_time = tz_offset.with_ymd_and_hms(2023, 10, 10, 11, 0, 0).unwrap().with_timezone(&Utc);
+        let t1_job = dummy_work_order(t1_job_time);
+
+        let mut agendas = HashMap::new();
+        agendas.insert(tech1_id, vec![t1_job]);
+
+        let result = decide_auto_assign(wo, technicians, agendas, &policies, 2, 4, Uuid::new_v4());
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none()); // Overlap prevents assignment
+    }
+}

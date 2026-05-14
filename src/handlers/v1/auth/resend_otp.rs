@@ -43,10 +43,13 @@ pub async fn resend_otp_handler(
     let effect = resend_otp::decide_resend_otp(user.as_ref(), pending_status_id, payload)?;
 
     if let Some(client) = valkey_client {
-        let mut conn = client.get_connection();
-        let valkey_key = format!("register_verification:{}", effect.email);
-        let valkey_data = serde_json::json!({ "code": effect.otp_code, "attempts": 5 }).to_string();
-        conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await?;
+        if let Ok(mut conn) = client.get_connection().await {
+            let valkey_key = format!("register_verification:{}", effect.email);
+            let valkey_data = serde_json::json!({ "code": effect.otp_code, "attempts": 5 }).to_string();
+            let _ = conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await;
+        } else {
+            tracing::warn!("Valkey unavailable — resend OTP not cached");
+        }
     }
 
     if let Some(rmq) = rabbitmq {

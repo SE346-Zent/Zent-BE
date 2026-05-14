@@ -15,6 +15,7 @@ use crate::{
     model::requests::work_orders::complete_request::CompleteWorkOrderRequest,
 };
 
+#[derive(Debug)]
 pub struct CompleteWorkOrderEffect {
     pub closing_form_id: Uuid,
     pub closing_form: work_order_closing_forms::ActiveModel,
@@ -110,3 +111,79 @@ pub fn decide_complete_work_order(
         checklist_json,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::requests::work_orders::complete_request::{ChecklistResultInput, PartChangeInput};
+
+    fn dummy_work_order() -> work_orders::Model {
+        work_orders::Model {
+            id: Uuid::new_v4(),
+            work_order_status_id: 3, // In Progress
+            customer_id: Uuid::new_v4(),
+            product_id: Uuid::new_v4(),
+            reference_ticket_id: None,
+            work_order_symptom_id: 1,
+            description: "".to_string(),
+            first_name: "".to_string(),
+            last_name: "".to_string(),
+            email: None,
+            phone_number: None,
+            country: "".to_string(),
+            province: "".to_string(),
+            city: "".to_string(),
+            address: "".to_string(),
+            building: None,
+            appointment: Utc::now(),
+            admin_id: None,
+            technician_id: None,
+            complete_form_id: None,
+            work_order_number: "".to_string(),
+            reject_form_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        }
+    }
+
+    #[test]
+    fn test_decide_complete_work_order_success() {
+        let wo = dummy_work_order();
+        let tech_id = Uuid::new_v4();
+        let completed_status_id = 4; // Completed
+
+        let req = CompleteWorkOrderRequest {
+            mtm: "82K2".to_string(),
+            serial_number: "PF3B1234".to_string(),
+            part_changes: vec![
+                PartChangeInput { part_id: Uuid::new_v4(), change_type: "installed".to_string() }
+            ],
+            diagnosis: "Repaired screen".to_string(),
+            latitude: 10.0,
+            longitude: 106.0,
+            signature_file_name: "sig.png".to_string(),
+            checklist: Some(vec![ChecklistResultInput { id: 1, result: true, notes: None }]),
+        };
+
+        let result = decide_complete_work_order(req, wo, completed_status_id, tech_id);
+        assert!(result.is_ok());
+        let effect = result.unwrap();
+
+        assert_eq!(effect.work_order.work_order_status_id, Set(completed_status_id));
+        assert!(effect.work_order.complete_form_id.is_set());
+        assert_eq!(effect.closing_form.mtm, Set("82K2".to_string()));
+        assert_eq!(effect.closing_form.serial_number, Set("PF3B1234".to_string()));
+        assert_eq!(effect.closing_form.diagnosis, Set("Repaired screen".to_string()));
+        assert_eq!(effect.closing_form.signature_file_name, Set("sig.png".to_string()));
+
+        assert_eq!(effect.part_changes.len(), 1);
+        assert_eq!(effect.part_changes[0].change_type, Set("installed".to_string()));
+        
+        assert_eq!(effect.part_updates.len(), 1);
+        assert!(effect.part_updates[0].installation_date.is_set());
+
+        assert!(effect.checklist_json.is_some());
+    }
+}
+

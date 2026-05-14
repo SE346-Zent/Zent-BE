@@ -48,7 +48,7 @@ pub async fn create(
     let mut cache_key_opt: Option<String> = None;
 
     if let (Some(client), Some(key)) = (valkey_client.as_ref(), idempotency_key) {
-        let mut conn = client.get_connection();
+        let mut conn = client.get_connection().await?;
         let cache_key = format!("idempotency:work_order:{}", key);
         let hashes = client.get_script_hashes();
         let script_sha = hashes.get("check_idempotency")

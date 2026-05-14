@@ -1,5 +1,6 @@
-use redis::{Client, aio::MultiplexedConnection};
+use redis::{Client, aio::MultiplexedConnection, RedisError};
 use std::collections::HashMap;
+use tracing::warn;
 use crate::core::config::AppConfig;
 
 /// Atomic OTP verification script loaded at compile time.
@@ -8,22 +9,27 @@ pub const VERIFY_OTP_LUA: &str = include_str!("lua_script/verify_otp.lua");
 /// Atomic idempotency check script loaded at compile time.
 pub const CHECK_IDEMPOTENCY_LUA: &str = include_str!("lua_script/check_idempotency.lua");
 
-/// Thin wrapper around the redis `Client`.
-/// The redis crate's `MultiplexedConnection` handles multiplexing and
-/// internal reconnection, so we cache a single connection created at
-/// init time and clone it on each request (cloning is cheap).
-/// Lua script hashes are loaded once at startup and stored immutably.
+/// Thin wrapper around a redis `Client`.
+///
+/// Instead of caching a single `MultiplexedConnection` (which can suffer from
+/// "broken pipe" errors when the server restarts or the connection times out),
+/// we store the `Client` and create a fresh `MultiplexedConnection` on every
+/// call. `Client::get_multiplexed_async_connection` is a cheap operation that
+/// creates a new connection pool handle; the underlying TCP connections are
+/// managed internally by the redis crate.
+///
+/// Lua script SHA hashes are loaded once at startup and stored immutably.
 pub struct ValkeyClient {
-    connection: MultiplexedConnection,
+    client: Client,
     script_hashes: HashMap<String, String>,
 }
 
 impl ValkeyClient {
-    /// Returns a clone of the cached multiplexed connection.
-    /// `MultiplexedConnection` is cheaply cloneable and handles
-    /// internal reconnection automatically.
-    pub fn get_connection(&self) -> MultiplexedConnection {
-        self.connection.clone()
+    /// Creates a fresh `MultiplexedConnection` from the underlying `Client`.
+    /// This ensures we never hand out a stale/broken connection — every
+    /// call gets a new pool handle to the Valkey server.
+    pub async fn get_connection(&self) -> Result<MultiplexedConnection, RedisError> {
+        self.client.get_multiplexed_async_connection().await
     }
 
     /// Returns a copy of the pre-loaded Lua script SHA hashes.
@@ -32,8 +38,8 @@ impl ValkeyClient {
     }
 }
 
-/// Initialize Valkey: connect, load Lua scripts, return client.
-pub async fn init_cache(cfg: &AppConfig) -> Result<ValkeyClient, redis::RedisError> {
+/// Initialize Valkey: open client, load Lua scripts, return wrapper.
+pub async fn init_cache(cfg: &AppConfig) -> Result<ValkeyClient, RedisError> {
     let db_index = match cfg.app_stage.as_str() {
         "production" => 0,
         _ => 1,
@@ -45,7 +51,7 @@ pub async fn init_cache(cfg: &AppConfig) -> Result<ValkeyClient, redis::RedisErr
     let client = Client::open(connection_url.as_str())?;
     let mut conn = client.get_multiplexed_async_connection().await?;
 
-    // Pre-load Lua scripts
+    // Pre-load Lua scripts (stored server-side; we only keep the SHA hashes)
     let mut script_hashes = HashMap::new();
 
     let verify_otp_sha: String = redis::cmd("SCRIPT")
@@ -64,8 +70,10 @@ pub async fn init_cache(cfg: &AppConfig) -> Result<ValkeyClient, redis::RedisErr
 
     script_hashes.insert("check_idempotency".to_string(), check_idempotency_sha);
 
-    Ok(ValkeyClient {
-        connection: conn,
-        script_hashes,
-    })
+    // Drop the initial connection — a fresh one is created on every get_connection() call
+    drop(conn);
+
+    warn!("Valkey cache initialized (db {}) — fresh connections will be created per-request", db_index);
+
+    Ok(ValkeyClient { client, script_hashes })
 }

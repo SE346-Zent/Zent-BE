@@ -32,7 +32,14 @@ pub async fn start(
     let wo = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
     let in_prog_id = *luts.work_order_statuses_by_name.get("InProg").ok_or_else(|| AppError::Internal(anyhow::anyhow!("In Progress status not found")))?;
 
-    let effect = crate::services::v1::work_orders::start::decide_start(payload, wo, auth.user.id, in_prog_id, &luts.policies).await?;
+    let target_location = crate::utils::geocoding::geocode_address(
+        &wo.address,
+        &wo.city,
+        &wo.province,
+        &wo.country,
+    ).await?;
+
+    let effect = crate::services::v1::work_orders::start::decide_start(payload, wo, auth.user.id, in_prog_id, &luts.policies, target_location.lat, target_location.lng).await?;
     db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order.update(txn).await?; effect.state_history.insert(txn).await?; Ok(()) }))
         .await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 

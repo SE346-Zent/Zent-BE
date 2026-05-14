@@ -5,6 +5,7 @@ use crate::entities::{work_orders, work_order_reject_forms, images, work_order_r
 use crate::model::requests::work_orders::refuse_request::RefuseWorkOrderRequest;
 use crate::core::errors::AppError;
 
+#[derive(Debug)]
 pub struct RefuseEffect {
     pub work_order: work_orders::ActiveModel,
     pub reject_form: work_order_reject_forms::ActiveModel,
@@ -79,3 +80,89 @@ pub fn decide_refuse_work_order(
         state_history,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dummy_work_order(tech_id: Uuid) -> work_orders::Model {
+        work_orders::Model {
+            id: Uuid::new_v4(),
+            work_order_status_id: 3, // In Progress
+            customer_id: Uuid::new_v4(),
+            product_id: Uuid::new_v4(),
+            reference_ticket_id: None,
+            work_order_symptom_id: 1,
+            description: "".to_string(),
+            first_name: "".to_string(),
+            last_name: "".to_string(),
+            email: None,
+            phone_number: None,
+            country: "".to_string(),
+            province: "".to_string(),
+            city: "".to_string(),
+            address: "".to_string(),
+            building: None,
+            appointment: Utc::now(),
+            admin_id: None,
+            technician_id: Some(tech_id),
+            complete_form_id: None,
+            work_order_number: "".to_string(),
+            reject_form_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        }
+    }
+
+    #[test]
+    fn test_decide_refuse_work_order_success() {
+        let tech_id = Uuid::new_v4();
+        let wo = dummy_work_order(tech_id);
+        let refuse_in_review_status_id = 5;
+
+        let req = RefuseWorkOrderRequest {
+            reason: "Out of scope".to_string(),
+            explanation: "Requires specialized equipment".to_string(),
+            evidence_image_urls: vec!["http://example.com/img1.png".to_string()],
+        };
+
+        let result = decide_refuse_work_order(req, wo, refuse_in_review_status_id, tech_id);
+        assert!(result.is_ok());
+        let effect = result.unwrap();
+
+        assert_eq!(effect.work_order.work_order_status_id, Set(refuse_in_review_status_id));
+        assert!(effect.work_order.reject_form_id.is_set());
+        assert_eq!(effect.reject_form.reason, Set("Out of scope".to_string()));
+        assert_eq!(effect.reject_form.approved, Set(false));
+        
+        assert_eq!(effect.images.len(), 1);
+        assert_eq!(effect.images[0].object_name, Set("http://example.com/img1.png".to_string()));
+        
+        assert_eq!(effect.image_links.len(), 1);
+        
+        assert_eq!(effect.state_history.to_status_id, Set(refuse_in_review_status_id));
+    }
+
+    #[test]
+    fn test_decide_refuse_work_order_forbidden() {
+        let tech_id = Uuid::new_v4();
+        let wrong_tech_id = Uuid::new_v4();
+        let wo = dummy_work_order(tech_id);
+        let refuse_in_review_status_id = 5;
+
+        let req = RefuseWorkOrderRequest {
+            reason: "Out of scope".to_string(),
+            explanation: "".to_string(),
+            evidence_image_urls: vec![],
+        };
+
+        let result = decide_refuse_work_order(req, wo, refuse_in_review_status_id, wrong_tech_id);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::Forbidden(_) => {},
+            _ => panic!("Expected Forbidden"),
+        }
+    }
+}
+

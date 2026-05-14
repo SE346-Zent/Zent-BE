@@ -7,9 +7,9 @@ use crate::{
     core::errors::AppError,
     entities::{work_order_state_history, work_orders},
     model::requests::work_orders::start_request::StartWorkOrderRequest,
-    utils::geocoding,
 };
 
+#[derive(Debug)]
 pub struct StartWorkOrderEffect {
     pub work_order: work_orders::ActiveModel,
     pub state_history: work_order_state_history::ActiveModel,
@@ -21,19 +21,14 @@ pub async fn decide_start(
     technician_id: Uuid,
     in_progress_status_id: i32,
     policies: &HashMap<String, String>,
+    target_lat: f64,
+    target_lng: f64,
 ) -> Result<StartWorkOrderEffect, AppError> {
     if work_order.technician_id != Some(technician_id) {
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
     // Geofencing Check
-    let target_location = geocoding::geocode_address(
-        &work_order.address,
-        &work_order.city,
-        &work_order.province,
-        &work_order.country,
-    ).await?;
-
     let radius: f64 = policies.get("geofencing_radius")
         .and_then(|v| v.parse().ok())
         .unwrap_or(500.0);
@@ -41,8 +36,8 @@ pub async fn decide_start(
     let is_verified = crate::utils::geo::is_within_geofence(
         payload.latitude,
         payload.longitude,
-        target_location.lat,
-        target_location.lng,
+        target_lat,
+        target_lng,
         radius,
     );
 
@@ -69,3 +64,103 @@ pub async fn decide_start(
         state_history,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dummy_work_order(tech_id: Uuid) -> work_orders::Model {
+        work_orders::Model {
+            id: Uuid::new_v4(),
+            work_order_status_id: 2, // Assigned
+            customer_id: Uuid::new_v4(),
+            product_id: Uuid::new_v4(),
+            reference_ticket_id: None,
+            work_order_symptom_id: 1,
+            description: "".to_string(),
+            first_name: "".to_string(),
+            last_name: "".to_string(),
+            email: None,
+            phone_number: None,
+            country: "Vietnam".to_string(),
+            province: "Ho Chi Minh City".to_string(),
+            city: "Ho Chi Minh City".to_string(),
+            address: "123 Le Loi".to_string(),
+            building: None,
+            appointment: Utc::now(),
+            admin_id: None,
+            technician_id: Some(tech_id),
+            complete_form_id: None,
+            work_order_number: "".to_string(),
+            reject_form_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_decide_start_success() {
+        let tech_id = Uuid::new_v4();
+        let wo = dummy_work_order(tech_id);
+        let in_progress_status_id = 3;
+
+        let req = StartWorkOrderRequest {
+            latitude: 10.774502,
+            longitude: 106.702958,
+        };
+
+        let mut policies = HashMap::new();
+        policies.insert("geofencing_radius".to_string(), "2000".to_string());
+
+        // Use same coordinates as target to ensure it is within geofence
+        let result = decide_start(req, wo, tech_id, in_progress_status_id, &policies, 10.7769, 106.7009).await;
+        assert!(result.is_ok());
+        let effect = result.unwrap();
+
+        assert_eq!(effect.work_order.work_order_status_id, Set(in_progress_status_id));
+        assert_eq!(effect.state_history.to_status_id, Set(in_progress_status_id));
+    }
+
+    #[tokio::test]
+    async fn test_decide_start_geofence_violation() {
+        let tech_id = Uuid::new_v4();
+        let wo = dummy_work_order(tech_id);
+        let in_progress_status_id = 3;
+
+        let req = StartWorkOrderRequest {
+            latitude: 40.712776,
+            longitude: -74.005974,
+        };
+
+        let mut policies = HashMap::new();
+        policies.insert("geofencing_radius".to_string(), "500".to_string());
+
+        // Pass coordinates in HCM, which is far from New York
+        let result = decide_start(req, wo, tech_id, in_progress_status_id, &policies, 10.7769, 106.7009).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::Forbidden(msg) => assert!(msg.contains("Geofencing violation")),
+            _ => panic!("Expected Forbidden"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_decide_start_forbidden_technician() {
+        let tech_id = Uuid::new_v4();
+        let wrong_tech_id = Uuid::new_v4();
+        let wo = dummy_work_order(tech_id);
+        let in_progress_status_id = 3;
+
+        let req = StartWorkOrderRequest { latitude: 0.0, longitude: 0.0 };
+        let policies = HashMap::new();
+
+        let result = decide_start(req, wo, wrong_tech_id, in_progress_status_id, &policies, 0.0, 0.0).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::Forbidden(msg) => assert_eq!(msg, "You are not assigned to this work order"),
+            _ => panic!("Expected Forbidden"),
+        }
+    }
+}
+

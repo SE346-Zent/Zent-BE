@@ -33,7 +33,7 @@ pub async fn get_details(
     let mut conn_opt = None;
     let cache_key = format!("cache:work_order:{}", id);
     if let Some(client) = valkey_client.as_ref() {
-        let mut conn = client.get_connection();
+        let mut conn = client.get_connection().await?;
         if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&cache_key).await {
             if let Ok(details) = serde_json::from_str::<WorkOrderDetails>(&cached_json) {
                 // Check permissions even if cached
