@@ -218,6 +218,7 @@ impl FcmCredentials {
                 "data": {
                     "notificationId": msg.notification_id.to_string(),
                     "userId": msg.user_id.to_string(),
+                    "payload": msg.data,
                 },
             }
         });

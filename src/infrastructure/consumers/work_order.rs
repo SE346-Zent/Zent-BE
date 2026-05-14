@@ -22,10 +22,6 @@ pub async fn start_work_order_consumer(state: AppState) {
 
     let url = AppConfig::get().rabbitmq_url.clone();
     let db = state.db.clone();
-    let luts = state.lookup_tables.clone();
-    let valkey = state.valkey.clone();
-    let rmq = state.rabbitmq.clone();
-    let templates = state.templates.clone();
 
     tokio::spawn(async move {
         loop {
@@ -90,15 +86,10 @@ pub async fn start_work_order_consumer(state: AppState) {
                                         if let Ok(id) = uuid::Uuid::parse_str(id_str) {
                                             info!("Processing auto-assign for WO {}", id);
                                             if let Ok(Some(wo)) = work_orders_ent::Entity::find_by_id(id).one(db.as_ref()).await {
-                                                let mongodb = state.mongodb.clone();
                                                 let _ = crate::handlers::v1::work_orders::try_auto_assign_single(
+                                                    &state,
                                                     db.clone(),
-                                                    mongodb,
-                                                    luts.clone(),
                                                     wo,
-                                                    valkey.clone(),
-                                                    rmq.clone(),
-                                                    Some(templates.clone()),
                                                 ).await;
                                             }
                                         }

@@ -30,11 +30,11 @@ pub struct NotificationMessage {
 
 /// Start the notification consumer background task.
 ///
-/// Phase 2 of the outbox pattern:
-/// 1. Consumes from `notification_queue`
-/// 2. Saves the notification document into MongoDB (bucket pattern)
-/// 3. Increments the Valkey unread counter for the user
-/// 4. Publishes an FCM push message for real-time delivery
+/// Consumes from `notification_queue`, fetches the user's FCM token,
+/// and publishes an FCM push message for real-time delivery.
+///
+/// MongoDB save and Valkey unread counter increment are now handled
+/// in `send_notification()` before the outbox is created.
 pub async fn start_notification_consumer(state: AppState) {
     let connection = match &state.rabbitmq {
         Some(c) => c.clone(),
