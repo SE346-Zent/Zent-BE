@@ -33,6 +33,7 @@ pub use start::__path_start;
 pub use approve_refusal::__path_approve_refusal;
 pub use deny_refusal::__path_deny_refusal;
 pub use history::__path_history;
+pub use cancel::__path_cancel;
 
 use axum::{Router, middleware};
 use std::collections::HashMap;
@@ -62,6 +63,7 @@ pub(crate) const IDEMPOTENCY_PENDING: &str = "__PENDING__";
 pub fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(create))
+        .route("/{id}/cancel", axum::routing::post(cancel))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Customer]),
@@ -78,7 +80,6 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
 
     let admin_routes = Router::new()
         .route("/{id}/assign", axum::routing::post(assign))
-        .route("/{id}/cancel", axum::routing::post(cancel))
         .route("/{id}/refusal/approve", axum::routing::post(approve_refusal))
         .route("/{id}/refusal/deny", axum::routing::post(deny_refusal))
         .route_layer(middleware::from_fn_with_state(
@@ -113,10 +114,11 @@ pub(crate) async fn get_cached_work_order_model(
 
     // Cache hit — serve from RAM
     if let Some(client) = valkey_client.as_ref() {
-        let mut conn = client.get_connection();
-        if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&model_cache_key).await {
-            if let Ok(model) = serde_json::from_str::<work_orders_ent::Model>(&cached_json) {
-                return Ok(model);
+        if let Ok(mut conn) = client.get_connection().await {
+            if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&model_cache_key).await {
+                if let Ok(model) = serde_json::from_str::<work_orders_ent::Model>(&cached_json) {
+                    return Ok(model);
+                }
             }
         }
     }
@@ -130,11 +132,14 @@ pub(crate) async fn get_cached_work_order_model(
     // Populate cache for next time (TTL matches details cache)
     if let Some(client) = valkey_client.as_ref() {
         if let Ok(cached_val) = serde_json::to_string(&model) {
-            let mut conn = client.get_connection();
-            let _: () = conn
-                .set_ex(&model_cache_key, cached_val, 600)
-                .await
-                .unwrap_or_default();
+            if let Ok(mut conn) = client.get_connection().await {
+                let _: () = conn
+                    .set_ex(&model_cache_key, cached_val, 600)
+                    .await
+                    .unwrap_or_default();
+            } else {
+                tracing::warn!("Valkey unavailable — model cache write skipped");
+            }
         }
     }
 
@@ -163,7 +168,7 @@ pub(crate) async fn write_through_work_order_cache(
         .await
     {
         let client = valkey_client.as_ref().unwrap();
-        let mut conn = client.get_connection();
+        let Ok(mut conn) = client.get_connection().await else { return; };
 
         // 1. Cache the raw model (for mutation handlers that need it)
         if let Ok(model_json) = serde_json::to_string(&wo) {
@@ -214,18 +219,19 @@ pub(crate) async fn fetch_paginated_work_orders(
     let mut full_cache_key = String::new();
 
     if let Some(client) = valkey_client.as_ref() {
-        let mut conn = client.get_connection();
-        let gen: u64 = conn.get("cache:work_orders:generation").await.unwrap_or(0);
-        full_cache_key = format!(
-            "cache:work_orders:gen:{}:prefix:{}:p:{}:l:{}",
-            gen, cache_key_prefix, pagination.page, pagination.limit
-        );
-        if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&full_cache_key).await {
-            if let Ok((data, meta)) = serde_json::from_str::<(Vec<WorkOrderListItem>, PaginationResponse)>(&cached_json) {
-                return Ok(axum::Json(ApiResponse::success_with_meta(200, "Work orders retrieved successfully", data, meta)));
+        if let Ok(mut conn) = client.get_connection().await {
+            let gen: u64 = conn.get("cache:work_orders:generation").await.unwrap_or(0);
+            full_cache_key = format!(
+                "cache:work_orders:gen:{}:prefix:{}:p:{}:l:{}",
+                gen, cache_key_prefix, pagination.page, pagination.limit
+            );
+            if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&full_cache_key).await {
+                if let Ok((data, meta)) = serde_json::from_str::<(Vec<WorkOrderListItem>, PaginationResponse)>(&cached_json) {
+                    return Ok(axum::Json(ApiResponse::success_with_meta(200, "Work orders retrieved successfully", data, meta)));
+                }
             }
+            conn_opt = Some(conn);
         }
-        conn_opt = Some(conn);
     }
 
     let mut query = work_orders_ent::Entity::find();
@@ -271,13 +277,13 @@ pub async fn run_cleanup(
     let closed_status_id = *luts.work_order_statuses_by_name.get("Closed").unwrap();
 
     let now = Utc::now();
-    let cutoff_time = now - chrono::Duration::hours(threshold_hours);
+    let threshold_window = now + chrono::Duration::hours(threshold_hours);
 
-    // Find WOs that are still pending assignment and were created before the cutoff time
+    // Find WOs that are still pending assignment and whose appointment is within the threshold window (or already past)
     let target_wos = work_orders_ent::Entity::find()
         .filter(work_orders_ent::Column::WorkOrderStatusId.eq(pending_status_id))
         .filter(work_orders_ent::Column::TechnicianId.is_null())
-        .filter(work_orders_ent::Column::CreatedAt.lte(cutoff_time))
+        .filter(work_orders_ent::Column::Appointment.lte(threshold_window))
         .all(db).await?;
 
     if target_wos.is_empty() { return Ok(()); }
@@ -312,7 +318,7 @@ pub async fn run_cleanup(
                             rmq,
                             &c.email,
                             "Work Order Cancelled",
-                            &format!("Dear {},\n\nYour work order {} has been cancelled because we could not assign a technician within the required time. We apologize for the inconvenience.", c.full_name, wo.work_order_number),
+                            &format!("Dear {},\n\nYour work order {} has been cancelled because your appointment is approaching and we could not assign a technician in time. We apologize for the inconvenience.", c.full_name, wo.work_order_number),
                         ).await;
                     }
                 }

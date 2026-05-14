@@ -7,6 +7,7 @@ use crate::{
 use uuid::Uuid;
 use chrono::Utc;
 
+#[derive(Debug)]
 pub struct CreateWorkOrderEffect {
     pub work_order: work_orders::ActiveModel,
     pub state_history: work_order_state_history::ActiveModel,
@@ -63,3 +64,71 @@ pub fn decide_create_work_order(
 
     Ok(CreateWorkOrderEffect { work_order, state_history })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decide_create_work_order_success() {
+        let customer_id = Uuid::new_v4();
+        let pending_status_id = 1;
+
+        let req = CreateWorkOrderRequest {
+            product_id: Uuid::new_v4(),
+            work_order_symptom_id: 1,
+            reference_ticket_id: None,
+            description: "Issue".to_string(),
+            appointment: Utc::now(),
+            first_name: "John".to_string(),
+            last_name: "Doe".to_string(),
+            email: None,
+            phone_number: None,
+            country: "VN".to_string(),
+            province: "HCM".to_string(),
+            city: "HCM".to_string(),
+            address: "123 Street".to_string(),
+            building: None,
+        };
+
+        let result = decide_create_work_order(req, customer_id, pending_status_id);
+        assert!(result.is_ok());
+        let effect = result.unwrap();
+
+        assert_eq!(effect.work_order.work_order_status_id, Set(pending_status_id));
+        assert_eq!(effect.work_order.city, Set("HCM".to_string()));
+        assert_eq!(effect.state_history.to_status_id, Set(pending_status_id));
+        assert_eq!(effect.state_history.from_status_id, Set(None));
+    }
+
+    #[test]
+    fn test_decide_create_work_order_invalid_location() {
+        let customer_id = Uuid::new_v4();
+        let pending_status_id = 1;
+
+        let req = CreateWorkOrderRequest {
+            product_id: Uuid::new_v4(),
+            work_order_symptom_id: 1,
+            reference_ticket_id: None,
+            description: "Issue".to_string(),
+            appointment: Utc::now(),
+            first_name: "John".to_string(),
+            last_name: "Doe".to_string(),
+            email: None,
+            phone_number: None,
+            country: "VN".to_string(),
+            province: "Binh Duong".to_string(),
+            city: "Binh Duong".to_string(), // Invalid
+            address: "123 Street".to_string(),
+            building: None,
+        };
+
+        let result = decide_create_work_order(req, customer_id, pending_status_id);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::BadRequest(msg) => assert_eq!(msg, "Only HCM and HN are supported at this time"),
+            _ => panic!("Expected BadRequest"),
+        }
+    }
+}
+

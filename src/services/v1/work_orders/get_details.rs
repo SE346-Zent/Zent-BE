@@ -48,3 +48,101 @@ pub fn decide_get_details(
     });
     map_to_details(wo, product, symptom, status)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    fn dummy_work_order() -> work_orders::Model {
+        work_orders::Model {
+            id: Uuid::new_v4(),
+            work_order_status_id: 1,
+            customer_id: Uuid::new_v4(),
+            product_id: Uuid::new_v4(),
+            reference_ticket_id: None,
+            work_order_symptom_id: 1,
+            description: "Broken thing".to_string(),
+            first_name: "Jane".to_string(),
+            last_name: "Smith".to_string(),
+            email: None,
+            phone_number: None,
+            country: "Canada".to_string(),
+            province: "ON".to_string(),
+            city: "Toronto".to_string(),
+            address: "123 Main St".to_string(),
+            building: None,
+            appointment: Utc::now(),
+            admin_id: None,
+            technician_id: None,
+            complete_form_id: None,
+            work_order_number: "WO-999".to_string(),
+            reject_form_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        }
+    }
+
+    fn dummy_product() -> products::Model {
+        products::Model {
+            id: Uuid::new_v4(),
+            product_model_code: "SW-100".to_string(),
+            customer_id: Uuid::new_v4(),
+            product_name: "Super Widget".to_string(),
+            serial_number: "SN123".to_string(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        }
+    }
+
+    fn dummy_symptom() -> work_order_symptoms::Model {
+        work_order_symptoms::Model {
+            id: 1,
+            name: "Does not turn on".to_string(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        }
+    }
+
+    #[test]
+    fn test_map_to_details_full() {
+        let wo = dummy_work_order();
+        let prod = dummy_product();
+        let symp = dummy_symptom();
+        let status = work_order_statuses::Model { id: 1, name: "Pending".to_string() };
+
+        let details = map_to_details(wo, Some(prod), Some(symp), Some(status));
+        assert_eq!(details.work_order_number, "WO-999");
+        assert_eq!(details.customer_name, "Jane Smith");
+        assert_eq!(details.product_name, "Super Widget");
+        assert_eq!(details.symptom_name, "Does not turn on");
+        assert_eq!(details.status, "Pending");
+        assert!(details.technician_id.is_none());
+    }
+
+    #[test]
+    fn test_map_to_details_missing_relations() {
+        let wo = dummy_work_order();
+        let details = map_to_details(wo, None, None, None);
+        assert_eq!(details.product_name, "Unknown Product");
+        assert_eq!(details.symptom_name, "General Service");
+        assert_eq!(details.status, "Unknown");
+    }
+
+    #[test]
+    fn test_decide_get_details_with_lut() {
+        let mut luts = LookupTables::empty();
+        luts.work_order_statuses.insert(1, "Pending".to_string());
+
+        let wo = dummy_work_order();
+        let details = decide_get_details(wo, None, None, &luts);
+
+        assert_eq!(details.status, "Pending");
+        assert_eq!(details.product_name, "Unknown Product");
+        assert_eq!(details.symptom_name, "General Service");
+    }
+}

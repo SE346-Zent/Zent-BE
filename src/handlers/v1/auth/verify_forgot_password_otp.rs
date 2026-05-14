@@ -28,7 +28,7 @@ pub async fn verify_forgot_password_otp_handler(
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
     let client = valkey_client.ok_or_else(|| AppError::Internal(anyhow::anyhow!("Valkey missing")))?;
-    let mut conn = client.get_connection();
+    let mut conn = client.get_connection().await?;
     let script_hashes = client.get_script_hashes();
     let script_hash = script_hashes.get("verify_otp")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Script hash missing")))?;
