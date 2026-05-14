@@ -11,10 +11,10 @@ pub struct CancelWorkOrderEffect {
 }
 
 pub fn decide_cancel(
-    work_order: work_orders::Model,
-    customer_id: Uuid,
-    cancelled_status_id: i32,
-    pending_status_id: i32,
+    _work_order: work_orders::Model,
+    _customer_id: Uuid,
+    _cancelled_status_id: i32,
+    _pending_status_id: i32,
 ) -> Result<CancelWorkOrderEffect, AppError> {
     unimplemented!()
 }
@@ -22,6 +22,8 @@ pub fn decide_cancel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
+    use sea_orm::Set;
 
     fn dummy_work_order(customer_id: Uuid, status_id: i32) -> work_orders::Model {
         work_orders::Model {

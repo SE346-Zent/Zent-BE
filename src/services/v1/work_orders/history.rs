@@ -5,8 +5,8 @@ use crate::{
 };
 
 pub fn decide_history_entries(
-    history_rows: Vec<(work_order_state_history::Model, Option<users::Model>)>,
-    luts: &LookupTables,
+    _history_rows: Vec<(work_order_state_history::Model, Option<users::Model>)>,
+    _luts: &LookupTables,
 ) -> Vec<WorkOrderStateHistoryEntry> {
     unimplemented!()
 }
