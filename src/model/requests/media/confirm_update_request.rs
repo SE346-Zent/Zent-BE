@@ -9,4 +9,7 @@ pub struct ConfirmUpdateRequest {
     pub unique_file_name: String,
     pub latitude: f64,
     pub longitude: f64,
+    /// Client-side Unix timestamp when the update was initiated.
+    /// Validated against server time using the `internet_time_drift_minutes` policy.
+    pub internet_time: i64,
 }

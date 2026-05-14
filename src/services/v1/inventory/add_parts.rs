@@ -51,7 +51,7 @@ pub fn decide_add_parts(
             object_name: Set(object_name),
             created_at: Set(now),
             updated_at: Set(now),
-            deleted_at: Set(None),
+            ..Default::default()
         });
 
         image_links_to_insert.push(new_part_form_image_links::ActiveModel {

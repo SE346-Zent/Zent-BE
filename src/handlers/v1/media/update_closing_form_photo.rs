@@ -36,6 +36,7 @@ pub async fn update_closing_form_photo(
     let mut file_name = String::new();
     let mut latitude = None;
     let mut longitude = None;
+    let mut internet_time = None;
 
     while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
         let name = field.name().unwrap_or_default().to_string();
@@ -53,6 +54,10 @@ pub async fn update_closing_form_photo(
                 let val = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
                 longitude = Some(val.parse::<f64>().map_err(|e| AppError::BadRequest(e.to_string()))?);
             }
+            "internet_time" => {
+                let val = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+                internet_time = Some(val.parse::<i64>().map_err(|e| AppError::BadRequest(e.to_string()))?);
+            }
             _ => {}
         }
     }
@@ -60,6 +65,7 @@ pub async fn update_closing_form_photo(
     let file_data = file_data.ok_or_else(|| AppError::BadRequest("File is missing".to_string()))?;
     let latitude = latitude.ok_or_else(|| AppError::BadRequest("Latitude is missing".to_string()))?;
     let longitude = longitude.ok_or_else(|| AppError::BadRequest("Longitude is missing".to_string()))?;
+    let internet_time = internet_time.ok_or_else(|| AppError::BadRequest("internet_time is missing".to_string()))?;
 
     let work_order = work_orders::Entity::find_by_id(id)
         .one(db.as_ref()).await?
@@ -80,7 +86,7 @@ pub async fn update_closing_form_photo(
 
     let object_name = oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
 
-    let payload = ConfirmUpdateRequest { unique_file_name, latitude, longitude };
+    let payload = ConfirmUpdateRequest { unique_file_name, latitude, longitude, internet_time };
 
     let effect = confirm_update::decide_confirm_update(
         payload, &work_order, image_id, link, auth.user.id,
@@ -95,6 +101,7 @@ pub async fn update_closing_form_photo(
         Box::pin(async move {
             let mut img_active = images::ActiveModel { id: Set(image_id), ..Default::default() };
             img_active.object_name = Set(object_name);
+            img_active.internet_time = Set(Some(effect.internet_time));
             img_active.updated_at = Set(updated_at);
             img_active.update(txn).await?;
             link_update.update(txn).await?;

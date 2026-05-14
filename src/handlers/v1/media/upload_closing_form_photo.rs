@@ -37,6 +37,7 @@ pub async fn upload_closing_form_photo(
     let mut latitude = None;
     let mut longitude = None;
     let mut phase = String::new();
+    let mut internet_time = None;
 
     while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
         let name = field.name().unwrap_or_default().to_string();
@@ -57,6 +58,10 @@ pub async fn upload_closing_form_photo(
             "phase" => {
                 phase = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
             }
+            "internet_time" => {
+                let val = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+                internet_time = Some(val.parse::<i64>().map_err(|e| AppError::BadRequest(e.to_string()))?);
+            }
             _ => {}
         }
     }
@@ -64,9 +69,14 @@ pub async fn upload_closing_form_photo(
     let file_data = file_data.ok_or_else(|| AppError::BadRequest("File is missing".to_string()))?;
     let latitude = latitude.ok_or_else(|| AppError::BadRequest("Latitude is missing".to_string()))?;
     let longitude = longitude.ok_or_else(|| AppError::BadRequest("Longitude is missing".to_string()))?;
+    let internet_time = internet_time.ok_or_else(|| AppError::BadRequest("Internet time is missing".to_string()))?;
 
     if phase.is_empty() {
         return Err(AppError::BadRequest("Phase is missing".to_string()));
+    }
+
+    if internet_time.is_negative() {
+        return Err(AppError::BadRequest("Internet time must be a positive integer".to_string()));
     }
 
     let work_order = work_orders::Entity::find_by_id(id)
@@ -84,7 +94,7 @@ pub async fn upload_closing_form_photo(
 
     let object_name = oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
 
-    let payload = ConfirmUploadRequest { unique_file_name, latitude, longitude, phase };
+    let payload = ConfirmUploadRequest { unique_file_name, latitude, longitude, phase, internet_time };
 
     let effect = confirm_upload::decide_confirm_upload(
         payload, &work_order, auth.user.id,

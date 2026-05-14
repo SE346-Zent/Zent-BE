@@ -26,7 +26,21 @@ pub fn decide_confirm_upload(
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
-    // 2. Geofencing Check
+    // 2. Internet time drift check
+    let drift_minutes: i64 = policies
+        .get("internet_time_drift_minutes")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
+    let now = Utc::now();
+    let drift_seconds = (now.timestamp() - req.internet_time).abs();
+    if drift_seconds > drift_minutes * 60 {
+        return Err(AppError::BadRequest(format!(
+            "Device time is too far from server time ({} seconds drift, max {} minutes allowed). Please sync your device clock and try again.",
+            drift_seconds, drift_minutes
+        )));
+    }
+
+    // 3. Geofencing Check
     let radius: f64 = policies.get("geofencing_radius")
         .and_then(|v| v.parse().ok())
         .unwrap_or(500.0);
@@ -43,13 +57,13 @@ pub fn decide_confirm_upload(
         return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
     }
 
-    // 3. Prepare Side-Effects
-    let now = Utc::now();
+    // 4. Prepare Side-Effects
     let image_id = Uuid::new_v4();
 
     let image = images::ActiveModel {
         id: Set(image_id),
         object_name: Set(object_name),
+        internet_time: Set(Some(req.internet_time)),
         created_at: Set(now),
         updated_at: Set(now),
         ..Default::default()
