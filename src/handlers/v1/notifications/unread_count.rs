@@ -32,24 +32,25 @@ pub async fn get_unread_noti_count(
 
     // 1. Try Valkey first
     if let Some(valkey) = &state.valkey {
-        let mut conn = valkey.get_connection();
-        match redis::cmd("GET")
-            .arg(&valkey_key)
-            .query_async::<Option<i64>>(&mut conn)
-            .await
-        {
-            Ok(Some(count)) if count >= 0 => {
-                return Ok(Json(ApiResponse::success(
-                    200,
-                    "Unread count retrieved",
-                    count as u64,
-                )));
-            }
-            Ok(_) => {
-                // Key doesn't exist or has unexpected value → fallback to MongoDB
-            }
-            Err(e) => {
-                tracing::warn!("Valkey GET failed for {}: {:?}. Falling back to MongoDB.", valkey_key, e);
+        if let Ok(mut conn) = valkey.get_connection().await {
+            match redis::cmd("GET")
+                .arg(&valkey_key)
+                .query_async::<Option<i64>>(&mut conn)
+                .await
+            {
+                Ok(Some(count)) if count >= 0 => {
+                    return Ok(Json(ApiResponse::success(
+                        200,
+                        "Unread count retrieved",
+                        count as u64,
+                    )));
+                }
+                Ok(_) => {
+                    // Key doesn't exist or has unexpected value → fallback to MongoDB
+                }
+                Err(e) => {
+                    tracing::warn!("Valkey GET failed for {}: {:?}. Falling back to MongoDB.", valkey_key, e);
+                }
             }
         }
     }
@@ -88,12 +89,13 @@ pub async fn get_unread_noti_count(
 
     // 3. Write count to Valkey for future requests
     if let Some(valkey) = &state.valkey {
-        let mut conn = valkey.get_connection();
-        let _ = redis::cmd("SET")
-            .arg(&valkey_key)
-            .arg(unread_count as i64)
-            .query_async::<()>(&mut conn)
-            .await;
+        if let Ok(mut conn) = valkey.get_connection().await {
+            let _ = redis::cmd("SET")
+                .arg(&valkey_key)
+                .arg(unread_count as i64)
+                .query_async::<()>(&mut conn)
+                .await;
+        }
     }
 
     Ok(Json(ApiResponse::success(

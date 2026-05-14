@@ -140,12 +140,13 @@ pub async fn list(
 
         // Decrement Valkey unread counter
         if let Some(valkey) = &state.valkey {
-            let mut conn = valkey.get_connection();
-            let _ = redis::cmd("DECRBY")
-                .arg(format!("unread:{}", auth.user.id))
-                .arg(unread_count as i64)
-                .query_async::<()>(&mut conn)
-                .await;
+            if let Ok(mut conn) = valkey.get_connection().await {
+                let _ = redis::cmd("DECRBY")
+                    .arg(format!("unread:{}", auth.user.id))
+                    .arg(unread_count as i64)
+                    .query_async::<()>(&mut conn)
+                    .await;
+            }
         }
     }
 

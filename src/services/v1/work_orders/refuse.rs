@@ -109,6 +109,7 @@ mod tests {
             complete_form_id: None,
             work_order_number: "".to_string(),
             reject_form_id: None,
+            about_to_start_notified: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,

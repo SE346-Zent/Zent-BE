@@ -160,14 +160,16 @@ async fn save_notification_to_mongodb(
 /// Increment the Valkey unread counter for a user.
 async fn increment_unread_count(valkey: &ValkeyClient, user_id: Uuid) {
     let key = format!("unread:{}", user_id);
-    let mut conn = valkey.get_connection();
-
-    if let Err(e) = redis::cmd("INCR")
-        .arg(&key)
-        .query_async::<i64>(&mut conn)
-        .await
-    {
-        warn!("Failed to increment Valkey unread count for {}: {:?}", user_id, e);
+    if let Ok(mut conn) = valkey.get_connection().await {
+        if let Err(e) = redis::cmd("INCR")
+            .arg(&key)
+            .query_async::<i64>(&mut conn)
+            .await
+        {
+            warn!("Failed to increment Valkey unread count for {}: {:?}", user_id, e);
+        }
+    } else {
+        warn!("Valkey unavailable — unread count increment skipped for {}", user_id);
     }
 }
 

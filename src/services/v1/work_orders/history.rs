@@ -60,6 +60,8 @@ mod tests {
             password_hash: "".to_string(),
             phone_number: "".to_string(),
             province: Some("".to_string()),
+            fcm_token: None,
+            installation_id: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
