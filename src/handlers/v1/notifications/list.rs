@@ -26,12 +26,13 @@ pub async fn list(
     Query(query): Query<NotificationListQuery>,
 ) -> Result<Json<ApiResponse<Vec<NotificationListItem>>>, AppError> {
 
-    if query.page <= 0 {
-        return Err(AppError::BadRequest(anyhow::anyhow!("Page must be greater than 0")));
+    // page and limit are Option<u32> — reject explicit zero, allow None (defaults apply)
+    if query.page == Some(0) {
+        return Err(AppError::BadRequest("Page must be greater than 0".to_string()));
     }
 
-    if query.limit <= 0 {
-        return Err(AppError::BadRequest(anyhow::anyhow!("Limit must be greater than 0")));
+    if query.limit == Some(0) {
+        return Err(AppError::BadRequest("Limit must be greater than 0".to_string()));
     }
 
     // 1. Fetch all notifications for this user from MongoDB
