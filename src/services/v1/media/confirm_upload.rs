@@ -43,7 +43,7 @@ pub fn decide_confirm_upload(
     // 3. Geofencing Check
     let radius: f64 = policies.get("geofencing_radius")
         .and_then(|v| v.parse().ok())
-        .unwrap_or(500.0);
+        .unwrap_or(2000.0);
 
     let is_verified = is_within_geofence(
         req.latitude,

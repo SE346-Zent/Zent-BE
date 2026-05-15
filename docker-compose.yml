@@ -35,6 +35,20 @@ services:
       - GRAFANA_CLOUD_USER=${GRAFANA_CLOUD_USER}
       - GRAFANA_CLOUD_API_KEY=${GRAFANA_CLOUD_API_KEY}
 
+  zent-be:
+    build: .
+    container_name: zent-be
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./.env:/app/.env
+      - ./src/infrastructure/lua_script:/app/src/infrastructure/lua_script
+      - ./templates:/app/templates
+      - ./zent_checklist:/app/zent_checklist
+    depends_on:
+      - mysql
+
 volumes:
   mysql-data:
     name: zent_mysql_data

@@ -37,12 +37,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     mongodb_migration::run_migrations(&mongodb_database).await?;
 
     // Initialize Valkey cache via infrastructure layer
-    let valkey: Option<Arc<ValkeyClient>> = infrastructure::cache::init_cache(cfg).await
-        .map(Arc::new)
-        .ok();
-    if valkey.is_none() {
-        tracing::warn!("Valkey cache client not initialized - continuing in degraded mode");
-    }
+    let valkey: Option<Arc<ValkeyClient>> = match infrastructure::cache::init_cache(cfg).await {
+        Ok(v) => Some(Arc::new(v)),
+        Err(e) => {
+            tracing::error!("Failed to initialize Valkey cache: {}. Continuing in degraded mode.", e);
+            None
+        }
+    };
 
     // Connect to RabbitMQ using configured URI mapping efficiently
     let rabbitmq: Option<Arc<Connection>> = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url).await
@@ -60,8 +61,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .expect("Failed to load lookup tables from database");
 
-    // Pre-load email templates into memory cache
-    let templates: HashMap<String, String> = infrastructure::templates::load_templates().await;
+    // Pre-load email templates into memory cache from the configured directory
+    let templates: HashMap<String, String> = infrastructure::templates::load_templates(&cfg.template_dir).await;
 
     // Initialize AppState with directly injected infrastructure
     let state = AppState::new(

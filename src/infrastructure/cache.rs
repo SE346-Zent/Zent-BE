@@ -1,13 +1,21 @@
-use redis::{Client, aio::MultiplexedConnection, RedisError};
 use std::collections::HashMap;
-use tracing::warn;
+use std::path::Path;
+use redis::{Client, aio::MultiplexedConnection, RedisError};
+use tokio::fs;
+use tracing::{warn, info};
 use crate::core::config::AppConfig;
 
-/// Atomic OTP verification script loaded at compile time.
-pub const VERIFY_OTP_LUA: &str = include_str!("lua_script/verify_otp.lua");
-
-/// Atomic idempotency check script loaded at compile time.
-pub const CHECK_IDEMPOTENCY_LUA: &str = include_str!("lua_script/check_idempotency.lua");
+/// Read a Lua script from the configured scripts directory.
+async fn read_lua_script(base_dir: &str, filename: &str) -> Result<String, RedisError> {
+    let path = Path::new(base_dir).join(filename);
+    fs::read_to_string(&path)
+        .await
+        .map_err(|e| RedisError::from((
+            redis::ErrorKind::Io,
+            "Failed to read Lua script",
+            format!("Path: {}, Error: {}", path.display(), e)
+        )))
+}
 
 /// Thin wrapper around a redis `Client`.
 ///
@@ -38,7 +46,7 @@ impl ValkeyClient {
     }
 }
 
-/// Initialize Valkey: open client, load Lua scripts, return wrapper.
+/// Initialize Valkey: open client, load Lua scripts from the filesystem, return wrapper.
 pub async fn init_cache(cfg: &AppConfig) -> Result<ValkeyClient, RedisError> {
     let db_index = match cfg.app_stage.as_str() {
         "production" => 0,
@@ -51,29 +59,39 @@ pub async fn init_cache(cfg: &AppConfig) -> Result<ValkeyClient, RedisError> {
     let client = Client::open(connection_url.as_str())?;
     let mut conn = client.get_multiplexed_async_connection().await?;
 
-    // Pre-load Lua scripts (stored server-side; we only keep the SHA hashes)
+    // Determine the Lua scripts directory with a fallback mechanism
+    let mut lua_dir = cfg.lua_script_dir.clone();
+    if !Path::new(&lua_dir).is_dir() {
+        let fallback = "src/infrastructure/lua_script";
+        if Path::new(fallback).is_dir() {
+            warn!("Configured LUA_SCRIPT_DIR '{}' not found, falling back to '{}'", lua_dir, fallback);
+            lua_dir = fallback.to_string();
+        }
+    }
+    info!("Loading Lua scripts from: {}", lua_dir);
+
     let mut script_hashes = HashMap::new();
 
-    let verify_otp_sha: String = redis::cmd("SCRIPT")
+    let verify_otp_lua = read_lua_script(&lua_dir, "verify_otp.lua").await?;
+    let sha: String = redis::cmd("SCRIPT")
         .arg("LOAD")
-        .arg(VERIFY_OTP_LUA)
+        .arg(verify_otp_lua)
         .query_async(&mut conn)
         .await?;
+    script_hashes.insert("verify_otp".to_string(), sha);
 
-    script_hashes.insert("verify_otp".to_string(), verify_otp_sha);
-
-    let check_idempotency_sha: String = redis::cmd("SCRIPT")
+    let check_idempotency_lua = read_lua_script(&lua_dir, "check_idempotency.lua").await?;
+    let sha: String = redis::cmd("SCRIPT")
         .arg("LOAD")
-        .arg(CHECK_IDEMPOTENCY_LUA)
+        .arg(check_idempotency_lua)
         .query_async(&mut conn)
         .await?;
-
-    script_hashes.insert("check_idempotency".to_string(), check_idempotency_sha);
+    script_hashes.insert("check_idempotency".to_string(), sha);
 
     // Drop the initial connection — a fresh one is created on every get_connection() call
     drop(conn);
 
-    warn!("Valkey cache initialized (db {}) — fresh connections will be created per-request", db_index);
+    info!("Valkey cache initialized (db {}, {} Lua scripts loaded)", db_index, script_hashes.len());
 
     Ok(ValkeyClient { client, script_hashes })
 }

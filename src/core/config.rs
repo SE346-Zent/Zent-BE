@@ -81,6 +81,16 @@ pub struct AppConfig {
     /// Delay (milliseconds) between poll retries.
     #[serde(default = "default_idempotency_poll_delay")]
     pub idempotency_poll_delay_ms: u64,
+
+    /// Directory containing Lua scripts (verify_otp.lua, check_idempotency.lua).
+    /// Loaded at startup and registered into Valkey/Redis.
+    #[serde(default = "default_lua_script_dir")]
+    pub lua_script_dir: String,
+
+    /// Directory containing HTML email templates.
+    /// Scanned at startup; each .html file becomes a template by filename.
+    #[serde(default = "default_template_dir")]
+    pub template_dir: String,
 }
 
 fn default_access_token_ttl() -> i64 { 3600 }
@@ -100,6 +110,8 @@ fn default_idempotency_claim_ttl() -> u64 { 30 }
 fn default_idempotency_final_ttl() -> u64 { 3600 }
 fn default_idempotency_poll_retries() -> u32 { 6 }
 fn default_idempotency_poll_delay() -> u64 { 500 }
+fn default_lua_script_dir() -> String { "lua_script".to_string() }
+fn default_template_dir() -> String { "templates".to_string() }
 
 static CONFIG: OnceLock<AppConfig> = OnceLock::new();
 
