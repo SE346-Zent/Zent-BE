@@ -69,7 +69,7 @@ pub async fn assign(
         });
 
         // Notify the technician
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             mongodb.as_ref(),
             valkey_client.clone(),
             db.as_ref(),
@@ -81,7 +81,7 @@ pub async fn assign(
         ).await;
 
         // Notify the customer
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             mongodb.as_ref(),
             valkey_client.clone(),
             db.as_ref(),

@@ -6,3 +6,4 @@ pub mod refuse_request;
 pub mod assign_request;
 pub mod complete_request;
 pub mod cancel_request;
+pub mod complaint_request;

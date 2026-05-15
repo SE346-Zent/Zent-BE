@@ -111,6 +111,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state.valkey.clone(),
         state.rabbitmq.clone(),
     ).expect("Failed to build auto assign job");
+
+    let escalation_job = infrastructure::cron_tasks::escalation::build_escalation_job(
+        db.clone(),
+        state.lookup_tables.clone(),
+        state.mongodb.clone(),
+        state.valkey.clone(),
+    ).expect("Failed to build escalation job");
     
     app_scheduler.register_job(user_cleanup_job)
         .await
@@ -127,6 +134,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     app_scheduler.register_job(auto_assign_job)
         .await
         .expect("Failed to register auto assign job");
+
+    app_scheduler.register_job(escalation_job)
+        .await
+        .expect("Failed to register escalation job");
 
     let outbox_cleanup_job = infrastructure::cron_tasks::cleanup_outbox::clean_up_outbox_job(
         db.clone(),

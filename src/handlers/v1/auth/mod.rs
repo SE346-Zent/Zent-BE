@@ -6,8 +6,10 @@ pub mod login;
 pub mod register;
 pub mod verify_otp;
 pub mod resend_otp;
+pub mod auto_login;
 pub mod logout;
 
+pub use auto_login::auto_login_handler;
 pub use forgot_password::forgot_password_handler;
 pub use verify_forgot_password_otp::verify_forgot_password_otp_handler;
 pub use reset_password::reset_password_handler;
@@ -28,6 +30,7 @@ pub use register::__path_register_handler;
 pub use verify_otp::__path_verify_otp_handler;
 pub use resend_otp::__path_resend_otp_handler;
 pub use logout::__path_logout_handler;
+pub use auto_login::__path_auto_login_handler;
 
 use axum::{Router, routing::post};
 use crate::core::state::AppState;
@@ -43,4 +46,5 @@ pub fn router() -> Router<AppState> {
         .route("/forgot-password", post(forgot_password_handler))
         .route("/verify-forgot-password-otp", post(verify_forgot_password_otp_handler))
         .route("/reset-password", post(reset_password_handler))
+        .route("/auto-login", post(auto_login_handler))
 }

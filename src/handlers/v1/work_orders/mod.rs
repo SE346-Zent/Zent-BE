@@ -9,7 +9,9 @@ pub mod approve_refusal;
 pub mod deny_refusal;
 pub mod history;
 pub mod cancel;
+pub mod complaint;
 
+pub use complaint::complaint;
 pub use create::create;
 pub use list::list;
 pub use get_details::get_details;
@@ -34,6 +36,7 @@ pub use approve_refusal::__path_approve_refusal;
 pub use deny_refusal::__path_deny_refusal;
 pub use history::__path_history;
 pub use cancel::__path_cancel;
+pub use complaint::__path_complaint;
 
 use axum::{Router, middleware};
 use std::collections::HashMap;
@@ -388,7 +391,7 @@ pub(crate) async fn try_auto_assign_single(
         });
 
         // Notify technician
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             state.mongodb.as_ref(),
             state.valkey.clone(),
             db.as_ref(),
@@ -400,7 +403,7 @@ pub(crate) async fn try_auto_assign_single(
         ).await;
 
         // Notify customer
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             state.mongodb.as_ref(),
             state.valkey.clone(),
             db.as_ref(),
