@@ -5,7 +5,6 @@ use axum::{
     Router,
 };
 use chrono::{DateTime, Utc};
-// Migrator not needed — handlers use unimplemented!()
 use sea_orm::{Database, DatabaseConnection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -14,6 +13,9 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 use uuid::Uuid;
+
+use zent_be::core::lookup_tables::LookupTables;
+use zent_be::core::state::{AccessTokenDefaultTTLSeconds, AppState, SessionDefaultTTLSeconds};
 
 // ---------------------------------------------------------
 // Infrastructure Mocking
@@ -189,30 +191,28 @@ impl MockMqProducer {
 }
 
 // ---------------------------------------------------------
-// Test State
-// ---------------------------------------------------------
-
-#[derive(Clone)]
-pub struct NotificationTestState {
-    pub notification_repo: MockNotificationRepo,
-    pub outbox_repo: MockOutboxRepo,
-    pub mq_producer: MockMqProducer,
-}
-
-// ---------------------------------------------------------
-// Router
+// Router — uses real AppState with lazy MongoDB
 // ---------------------------------------------------------
 
 async fn setup_test_app(_db: DatabaseConnection) -> Router {
     let _ = tracing_subscriber::fmt::try_init();
-    // Skip DB migrations entirely — notification handlers use unimplemented!()
-    // and don't touch the database. Pure-logic tests (3-5) use mock repos directly.
 
-    let state = NotificationTestState {
-        notification_repo: MockNotificationRepo::new(),
-        outbox_repo: MockOutboxRepo::new(),
-        mq_producer: MockMqProducer::new(),
-    };
+    let mongodb_database = mongodb::Client::with_uri_str("mongodb://localhost:27017")
+        .await
+        .expect("Failed to create MongoDB client")
+        .database("zent_test");
+
+    let state = AppState::new(
+        b"test_secret",
+        LookupTables::empty(),
+        _db,
+        mongodb_database,
+        None,  // valkey
+        None,  // rabbitmq
+        HashMap::new(),
+        AccessTokenDefaultTTLSeconds(900),
+        SessionDefaultTTLSeconds(3600),
+    );
 
     Router::new()
         .route("/api/v1/notifications/preferences",

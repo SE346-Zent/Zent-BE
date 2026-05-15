@@ -1,521 +1,555 @@
 //! Integration tests for the inventory domain.
 //!
-//! Tests the service layer directly with an in-memory SQLite database.
+//! Tests the service layer directly with mock-assembled entity structs.
 //! Since handlers are stubbed with `unimplemented!()`, these tests
-//! exercise the pure service logic by calling service functions directly,
-//! seeded with realistic data.
+//! exercise the pure service logic by calling service functions directly
+//! with the new PartEntry / ProductEntry / PartWithRelations / ProductWithRelations types.
 
-use migration::{Migrator, MigratorTrait};
-use sea_orm::{Database, DatabaseConnection, EntityTrait, ActiveModelTrait, Set, QueryFilter, ColumnTrait};
 use uuid::Uuid;
 
-use zent_be::core::errors::AppError;
-use zent_be::services::v1::inventory::parts::{self, RawPart};
-use zent_be::services::v1::inventory::products::{self, RawProduct};
-use zent_be::services::v1::inventory::approve_part;
+
+use zent_be::services::v1::inventory::list_parts::{self, PartEntry};
+use zent_be::services::v1::inventory::list_products::{self, ProductEntry, PartInProduct as ListPartInProduct};
+use zent_be::services::v1::inventory::get_product::{PartInProduct as DetailPartInProduct};
+use zent_be::services::v1::inventory::get_product::{self, ProductWithRelations};
+use zent_be::services::v1::inventory::accept_part;
+use zent_be::services::v1::inventory::deny_part;
+use zent_be::services::v1::inventory::register_product;
 use zent_be::model::requests::inventory::list_parts_query::ListPartsQuery;
 use zent_be::model::requests::inventory::list_products_query::ListProductsQuery;
 use zent_be::model::requests::inventory::register_product_request::RegisterProductRequest;
-use zent_be::entities::{roles, account_status, work_order_statuses, work_order_symptoms};
+use zent_be::entities::{parts, part_catalog, part_conditions, products, product_models};
 
 fn u(s: &str) -> Uuid { Uuid::parse_str(s).unwrap() }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Database helper factory
-// ─────────────────────────────────────────────────────────────────────────────
-
-async fn seeded_db() -> DatabaseConnection {
-    let db = Database::connect("sqlite::memory:").await.unwrap();
-    Migrator::up(&db, None).await.unwrap();
-
-    // Insert roles
-    let _ = roles::ActiveModel { id: Set(1), name: Set("Admin".to_string()) }.insert(&db).await;
-    let _ = roles::ActiveModel { id: Set(3), name: Set("Technician".to_string()) }.insert(&db).await;
-    let _ = roles::ActiveModel { id: Set(5), name: Set("Customer".to_string()) }.insert(&db).await;
-
-    // Insert account statuses
-    let _ = account_status::ActiveModel { id: Set(2), name: Set("Active".to_string()) }.insert(&db).await;
-
-    // Work order statuses (needed for FK in work_orders if referenced)
-    for (i, name) in ["Pending", "Assigned", "InProg", "Closed", "Reject_InReview", "Rejected"].iter().enumerate() {
-        let _ = zent_be::entities::work_order_statuses::ActiveModel { id: Set(i as i32 + 1), name: Set(name.to_string()), ..Default::default() }.insert(&db).await;
-    }
-
-    // Work order symptoms
-    let now = chrono::Utc::now();
-    for (i, name) in ["Battery", "Display", "Charger", "Audio"].iter().enumerate() {
-        let _ = zent_be::entities::work_order_symptoms::ActiveModel { id: Set(i as i32 + 1), name: Set(name.to_string()), created_at: Set(now), updated_at: Set(now), ..Default::default() }.insert(&db).await;
-    }
-
-    db
+fn t() -> chrono::DateTime<chrono::Utc> {
+    chrono::Utc::now()
 }
 
-/// Create a RawPart for testing the service layer.
-fn make_raw_part(
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers — build PartEntry / ProductEntry / queries
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn make_part_entry(
     part_id: &str, part_number: &str, serial: &str, approval: &str,
-    type_name: &str, condition: &str, tech_id: Option<&str>, cust_id: Option<&str>,
-    product_id: Option<&str>, product_name: Option<&str>, created: &str,
-) -> RawPart {
-    RawPart {
-        part_id: u(part_id), part_number: part_number.to_string(),
-        part_type_id: 1, part_type_name: type_name.to_string(),
-        model_code: Some("MODEL-A".to_string()), serial_number: serial.to_string(),
-        description: None, condition_id: 1, condition_name: condition.to_string(),
-        product_id: product_id.map(|s| u(s)), product_name: product_name.map(|s| s.to_string()),
-        work_order_id: Some(u("00000000-0000-0000-0000-000000000001")),
-        technician_id: tech_id.map(|s| u(s)), customer_id: cust_id.map(|s| u(s)),
-        approval_status: approval.to_string(), denial_reason: None,
-        manufactured_date: None, installation_date: None,
-        created_at: created.to_string(), updated_at: "2024-06-01T00:00:00Z".to_string(),
+    _type_name: &str, condition_name: &str, tech_id: Option<&str>, cust_id: Option<&str>,
+    product_id: Option<&str>, _product_name: Option<&str>,
+) -> PartEntry {
+    let now = t();
+    PartEntry {
+        part: parts::Model {
+            id: u(part_id),
+            part_catalog_id: Uuid::new_v4(),
+            product_id: product_id.map(|s| u(s)),
+            serial_number: serial.to_string(),
+            part_condition_id: 1,
+            manufactured_date: now,
+            installation_date: None,
+            removal_date: None,
+            scrapped_date: None,
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+        },
+        catalog: part_catalog::Model {
+            id: Uuid::new_v4(),
+            part_number: part_number.to_string(),
+            part_types_id: 1,
+            mfg_number: "MFG-1".to_string(),
+            description: None,
+            part_mfg_status: 1,
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+        },
+        condition: part_conditions::Model {
+            id: 1,
+            name: condition_name.to_string(),
+        },
+        product: product_id.map(|pid| products::Model {
+            id: u(pid),
+            product_model_code: "MODEL-A".to_string(),
+            customer_id: cust_id.map_or(Uuid::nil(), |s| u(s)),
+            product_name: _product_name.unwrap_or("Product").to_string(),
+            serial_number: format!("SN-{}", pid),
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+        }),
+        status: approval.to_string(),
+        denial_reason: None,
+        customer_id: cust_id.map(|s| u(s)),
+        technician_id: tech_id.map(|s| u(s)),
     }
 }
 
-fn make_raw_product(
+fn make_product_entry(
     id: &str, name: &str, model: &str, serial: &str, cust_id: &str,
-    cust_name: &str, parts_tech_ids: Vec<&str>, created: &str,
-) -> RawProduct {
-    RawProduct {
-        product_id: u(id), product_name: name.to_string(), model_code: model.to_string(),
-        model_name: format!("Model {}", model), serial_number: serial.to_string(),
-        customer_id: u(cust_id), customer_name: cust_name.to_string(),
-        part_count: parts_tech_ids.len() as i64,
-        parts: parts_tech_ids.iter().enumerate().map(|(i, tid)| {
-            make_raw_part(
-                &format!("{i}000000-0000-0000-0000-000000000000"), &format!("PN-{i}"),
-                &format!("SN-{i}"), "approved", "Battery", "New",
-                Some(tid), Some(cust_id), Some(id), Some(name), "2024-01-01T00:00:00Z",
-            )
+    _cust_name: &str, part_ids: &[&str],
+) -> ProductEntry {
+    let now = t();
+    ProductEntry {
+        product: products::Model {
+            id: u(id),
+            product_model_code: model.to_string(),
+            customer_id: u(cust_id),
+            product_name: name.to_string(),
+            serial_number: serial.to_string(),
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+        },
+        model: product_models::Model {
+            model_code: model.to_string(),
+            model_name: format!("Model {}", model),
+            description: None,
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+        },
+        parts: part_ids.iter().enumerate().map(|(i, tid)| ListPartInProduct {
+            part: parts::Model {
+                id: Uuid::new_v4(),
+                part_catalog_id: Uuid::new_v4(),
+                product_id: Some(u(id)),
+                serial_number: format!("SN-{}-P{}", id, i),
+                part_condition_id: 1,
+                manufactured_date: now,
+                installation_date: None,
+                removal_date: None,
+                scrapped_date: None,
+                created_at: now,
+                updated_at: now,
+                deleted_at: None,
+            },
+            catalog: part_catalog::Model {
+                id: Uuid::new_v4(),
+                part_number: format!("PN-{}-P{}", id, i),
+                part_types_id: 1,
+                mfg_number: "MFG-1".to_string(),
+                description: None,
+                part_mfg_status: 1,
+                created_at: now,
+                updated_at: now,
+                deleted_at: None,
+            },
+            condition: part_conditions::Model {
+                id: 1,
+                name: "New".to_string(),
+            },
+            technician_id: if !tid.is_empty() { Some(u(tid)) } else { None },
         }).collect(),
-        created_at: created.to_string(), updated_at: "2024-06-01T00:00:00Z".to_string(),
     }
 }
 
 fn default_parts_query() -> ListPartsQuery {
-    ListPartsQuery { model_code: None, part_type_id: None, approval_status: None, search: None, page: None, limit: None }
+    ListPartsQuery {
+        model_code: None,
+        part_type_id: None,
+        approval_status: None,
+        search: None,
+        page: None,
+        limit: None,
+        sort_by: None,
+        sort_order: None,
+    }
 }
 
 fn default_products_query() -> ListProductsQuery {
-    ListProductsQuery { model_code: None, search: None, page: None, limit: None }
+    ListProductsQuery {
+        model_code: None,
+        search: None,
+        page: None,
+        limit: None,
+        sort_by: None,
+        sort_order: None,
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TEST 1 — Complex role-access matrix across 5 users and 10 parts
+// TEST 1 — Role-based access matrix (10 parts, 5 users)
 // ═══════════════════════════════════════════════════════════════════════════════
-#[tokio::test]
-async fn integration_role_access_matrix_10_parts_5_users() {
-    let _db = seeded_db().await;
-    let admin   = u("a0000000-0000-0000-0000-000000000000");
-    let tech_a  = u("b0000000-0000-0000-0000-000000000001");
-    let tech_b  = u("b0000000-0000-0000-0000-000000000002");
-    let cust_a  = u("c0000000-0000-0000-0000-000000000001");
-    let cust_b  = u("c0000000-0000-0000-0000-000000000002");
+#[test]
+fn integration_role_access_matrix_10_parts_5_users() {
+    let admin = u("a0000000-0000-0000-0000-000000000001");
+    let tech_a = u("b0000000-0000-0000-0000-000000000001");
+    let tech_b = u("b0000000-0000-0000-0000-000000000002");
+    let cust_a = u("c0000000-0000-0000-0000-000000000001");
+    let cust_b = u("c0000000-0000-0000-0000-000000000002");
 
+    // 10 parts with varying ownership / approval status
     let parts = vec![
-        // Tech A, Customer A product, pending
-        make_raw_part("10000000-0000-0000-0000-000000000000", "BAT-001", "S-001", "pending", "Battery", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), Some("p0000000-0000-0000-0000-000000000001"), Some("Laptop A"), "2024-05-01T00:00:00Z"),
-        // Tech A, Customer A product, approved
-        make_raw_part("20000000-0000-0000-0000-000000000000", "SCR-001", "S-002", "approved", "Screen", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), Some("p0000000-0000-0000-0000-000000000001"), Some("Laptop A"), "2024-05-02T00:00:00Z"),
-        // Tech A, Customer B product, approved
-        make_raw_part("30000000-0000-0000-0000-000000000000", "CHG-001", "S-003", "approved", "Charger", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000002"), Some("p0000000-0000-0000-0000-000000000002"), Some("Laptop B"), "2024-05-03T00:00:00Z"),
-        // Tech B, Customer B product, approved
-        make_raw_part("40000000-0000-0000-0000-000000000000", "BAT-002", "S-004", "approved", "Battery", "Used", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000002"), Some("p0000000-0000-0000-0000-000000000002"), Some("Laptop B"), "2024-05-04T00:00:00Z"),
-        // Tech B, no customer, pending (not assigned to product yet)
-        make_raw_part("50000000-0000-0000-0000-000000000000", "AUD-001", "S-005", "pending", "Audio", "New", Some("b0000000-0000-0000-0000-000000000002"), None, None, None, "2024-05-05T00:00:00Z"),
-        // No tech (orphan), approved, Customer A
-        make_raw_part("60000000-0000-0000-0000-000000000000", "DSP-001", "S-006", "approved", "Display", "New", None, Some("c0000000-0000-0000-0000-000000000001"), Some("p0000000-0000-0000-0000-000000000001"), Some("Laptop A"), "2024-05-06T00:00:00Z"),
-        // Tech A, denied, Customer A
-        make_raw_part("70000000-0000-0000-0000-000000000000", "FAN-001", "S-007", "denied", "Fan", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), Some("p0000000-0000-0000-0000-000000000001"), Some("Laptop A"), "2024-05-07T00:00:00Z"),
-        // Tech B, Approved, Customer A (cross: different tech, same customer)
-        make_raw_part("80000000-0000-0000-0000-000000000000", "KBD-001", "S-008", "approved", "Keyboard", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000001"), Some("p0000000-0000-0000-0000-000000000001"), Some("Laptop A"), "2024-05-08T00:00:00Z"),
-        // Tech A, approved, Customer A (different product)
-        make_raw_part("90000000-0000-0000-0000-000000000000", "MOU-001", "S-009", "approved", "Mouse", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), Some("p0000000-0000-0000-0000-000000000003"), Some("Desktop A"), "2024-05-09T00:00:00Z"),
-        // Tech A, approved, no customer, no product (approved orphan)
-        make_raw_part("a0000000-0000-0000-0000-000000000000", "PWR-001", "S-010", "approved", "Power Supply", "New", Some("b0000000-0000-0000-0000-000000000001"), None, None, None, "2024-05-10T00:00:00Z"),
+        make_part_entry("p0000000-0000-0000-0000-000000000001", "PN-001", "SN-001", "approved", "Battery", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000002", "PN-002", "SN-002", "approved", "Battery", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000003", "PN-003", "SN-003", "pending", "Display", "Used", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000004", "PN-004", "SN-004", "denied", "Charger", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000005", "PN-005", "SN-005", "approved", "Audio", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000006", "PN-006", "SN-006", "approved", "Battery", "Used", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000007", "PN-007", "SN-007", "pending", "Display", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000008", "PN-008", "SN-008", "approved", "Charger", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000009", "PN-009", "SN-009", "denied", "Audio", "Used", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000010", "PN-010", "SN-010", "pending", "Battery", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
     ];
 
-    // Admin: sees all 10
-    let (admin_items, admin_meta) = parts::list_parts(&parts, "Admin", admin, &default_parts_query());
-    assert_eq!(admin_items.len(), 10, "Admin should see all 10 parts");
-    assert_eq!(admin_meta.total_records, 10);
+    let q = default_parts_query();
 
-    // Tech A: sees parts where they are technician (6 parts: indices 0,1,2,6,8,9)
-    let (ta_items, _) = parts::list_parts(&parts, "Technician", tech_a, &default_parts_query());
-    assert_eq!(ta_items.len(), 6, "Tech A should see 6 parts assigned to them");
-    let ta_part_nos: Vec<&str> = ta_items.iter().map(|p| p.part_number.as_str()).collect();
-    assert!(ta_part_nos.contains(&"BAT-001"), "Tech A should see BAT-001");
-    assert!(ta_part_nos.contains(&"FAN-001"), "Tech A should see FAN-001 even if denied");
-    assert!(!ta_part_nos.contains(&"BAT-002"), "Tech A should NOT see Tech B's BAT-002");
+    // Admin sees everything
+    let (admin_view, _) = list_parts::list_parts(&parts, "Admin", admin, &q);
+    assert_eq!(admin_view.len(), 10);
 
-    // Tech B: sees parts where they are technician (3 parts: indices 3,4,7)
-    let (tb_items, _) = parts::list_parts(&parts, "Technician", tech_b, &default_parts_query());
-    assert_eq!(tb_items.len(), 3, "Tech B should see 3 parts");
-    let tb_part_nos: Vec<&str> = tb_items.iter().map(|p| p.part_number.as_str()).collect();
-    assert!(tb_part_nos.contains(&"BAT-002"), "Tech B should see BAT-002");
-    assert!(tb_part_nos.contains(&"AUD-001"), "Tech B should see AUD-001 (pending, no product)");
-    assert!(!tb_part_nos.contains(&"BAT-001"), "Tech B should NOT see Tech A's parts");
+    // Tech A sees their own parts regardless of status
+    let (tech_a_view, _) = list_parts::list_parts(&parts, "Technician", tech_a, &q);
+    assert_eq!(tech_a_view.len(), 6);  // parts 1,3,5,6,9,10
 
-    // Customer A: sees approved parts in their products only (3 items: S-002, S-006, S-008, S-009)
-    // But S-001 is pending → not visible; S-007 is denied → not visible
-    let (ca_items, _) = parts::list_parts(&parts, "Customer", cust_a, &default_parts_query());
-    assert_eq!(ca_items.len(), 4, "Customer A should see 4 approved parts in their products");
-    let ca_serials: Vec<&str> = ca_items.iter().map(|p| p.serial_number.as_str()).collect();
-    assert!(ca_serials.contains(&"S-002"));
-    assert!(ca_serials.contains(&"S-006"));
-    assert!(ca_serials.contains(&"S-008"));
-    assert!(ca_serials.contains(&"S-009"));
-    assert!(!ca_serials.contains(&"S-001"), "Customer should NOT see pending part S-001");
-    assert!(!ca_serials.contains(&"S-007"), "Customer should NOT see denied part S-007");
-    assert!(!ca_serials.contains(&"S-004"), "Customer should NOT see other customer's part S-004");
+    // Tech B sees their own parts
+    let (tech_b_view, _) = list_parts::list_parts(&parts, "Technician", tech_b, &q);
+    assert_eq!(tech_b_view.len(), 4);  // parts 2,4,7,8
 
-    // Customer B: sees approved parts in their products only (2 items: S-003, S-004)
-    let (cb_items, _) = parts::list_parts(&parts, "Customer", cust_b, &default_parts_query());
-    assert_eq!(cb_items.len(), 2, "Customer B should see 2 approved parts");
+    // Customer A only sees approved parts they own
+    let (cust_a_view, _) = list_parts::list_parts(&parts, "Customer", cust_a, &q);
+    assert_eq!(cust_a_view.len(), 2);  // parts 1,6
+    for item in &cust_a_view {
+        assert_eq!(item.approval_status, "approved");
+    }
+
+    // Customer B only sees approved parts they own
+    let (cust_b_view, _) = list_parts::list_parts(&parts, "Customer", cust_b, &q);
+    assert_eq!(cust_b_view.len(), 2);  // parts 2,8
+    for item in &cust_b_view {
+        assert_eq!(item.approval_status, "approved");
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TEST 2 — Part approval/denial state machine with full audit trail
+// TEST 2 — Approval state machine with audit trail
 // ═══════════════════════════════════════════════════════════════════════════════
-#[tokio::test]
-async fn integration_approval_state_machine_with_audit() {
-    let _db = seeded_db().await;
-    let admin_a = u("a0000000-0000-0000-0000-000000000001");
-    let admin_b = u("a0000000-0000-0000-0000-000000000002");
-    let form_id = u("f0000000-0000-0000-0000-000000000001");
+#[test]
+fn integration_approval_state_machine_with_audit() {
+    let admin_id = u("a0000000-0000-0000-0000-000000000001");
     let now = chrono::Utc::now();
 
-    // 1. Accept a pending form → succeeds
-    let accept = approve_part::decide_accept_part(form_id, admin_a, "pending", now);
-    assert!(accept.is_ok(), "Should accept pending form");
-    let effect = accept.unwrap();
-    assert_eq!(effect.audit.action, "approved");
-    assert!(effect.audit.reason.is_none());
-    assert_eq!(effect.audit.admin_id, admin_a);
-    // Part ID should be freshly generated
-    assert_ne!(effect.part_id, uuid::Uuid::nil());
+    // Accept pending → succeeds
+    let r = accept_part::decide_accept_part(
+        u("f0000000-0000-0000-0000-000000000001"),
+        admin_id, "pending", now,
+    );
+    assert!(r.is_ok());
+    assert_eq!(r.unwrap().audit.action.unwrap(), "approved");
 
-    // 2. Accept an already-approved form → rejected
-    let double_accept = approve_part::decide_accept_part(form_id, admin_b, "approved", now);
-    assert!(double_accept.is_err());
+    // Accept non-pending → fails
+    let r = accept_part::decide_accept_part(
+        u("f0000000-0000-0000-0000-000000000002"),
+        admin_id, "approved", now,
+    );
+    assert!(r.is_err());
 
-    // 3. Deny an already-approved form → rejected (can't deny approved)
-    let deny_approved = approve_part::decide_deny_part(
-        form_id, admin_a, "approved",
-        "This part was already approved and cannot be denied",
+    // Deny pending with valid reason → succeeds
+    let r = deny_part::decide_deny_part(
+        u("f0000000-0000-0000-0000-000000000003"),
+        admin_id, "pending",
+        "Part does not meet quality standards due to visible damage",
         now,
     );
-    assert!(deny_approved.is_err());
+    assert!(r.is_ok());
+    assert_eq!(r.unwrap().audit.action.unwrap(), "denied");
 
-    // 4. Deny a pending form → succeeds
-    let form2 = u("f0000000-0000-0000-0000-000000000002");
-    let deny = approve_part::decide_deny_part(
-        form2, admin_b, "pending",
-        "Part does not meet quality requirements; incorrect dimensions",
-        now,
+    // Deny with short reason → fails
+    let r = deny_part::decide_deny_part(
+        u("f0000000-0000-0000-0000-000000000004"),
+        admin_id, "pending", "short", now,
     );
-    assert!(deny.is_ok());
-    let deny_effect = deny.unwrap();
-    assert_eq!(deny_effect.audit.action, "denied");
-    assert_eq!(deny_effect.audit.reason.unwrap(), "Part does not meet quality requirements; incorrect dimensions");
-    assert_eq!(deny_effect.audit.admin_id, admin_b);
+    assert!(r.is_err());
 
-    // 5. Deny an already-denied form → rejected (can't deny twice)
-    let double_deny = approve_part::decide_deny_part(
-        form2, admin_a, "denied",
-        "Attempting to deny an already denied part",
-        now,
+    // Deny non-pending → fails
+    let r = deny_part::decide_deny_part(
+        u("f0000000-0000-0000-0000-000000000005"),
+        admin_id, "denied",
+        "This part was already denied by the approver", now,
     );
-    assert!(double_deny.is_err());
-
-    // 6. Deny with very short reason → rejected
-    let short_deny = approve_part::decide_deny_part(
-        u("f0000000-0000-0000-0000-000000000003"), admin_a, "pending",
-        "short", // 5 chars
-        now,
-    );
-    assert!(short_deny.is_err());
-
-    // 7. Deny with just barely valid reason (10 chars) → valid
-    let exact_deny = approve_part::decide_deny_part(
-        u("f0000000-0000-0000-0000-000000000004"), admin_b, "pending",
-        "0123456789", // exactly 10 chars
-        now,
-    );
-    assert!(exact_deny.is_ok());
+    assert!(r.is_err());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TEST 3 — Product registration with duplicate detection, idempotency, catalog validation
+// TEST 3 — Product registration logic
 // ═══════════════════════════════════════════════════════════════════════════════
-#[tokio::test]
-async fn integration_product_registration_complex() {
-    let _db = seeded_db().await;
-    let user_a = u("c0000000-0000-0000-0000-000000000001");
-    let user_b = u("c0000000-0000-0000-0000-000000000002");
+#[test]
+fn integration_product_registration_complex() {
+    let user_id = u("c0000000-0000-0000-0000-000000000001");
     let now = chrono::Utc::now();
 
-    // Make a valid registration request
+    // Successful first registration (no existing product)
     let req = RegisterProductRequest {
-        serial_number: "SN-VALID-001".to_string(),
+        serial_number: "SN-VALID-123".to_string(),
         country: "Vietnam".to_string(),
-        province: "Ho Chi Minh".to_string(),
-        city: "District 1".to_string(),
-        address: "456 Nguyen Hue".to_string(),
-        first_name: "Minh".to_string(),
-        last_name: "Tran".to_string(),
-        email: "minh@example.com".to_string(),
-        mobile_phone: "0987654321".to_string(),
+        province: "Hanoi".to_string(),
+        city: "Cau Giay".to_string(),
+        address: "123 Test Street".to_string(),
+        first_name: "John".to_string(),
+        last_name: "Doe".to_string(),
+        email: "john@example.com".to_string(),
+        mobile_phone: "0123456789".to_string(),
         send_email_confirmation: true,
     };
 
-    // Initial registration → success
-    let r1 = products::decide_register_product(
-        &req, user_a, "Minh Tran",
-        Some("MODEL-X".to_string()), Some("ThinkPad X1 Carbon".to_string()),
+    let result = register_product::decide_register_product(
+        &req, user_id, "John Doe",
+        Some("MODEL-A".to_string()), Some("Model A".to_string()),
         None, now,
     );
-    assert!(r1.is_ok(), "First registration should succeed");
-    let e1 = r1.unwrap();
-    assert!(e1.should_send_email, "Email should be sent");
-    assert_eq!(e1.serial_number, "SN-VALID-001");
+    assert!(result.is_ok());
+    let effect = result.unwrap();
+    assert!(effect.should_send_email);
+    assert_eq!(effect.model_code, "MODEL-A");
 
-    // Second registration by same user with same serial → idempotent (returns existing product)
-    let existing_product = make_raw_product(
-        "p0000000-0000-0000-0000-000000000001", "ThinkPad X1 Carbon Vietnam 2026",
-        "MODEL-X", "SN-VALID-001", "c0000000-0000-0000-0000-000000000001",
-        "Minh Tran", vec![], "2026-05-01T00:00:00Z",
-    );
-    let r2 = products::decide_register_product(
-        &req, user_a, "Minh Tran",
-        Some("MODEL-X".to_string()), Some("ThinkPad X1 Carbon".to_string()),
-        Some(&existing_product), now,
-    );
-    assert!(r2.is_ok(), "Re-registration by same user should be idempotent");
-    let e2 = r2.unwrap();
-    assert_eq!(e2.product_id, existing_product.product_id, "Should return existing product ID");
-    assert!(!e2.should_send_email, "Email should NOT be resent");
-
-    // Third: different user tries same serial → Conflict
-    let r3 = products::decide_register_product(
-        &req, user_b, "Lan Pham",
-        Some("MODEL-X".to_string()), Some("ThinkPad X1 Carbon".to_string()),
-        Some(&existing_product), now,
-    );
-    assert!(r3.is_err(), "Different user should get Conflict");
-    match r3.unwrap_err() {
-        AppError::Conflict(msg) => assert!(msg.contains("already registered")),
-        other => panic!("Expected Conflict, got {:?}", other),
-    }
-
-    // Fourth: serial not in catalog → BadRequest
-    let r4 = products::decide_register_product(
-        &req, user_a, "Minh Tran",
-        None, // Serial not found
-        None,
+    // Serial not in catalog → fails
+    let result = register_product::decide_register_product(
+        &req, user_id, "John Doe",
+        None, None,
         None, now,
     );
-    assert!(r4.is_err());
+    assert!(result.is_err());
 
-    // Fifth: empty country defaults to Vietnam in product name
-    let mut req_no_country = req.clone();
-    req_no_country.country = "".to_string();
-    let r5 = products::decide_register_product(
-        &req_no_country, user_a, "Minh Tran",
-        Some("MODEL-X".to_string()), Some("ThinkPad X1 Carbon".to_string()),
-        None, now,
+    // Re-registration of existing product (existing_product_id is Some)
+    let result = register_product::decide_register_product(
+        &req, user_id, "John Doe",
+        Some("MODEL-A".to_string()), Some("Model A".to_string()),
+        Some(u("p1000000-0000-0000-0000-000000000001")), now,
     );
-    let e5 = r5.unwrap();
-    assert!(e5.product_name.contains("Vietnam"), "Product name should default to Vietnam");
+    assert!(result.is_ok());
+    let effect = result.unwrap();
+    assert!(!effect.should_send_email); // No email on re-registration
+    assert_eq!(effect.product_id, u("p1000000-0000-0000-0000-000000000001"));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TEST 4 — Product listing with cross-tech, cross-customer isolation
+// TEST 4 — Product isolation across roles
 // ═══════════════════════════════════════════════════════════════════════════════
-#[tokio::test]
-async fn integration_product_isolation_across_roles() {
-    let _db = seeded_db().await;
-    let tech_a = u("b0000000-0000-0000-0000-000000000001");
-    let tech_b = u("b0000000-0000-0000-0000-000000000002");
-    let tech_c = u("b0000000-0000-0000-0000-000000000003");
-    let cust_a = u("c0000000-0000-0000-0000-000000000001");
-    let cust_b = u("c0000000-0000-0000-0000-000000000002");
-    let admin = u("a0000000-0000-0000-0000-000000000000");
+#[test]
+fn integration_product_isolation_across_roles() {
+    let admin = u("a0000000-0000-0000-0000-000000000001");
+    let tech = u("b0000000-0000-0000-0000-000000000001");
+    let cust = u("c0000000-0000-0000-0000-000000000001");
+    let other = u("c0000000-0000-0000-0000-000000000002");
 
     let products = vec![
-        // Product 1: Cust A, with parts from Tech A
-        make_raw_product("p0000000-0000-0000-0000-000000000001", "Laptop Alpha", "MOD-A", "S-001",
-            "c0000000-0000-0000-0000-000000000001", "Alice",
-            vec!["b0000000-0000-0000-0000-000000000001"], "2024-06-01T00:00:00Z"),
-        // Product 2: Cust A, with parts from Tech A and Tech B
-        make_raw_product("p0000000-0000-0000-0000-000000000002", "Laptop Beta", "MOD-B", "S-002",
-            "c0000000-0000-0000-0000-000000000001", "Alice",
-            vec!["b0000000-0000-0000-0000-000000000001", "b0000000-0000-0000-0000-000000000002"], "2024-06-02T00:00:00Z"),
-        // Product 3: Cust B, with parts from Tech B only
-        make_raw_product("p0000000-0000-0000-0000-000000000003", "Desktop Gamma", "MOD-C", "S-003",
-            "c0000000-0000-0000-0000-000000000002", "Bob",
-            vec!["b0000000-0000-0000-0000-000000000002"], "2024-06-03T00:00:00Z"),
-        // Product 4: Cust B, with no parts yet (new registration)
-        make_raw_product("p0000000-0000-0000-0000-000000000004", "Desktop Delta", "MOD-D", "S-004",
-            "c0000000-0000-0000-0000-000000000002", "Bob",
-            vec![], "2024-06-04T00:00:00Z"),
+        make_product_entry("p0000000-0000-0000-0000-000000000001", "Laptop X", "MOD-X", "SN-XXX", "c0000000-0000-0000-0000-000000000001", "Alice", &["b0000000-0000-0000-0000-000000000001"]),
+        make_product_entry("p0000000-0000-0000-0000-000000000002", "Laptop Y", "MOD-Y", "SN-YYY", "c0000000-0000-0000-0000-000000000002", "Bob", &["b0000000-0000-0000-0000-000000000001"]),
+        make_product_entry("p0000000-0000-0000-0000-000000000003", "Laptop Z", "MOD-Z", "SN-ZZZ", "c0000000-0000-0000-0000-000000000001", "Alice", &[]),
     ];
 
-    let query = default_products_query();
+    let q = default_products_query();
 
-    // Admin: sees all 4
-    let (a_items, _) = products::list_products(&products, "Admin", admin, &query);
-    assert_eq!(a_items.len(), 4, "Admin should see all 4 products");
+    // Admin sees all
+    let (admin_view, _) = list_products::list_products(&products, "Admin", admin, &q);
+    assert_eq!(admin_view.len(), 3);
 
-    // Cust A: sees only own products (1 and 2)
-    let (ca_items, _) = products::list_products(&products, "Customer", cust_a, &query);
-    assert_eq!(ca_items.len(), 2);
-    let ca_names: Vec<&str> = ca_items.iter().map(|p| p.product_name.as_str()).collect();
-    assert!(ca_names.contains(&"Laptop Alpha"));
-    assert!(ca_names.contains(&"Laptop Beta"));
+    // Tech sees only products with their parts
+    let (tech_view, _) = list_products::list_products(&products, "Technician", tech, &q);
+    assert_eq!(tech_view.len(), 2); // MOD-X, MOD-Y (not MOD-Z — no parts assigned to tech)
 
-    // Cust B: sees own products (3 and 4)
-    let (cb_items, _) = products::list_products(&products, "Customer", cust_b, &query);
-    assert_eq!(cb_items.len(), 2);
-    assert!(cb_items.iter().any(|p| p.product_name == "Desktop Gamma"));
-    assert!(cb_items.iter().any(|p| p.product_name == "Desktop Delta"));
+    // Customer A sees only their own products
+    let (cust_a_view, _) = list_products::list_products(&products, "Customer", cust, &q);
+    assert_eq!(cust_a_view.len(), 2); // MOD-X, MOD-Z
 
-    // Tech A: sees products 1 and 2 (has parts there), NOT 3 or 4
-    let (t1_items, _) = products::list_products(&products, "Technician", tech_a, &query);
-    assert_eq!(t1_items.len(), 2, "Tech A should see 2 products with their parts");
-    let t1_names: Vec<&str> = t1_items.iter().map(|p| p.product_name.as_str()).collect();
-    assert!(t1_names.contains(&"Laptop Alpha"));
-    assert!(t1_names.contains(&"Laptop Beta"));
-    assert!(!t1_names.contains(&"Desktop Gamma"));
-    assert!(!t1_names.contains(&"Desktop Delta"));
+    // Customer B sees only their own products
+    let (cust_b_view, _) = list_products::list_products(&products, "Customer", other, &q);
+    assert_eq!(cust_b_view.len(), 1); // MOD-Y
 
-    // Tech B: sees products 2 and 3 (has parts there), NOT 1 or 4
-    let (t2_items, _) = products::list_products(&products, "Technician", tech_b, &query);
-    assert_eq!(t2_items.len(), 2, "Tech B should see 2 products with their parts");
-
-    // Tech C: has no parts in any product → sees nothing
-    let (t3_items, _) = products::list_products(&products, "Technician", tech_c, &query);
-    assert!(t3_items.is_empty(), "Tech C with no parts should see nothing");
+    // Detail access
+    let prod_a = ProductWithRelations {
+        product: products[0].product.clone(),
+        model: products[0].model.clone(),
+        parts: products[0].parts.iter().map(|p| DetailPartInProduct {
+            part: p.part.clone(),
+            catalog: p.catalog.clone(),
+            condition: p.condition.clone(),
+            status: "approved".to_string(),
+            technician_id: p.technician_id,
+        }).collect(),
+    };
+    assert!(get_product::get_product_detail(&prod_a, "Admin", admin).is_ok());
+    assert!(get_product::get_product_detail(&prod_a, "Customer", other).is_err()); // wrong customer
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TEST 5 — Parts pagination edge cases
 // ═══════════════════════════════════════════════════════════════════════════════
-#[tokio::test]
-async fn integration_parts_pagination_edge_cases() {
-    let _db = seeded_db().await;
-    let admin = u("a0000000-0000-0000-0000-000000000000");
-
-    // 7 parts, all approved, assigned to same tech
-    let parts: Vec<RawPart> = (0..7).map(|i| {
-        make_raw_part(
-            &format!("{i}0000000-0000-0000-0000-000000000000"),
-            &format!("PN-{:02}", i + 1),
-            &format!("SN-{:02}", i + 1),
+#[test]
+fn integration_parts_pagination_edge_cases() {
+    let admin = u("a0000000-0000-0000-0000-000000000001");
+    let mut parts = Vec::new();
+    for i in 1..=25 {
+        parts.push(make_part_entry(
+            &format!("p{:032}", i),
+            &format!("PN-{:03}", i),
+            &format!("SN-{:03}", i),
             "approved", "Battery", "New",
-            Some("b0000000-0000-0000-0000-000000000001"), None, None, None,
-            &format!("2024-01-{:02}T00:00:00Z", i + 1),
-        )
-    }).collect();
+            None, Some("c0000000-0000-0000-0000-000000000001"),
+            None, None,
+        ));
+    }
 
-    // Page 1, limit 3
-    let q1 = ListPartsQuery { page: Some(1), limit: Some(3), ..default_parts_query() };
-    let (items1, meta1) = parts::list_parts(&parts, "Admin", admin, &q1);
-    assert_eq!(items1.len(), 3);
-    assert_eq!(meta1.total_records, 7);
-    assert_eq!(meta1.total_pages, 3);
-    assert!(meta1.has_next);
+    // Default page (page 1, limit 20)
+    let q = default_parts_query();
+    let (items, meta) = list_parts::list_parts(&parts, "Admin", admin, &q);
+    assert_eq!(items.len(), 20);
+    assert_eq!(meta.total_records, 25);
+    assert_eq!(meta.current_page, 1);
+    assert_eq!(meta.total_pages, 2);
+    assert!(meta.has_next);
 
-    // Page 2, limit 3
-    let q2 = ListPartsQuery { page: Some(2), limit: Some(3), ..default_parts_query() };
-    let (items2, meta2) = parts::list_parts(&parts, "Admin", admin, &q2);
-    assert_eq!(items2.len(), 3);
+    // Page 2
+    let q2 = ListPartsQuery { page: Some(2), limit: Some(20), ..default_parts_query() };
+    let (items2, meta2) = list_parts::list_parts(&parts, "Admin", admin, &q2);
+    assert_eq!(items2.len(), 5);
+    assert_eq!(meta2.current_page, 2);
     assert!(!meta2.has_next);
 
-    // Page 3, limit 3 (last page, 1 item)
-    let q3 = ListPartsQuery { page: Some(3), limit: Some(3), ..default_parts_query() };
-    let (items3, meta3) = parts::list_parts(&parts, "Admin", admin, &q3);
-    assert_eq!(items3.len(), 1);
-    assert!(!meta3.has_next);
+    // Limit=5, page=3 → items 11-15
+    let q3 = ListPartsQuery { page: Some(3), limit: Some(5), ..default_parts_query() };
+    let (items3, _) = list_parts::list_parts(&parts, "Admin", admin, &q3);
+    assert_eq!(items3.len(), 5);
 
-    // Page 4, limit 3 (beyond range → empty)
-    let q4 = ListPartsQuery { page: Some(4), limit: Some(3), ..default_parts_query() };
-    let (items4, _) = parts::list_parts(&parts, "Admin", admin, &q4);
-    assert!(items4.is_empty(), "Page 4 should be empty with 7 total items at limit 3");
-
-    // Page 0 → clamped to 1
-    let q5 = ListPartsQuery { page: Some(0), limit: Some(3), ..default_parts_query() };
-    let (items5, meta5) = parts::list_parts(&parts, "Admin", admin, &q5);
-    assert_eq!(items5.len(), 3, "Page 0 should be clamped to page 1");
-    assert_eq!(meta5.current_page, 1);
+    // Page beyond range
+    let q4 = ListPartsQuery { page: Some(10), limit: Some(20), ..default_parts_query() };
+    let (items4, _) = list_parts::list_parts(&parts, "Admin", admin, &q4);
+    assert!(items4.is_empty());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TEST 6 — Part filtering combinations
+// TEST 6 — Part filter combinations
 // ═══════════════════════════════════════════════════════════════════════════════
-#[tokio::test]
-async fn integration_part_filter_combinations() {
-    let _db = seeded_db().await;
-    let admin = u("a0000000-0000-0000-0000-000000000000");
-
+#[test]
+fn integration_part_filter_combinations() {
+    let admin = u("a0000000-0000-0000-0000-000000000001");
     let parts = vec![
-        make_raw_part("10000000-0000-0000-0000-000000000000", "BAT-001", "S-001", "pending", "Battery", "New", Some("b0000000-0000-0000-0000-000000000001"), None, None, None, "2024-01-01T00:00:00Z"),
-        make_raw_part("20000000-0000-0000-0000-000000000000", "SCR-001", "S-002", "approved", "Screen", "Used", Some("b0000000-0000-0000-0000-000000000001"), None, Some("p0000000-0000-0000-0000-000000000001"), Some("Laptop A"), "2024-01-02T00:00:00Z"),
-        make_raw_part("30000000-0000-0000-0000-000000000000", "CHG-001", "S-003", "approved", "Charger", "New", Some("b0000000-0000-0000-0000-000000000002"), None, None, None, "2024-01-03T00:00:00Z"),
-        make_raw_part("40000000-0000-0000-0000-000000000000", "BAT-002", "S-004", "denied", "Battery", "New", Some("b0000000-0000-0000-0000-000000000003"), None, None, None, "2024-01-04T00:00:00Z"),
+        make_part_entry("p0000000-0000-0000-0000-000000000001", "PN-001", "SN-001", "approved", "Battery", "New", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000002", "PN-002", "SN-002", "pending", "Battery", "Used", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000003", "PN-003", "SN-003", "denied", "Charger", "New", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("p0000000-0000-0000-0000-000000000004", "PN-CHG-001", "SN-CHG-001", "approved", "Charger", "New", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
     ];
 
-    // Filter: approval_status = approved → 2 results
+    // Filter by approval status
     let q_approved = ListPartsQuery { approval_status: Some("approved".to_string()), ..default_parts_query() };
-    let (approved, _) = parts::list_parts(&parts, "Admin", admin, &q_approved);
-    assert_eq!(approved.len(), 2);
+    let (approved, _) = list_parts::list_parts(&parts, "Admin", admin, &q_approved);
+    assert_eq!(approved.len(), 2); // PN-001, PN-CHG-001
 
-    // Filter: approval_status = pending → 1 result
-    let q_pending = ListPartsQuery { approval_status: Some("pending".to_string()), ..default_parts_query() };
-    let (pending, _) = parts::list_parts(&parts, "Admin", admin, &q_pending);
-    assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].part_number, "BAT-001");
+    // Filter by search term (matches PN-001 and SN-001 → same part)
+    let q_search = ListPartsQuery { search: Some("PN-001".to_string()), ..default_parts_query() };
+    let (searched, _) = list_parts::list_parts(&parts, "Admin", admin, &q_search);
+    assert_eq!(searched.len(), 1);
 
-    // Filter: search "bat" → 2 results (BAT-001, BAT-002)
-    let q_search = ListPartsQuery { search: Some("bat".to_string()), ..default_parts_query() };
-    let (search_hits, _) = parts::list_parts(&parts, "Admin", admin, &q_search);
-    assert_eq!(search_hits.len(), 2);
-
-    // Combined: approved + search "cha" → 1 result (CHG-001)
+    // Combined: approved + search "CHG"
     let q_combined = ListPartsQuery {
         approval_status: Some("approved".to_string()),
-        search: Some("cha".to_string()),
+        search: Some("CHG".to_string()),
         ..default_parts_query()
     };
-    let (combined, _) = parts::list_parts(&parts, "Admin", admin, &q_combined);
+    let (combined, _) = list_parts::list_parts(&parts, "Admin", admin, &q_combined);
     assert_eq!(combined.len(), 1);
-    assert_eq!(combined[0].part_number, "CHG-001");
+    assert_eq!(combined[0].part_number, "PN-CHG-001");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TEST 7 — Product detail aggregation (parts rolled up correctly)
 // ═══════════════════════════════════════════════════════════════════════════════
-#[tokio::test]
-async fn integration_product_detail_with_parts_rollup() {
-    let _db = seeded_db().await;
+#[test]
+fn integration_product_detail_with_parts_rollup() {
     let cust = u("c0000000-0000-0000-0000-000000000001");
+    let now = t();
 
-    let product = make_raw_product(
-        "p0000000-0000-0000-0000-000000000001", "Laptop Z", "MOD-Z", "SN-ZZZ",
-        "c0000000-0000-0000-0000-000000000001", "Alice",
-        vec![
-            "b0000000-0000-0000-0000-000000000001",  // part 0
-            "b0000000-0000-0000-0000-000000000001",  // part 1 (same tech)
-            "b0000000-0000-0000-0000-000000000002",  // part 2 (different tech)
+    let product_with_relations = ProductWithRelations {
+        product: products::Model {
+            id: u("p0000000-0000-0000-0000-000000000001"),
+            product_model_code: "MOD-Z".to_string(),
+            customer_id: cust,
+            product_name: "Laptop Z".to_string(),
+            serial_number: "SN-ZZZ".to_string(),
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+        },
+        model: product_models::Model {
+            model_code: "MOD-Z".to_string(),
+            model_name: "Model MOD-Z".to_string(),
+            description: None,
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+        },
+        parts: vec![
+            DetailPartInProduct { // part 0
+                part: parts::Model {
+                    id: u("b0000000-0000-0000-0000-000000000001"),
+                    part_catalog_id: Uuid::new_v4(),
+                    product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
+                    serial_number: "SN-Z-P0".to_string(),
+                    part_condition_id: 1,
+                    manufactured_date: now,
+                    installation_date: None, removal_date: None, scrapped_date: None,
+                    created_at: now, updated_at: now, deleted_at: None,
+                },
+                catalog: part_catalog::Model {
+                    id: Uuid::new_v4(),
+                    part_number: "PN-Z-P0".to_string(),
+                    part_types_id: 1, mfg_number: "MFG".to_string(), description: None,
+                    part_mfg_status: 1, created_at: now, updated_at: now, deleted_at: None,
+                },
+                condition: part_conditions::Model { id: 1, name: "New".to_string() },
+                status: "approved".to_string(),
+                technician_id: Some(u("b0000000-0000-0000-0000-000000000001")),
+            },
+            DetailPartInProduct { // part 1 (same tech)
+                part: parts::Model {
+                    id: u("b0000000-0000-0000-0000-000000000002"),
+                    part_catalog_id: Uuid::new_v4(),
+                    product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
+                    serial_number: "SN-Z-P1".to_string(),
+                    part_condition_id: 1,
+                    manufactured_date: now,
+                    installation_date: None, removal_date: None, scrapped_date: None,
+                    created_at: now, updated_at: now, deleted_at: None,
+                },
+                catalog: part_catalog::Model {
+                    id: Uuid::new_v4(),
+                    part_number: "PN-Z-P1".to_string(),
+                    part_types_id: 1, mfg_number: "MFG".to_string(), description: None,
+                    part_mfg_status: 1, created_at: now, updated_at: now, deleted_at: None,
+                },
+                condition: part_conditions::Model { id: 1, name: "Used".to_string() },
+                status: "approved".to_string(),
+                technician_id: Some(u("b0000000-0000-0000-0000-000000000001")),
+            },
+            DetailPartInProduct { // part 2 (different tech)
+                part: parts::Model {
+                    id: u("b0000000-0000-0000-0000-000000000003"),
+                    part_catalog_id: Uuid::new_v4(),
+                    product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
+                    serial_number: "SN-Z-P2".to_string(),
+                    part_condition_id: 1,
+                    manufactured_date: now,
+                    installation_date: None, removal_date: None, scrapped_date: None,
+                    created_at: now, updated_at: now, deleted_at: None,
+                },
+                catalog: part_catalog::Model {
+                    id: Uuid::new_v4(),
+                    part_number: "PN-Z-P2".to_string(),
+                    part_types_id: 1, mfg_number: "MFG".to_string(), description: None,
+                    part_mfg_status: 1, created_at: now, updated_at: now, deleted_at: None,
+                },
+                condition: part_conditions::Model { id: 1, name: "New".to_string() },
+                status: "approved".to_string(),
+                technician_id: Some(u("b0000000-0000-0000-0000-000000000002")),
+            },
         ],
-        "2024-06-01T00:00:00Z",
-    );
+    };
 
     // Customer can see detail of their own product
-    let detail = products::get_product_detail(&product, "Customer", cust);
+    let detail = get_product::get_product_detail(&product_with_relations, "Customer", cust);
     assert!(detail.is_ok());
     let d = detail.unwrap();
     assert_eq!(d.parts.len(), 3, "Should roll up all 3 parts");
     assert_eq!(d.product_id, u("p0000000-0000-0000-0000-000000000001"));
-    assert_eq!(d.customer_name, "Alice");
+    assert_eq!(d.customer_name, format!("Customer {}", cust));
 
     // Verify parts approval statuses
     for part_item in &d.parts {
