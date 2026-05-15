@@ -47,10 +47,17 @@ async fn setup_app_with_db(db: DatabaseConnection) -> Router {
     let mut templates = std::collections::HashMap::new();
     templates.insert("verification_email.html".to_string(), "Template content".to_string());
 
+    // Lazy MongoDB client — doesn't connect until a command is issued
+    let mongo_client = mongodb::Client::with_uri_str("mongodb://localhost:27017")
+        .await
+        .expect("Failed to create MongoDB client");
+    let mongodb_database = mongo_client.database("zent_test");
+
     let state = AppState::new(
         b"integration_test_secret_for_tokens",
         LookupTables::empty(),
         db.clone(),
+        mongodb_database,
         None,
         None,
         templates,
@@ -120,6 +127,8 @@ async fn test_register_existing_pending_user() {
         account_status: Set(1), // Pending
         role_id: Set(1),
         province: Set(None),
+        fcm_token: Set(None),
+        installation_id: Set(None),
         created_at: Set(chrono::Utc::now()),
         updated_at: Set(chrono::Utc::now()),
         deleted_at: Set(None),
@@ -166,6 +175,8 @@ async fn test_register_existing_active_user_conflict() {
         account_status: Set(2), // Active
         role_id: Set(1),
         province: Set(None),
+        fcm_token: Set(None),
+        installation_id: Set(None),
         created_at: Set(chrono::Utc::now()),
         updated_at: Set(chrono::Utc::now()),
         deleted_at: Set(None),

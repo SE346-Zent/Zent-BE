@@ -25,6 +25,15 @@ pub async fn list(
     State(state): State<AppState>,
     Query(query): Query<NotificationListQuery>,
 ) -> Result<Json<ApiResponse<Vec<NotificationListItem>>>, AppError> {
+
+    if query.page <= 0 {
+        return Err(AppError::BadRequest(anyhow::anyhow!("Page must be greater than 0")));
+    }
+
+    if query.limit <= 0 {
+        return Err(AppError::BadRequest(anyhow::anyhow!("Limit must be greater than 0")));
+    }
+
     // 1. Fetch all notifications for this user from MongoDB
     let collection = state.mongodb
         .collection::<mongodb::bson::Document>("notifications");
