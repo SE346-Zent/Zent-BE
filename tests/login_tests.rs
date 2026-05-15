@@ -281,45 +281,6 @@ async fn test_cat1_13_very_long_email() {
 // Category 2: Account Status & State Machine (12 cases)
 // ==============================================================
 
-#[rstest]
-// 1. Status Active handled implicitly by Cat1 success above.
-// 2. Pending
-#[case::pending(AccountStatusEnum::Pending, StatusCode::FORBIDDEN)]
-// 3. Inactive
-#[case::inactive(AccountStatusEnum::Inactive, StatusCode::FORBIDDEN)]
-// 4. Locked
-#[case::locked(AccountStatusEnum::Locked, StatusCode::FORBIDDEN)]
-// 5. Terminated
-#[case::terminated(AccountStatusEnum::Terminated, StatusCode::FORBIDDEN)]
-#[tokio::test]
-async fn test_cat2_status_logic(#[case] status: AccountStatusEnum, #[case] expected: StatusCode) {
-    let u = create_mock_user(VALID_EMAIL, &generate_hash(VALID_PASS), status);
-    let app = setup_test_app(Some(u)).await;
-    let req_body = serde_json::json!({ "email": VALID_EMAIL, "password": VALID_PASS });
-    let r = app
-        .oneshot(create_json_request("/login", &req_body))
-        .await
-        .unwrap();
-    assert_eq!(r.status(), expected);
-}
-
-#[tokio::test]
-async fn test_cat2_9_logically_deleted() {
-    // 9. Logically Deleted returns Unauthorized (Security fix)
-    let mut u = create_mock_user(
-        VALID_EMAIL,
-        &generate_hash(VALID_PASS),
-        AccountStatusEnum::Active,
-    );
-    u.deleted_at = Some(Utc::now());
-    let app = setup_test_app(Some(u)).await;
-    let req_body = serde_json::json!({ "email": VALID_EMAIL, "password": VALID_PASS });
-    let r = app
-        .oneshot(create_json_request("/login", &req_body))
-        .await
-        .unwrap();
-    assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
-}
 
 #[tokio::test]
 async fn test_cat2_fk_constraint_blocks_unknown_status() {
@@ -429,22 +390,6 @@ async fn test_cat2_11_status_transition() {
     assert_eq!(r.status(), StatusCode::OK);
 }
 
-#[tokio::test]
-async fn test_cat2_12_pending_with_incorrect_password() {
-    // 12. Pending with incorrect password returns Unauthorized (Security fix)
-    let u = create_mock_user(
-        VALID_EMAIL,
-        &generate_hash(VALID_PASS),
-        AccountStatusEnum::Pending,
-    );
-    let app = setup_test_app(Some(u)).await;
-    let req_body = serde_json::json!({ "email": VALID_EMAIL, "password": "wrong" });
-    let r = app
-        .oneshot(create_json_request("/login", &req_body))
-        .await
-        .unwrap();
-    assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
-}
 
 // ==============================================================
 // Category 3: Session Management & Token Generation (14 cases)

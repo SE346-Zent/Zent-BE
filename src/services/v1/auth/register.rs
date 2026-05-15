@@ -57,3 +57,91 @@ pub fn decide_register(
         otp_code,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn create_mock_user(status: i32) -> users::Model {
+        users::Model {
+            id: Uuid::new_v4(),
+            full_name: "Test User".to_string(),
+            email: "test@example.com".to_string(),
+            password_hash: "hash".to_string(),
+            phone_number: "+1234567890".to_string(),
+            account_status: status,
+            role_id: 1,
+            province: None,
+            fcm_token: None,
+            installation_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        }
+    }
+
+    fn create_mock_request() -> UserRegistrationRequest {
+        UserRegistrationRequest {
+            full_name: "New User".to_string(),
+            email: "new@example.com".to_string(),
+            password: "password123".to_string(),
+            phone_number: "123456789".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_decide_register_new_user() {
+        let req = create_mock_request();
+        let result = decide_register(
+            req.clone(),
+            None,
+            1, // pending_status_id
+            1, // customer_role_id
+            "hashed".to_string(),
+        );
+
+        assert!(result.is_ok());
+        let effect = result.unwrap();
+        assert_eq!(effect.email, req.email);
+        assert_eq!(effect.account_status, 1);
+        assert!(effect.is_new);
+    }
+
+    #[test]
+    fn test_decide_register_existing_pending() {
+        let req = create_mock_request();
+        let user = create_mock_user(1); // pending
+        
+        let result = decide_register(
+            req.clone(),
+            Some(&user),
+            1, // pending_status_id
+            1, // customer_role_id
+            "hashed".to_string(),
+        );
+
+        assert!(result.is_ok());
+        let effect = result.unwrap();
+        assert_eq!(effect.user_id, user.id);
+        assert_eq!(effect.email, req.email);
+        assert_eq!(effect.account_status, 1);
+        assert!(!effect.is_new);
+    }
+
+    #[test]
+    fn test_decide_register_existing_active() {
+        let req = create_mock_request();
+        let user = create_mock_user(2); // active
+        
+        let result = decide_register(
+            req.clone(),
+            Some(&user),
+            1, // pending_status_id
+            1, // customer_role_id
+            "hashed".to_string(),
+        );
+
+        assert!(matches!(result, Err(AppError::Conflict(_))));
+    }
+}

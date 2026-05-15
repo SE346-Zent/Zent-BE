@@ -81,3 +81,149 @@ pub fn decide_login(
         },
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use uuid::Uuid;
+    use jsonwebtoken::EncodingKey;
+    use crate::model::responses::auth::login_response::AccountStatusEnum;
+
+    fn get_mock_key() -> EncodingKey {
+        EncodingKey::from_secret(b"secret")
+    }
+
+    fn create_mock_user(status: AccountStatusEnum, deleted: bool) -> users::Model {
+        users::Model {
+            id: Uuid::new_v4(),
+            full_name: "Test User".to_string(),
+            email: "test@example.com".to_string(),
+            password_hash: "hash".to_string(),
+            phone_number: "+1234567890".to_string(),
+            account_status: i32::from(status),
+            role_id: 1,
+            province: None,
+            fcm_token: None,
+            installation_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: if deleted { Some(Utc::now()) } else { None },
+        }
+    }
+
+    #[test]
+    fn test_decide_login_success() {
+        let user = create_mock_user(AccountStatusEnum::Active, false);
+        let key = get_mock_key();
+        
+        let result = decide_login(
+            &user,
+            true, // valid password
+            AccessTokenDefaultTTLSeconds(900),
+            SessionDefaultTTLSeconds(3600),
+            &key,
+        );
+
+        assert!(result.is_ok());
+        let effect = result.unwrap();
+        assert_eq!(effect.user_id, user.id);
+        assert_eq!(effect.response_data.user.email, user.email);
+    }
+
+    #[test]
+    fn test_decide_login_invalid_password() {
+        let user = create_mock_user(AccountStatusEnum::Active, false);
+        let key = get_mock_key();
+        
+        let result = decide_login(
+            &user,
+            false, // invalid password
+            AccessTokenDefaultTTLSeconds(900),
+            SessionDefaultTTLSeconds(3600),
+            &key,
+        );
+
+        assert!(matches!(result, Err(AppError::Unauthorized(_))));
+    }
+
+    #[test]
+    fn test_decide_login_deleted_user() {
+        let user = create_mock_user(AccountStatusEnum::Active, true); // logically deleted
+        let key = get_mock_key();
+        
+        let result = decide_login(
+            &user,
+            true,
+            AccessTokenDefaultTTLSeconds(900),
+            SessionDefaultTTLSeconds(3600),
+            &key,
+        );
+
+        assert!(matches!(result, Err(AppError::Unauthorized(_))));
+    }
+
+    #[test]
+    fn test_decide_login_status_pending() {
+        let user = create_mock_user(AccountStatusEnum::Pending, false);
+        let key = get_mock_key();
+        
+        let result = decide_login(
+            &user,
+            true,
+            AccessTokenDefaultTTLSeconds(900),
+            SessionDefaultTTLSeconds(3600),
+            &key,
+        );
+
+        assert!(matches!(result, Err(AppError::Forbidden(_))));
+    }
+
+    #[test]
+    fn test_decide_login_status_inactive() {
+        let user = create_mock_user(AccountStatusEnum::Inactive, false);
+        let key = get_mock_key();
+        
+        let result = decide_login(
+            &user,
+            true,
+            AccessTokenDefaultTTLSeconds(900),
+            SessionDefaultTTLSeconds(3600),
+            &key,
+        );
+
+        assert!(matches!(result, Err(AppError::Forbidden(_))));
+    }
+
+    #[test]
+    fn test_decide_login_status_locked() {
+        let user = create_mock_user(AccountStatusEnum::Locked, false);
+        let key = get_mock_key();
+        
+        let result = decide_login(
+            &user,
+            true,
+            AccessTokenDefaultTTLSeconds(900),
+            SessionDefaultTTLSeconds(3600),
+            &key,
+        );
+
+        assert!(matches!(result, Err(AppError::Forbidden(_))));
+    }
+
+    #[test]
+    fn test_decide_login_status_terminated() {
+        let user = create_mock_user(AccountStatusEnum::Terminated, false);
+        let key = get_mock_key();
+        
+        let result = decide_login(
+            &user,
+            true,
+            AccessTokenDefaultTTLSeconds(900),
+            SessionDefaultTTLSeconds(3600),
+            &key,
+        );
+
+        assert!(matches!(result, Err(AppError::Forbidden(_))));
+    }
+}
