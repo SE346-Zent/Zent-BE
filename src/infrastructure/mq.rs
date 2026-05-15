@@ -9,7 +9,7 @@ pub mod notification;
 
 /// Append `heartbeat=60` to the AMQP URL if not already present.
 /// Lapin 2.x reads heartbeat from the URI query parameter.
-fn ensure_heartbeat(url: &str) -> String {
+pub(crate) fn ensure_heartbeat(url: &str) -> String {
     let heartbeat_param = "heartbeat=60";
     if url.contains("heartbeat=") {
         url.to_string()

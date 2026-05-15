@@ -218,7 +218,7 @@ impl FcmCredentials {
                 "data": {
                     "notificationId": msg.notification_id.to_string(),
                     "userId": msg.user_id.to_string(),
-                    "payload": msg.data,
+                    "payload": serde_json::to_string(&msg.data).unwrap_or_default(),
                 },
             }
         });

@@ -118,9 +118,19 @@ pub async fn create(
     if let Some(rmq) = rabbitmq.as_ref() {
         let producer = crate::infrastructure::mq::work_order::WorkOrderProducer::new(Some(rmq.clone()));
         let payload = serde_json::json!({ "id": wo_model.id });
-        if let Ok(payload_bytes) = serde_json::to_vec(&payload) {
-            let _ = producer.publish_created(&payload_bytes).await;
+        match serde_json::to_vec(&payload) {
+            Ok(payload_bytes) => {
+                tracing::info!("Publishing WO {} to MQ for auto-assignment", wo_model.id);
+                if let Err(e) = producer.publish_created(&payload_bytes).await {
+                    tracing::warn!("Failed to publish WO {} to MQ: {} — auto-assign will not run", wo_model.id, e);
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to serialize WO {} for MQ: {} — auto-assign will not run", wo_model.id, e);
+            }
         }
+    } else {
+        tracing::warn!("RabbitMQ not available — WO {} will not be auto-assigned", wo_model.id);
     }
 
     let status_text = "Pending assignment".to_string();

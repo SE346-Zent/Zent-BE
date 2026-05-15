@@ -86,11 +86,16 @@ pub async fn start_work_order_consumer(state: AppState) {
                                         if let Ok(id) = uuid::Uuid::parse_str(id_str) {
                                             info!("Processing auto-assign for WO {}", id);
                                             if let Ok(Some(wo)) = work_orders_ent::Entity::find_by_id(id).one(db.as_ref()).await {
-                                                let _ = crate::handlers::v1::work_orders::try_auto_assign_single(
+                                                let success = crate::handlers::v1::work_orders::try_auto_assign_single(
                                                     &state,
                                                     db.clone(),
                                                     wo,
                                                 ).await;
+                                                if !success {
+                                                    warn!("Auto-assign did not complete for WO {} — see prior log lines for reason", id);
+                                                }
+                                            } else {
+                                                warn!("WO {} not found in database — skipping auto-assign (may have been deleted)", id);
                                             }
                                         }
                                     }
