@@ -36,6 +36,8 @@ COPY --from=builder /app/target/release/zent-be /usr/local/bin/zent-be
 COPY --from=builder /app/target/release/seeder /usr/local/bin/seeder
 # Copy the resources
 COPY --from=builder /app/seeder/resources/ /app/resources/
+COPY --from=builder /app/src/infrastructure/lua_script/ /app/src/infrastructure/lua_script/
+COPY --from=builder /app/templates/ /app/templates/
 
 EXPOSE 3000
 CMD ["zent-be"]

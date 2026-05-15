@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 use crate::core::errors::AppError;
-use super::is_valid_category_id;
 
 /// Toggle OS delivery for a single category.
 ///
-/// Returns `Err` when the category id does not exist.
+/// Returns `Err` when the category id is not allowed for the user's role.
 pub fn update_preference(
     category_id: i32,
     os_enabled: bool,
     user_prefs: &mut HashMap<i32, bool>,
+    allowed_ids: &[i32],
 ) -> Result<(), AppError> {
-    if !is_valid_category_id(category_id) {
-        return Err(AppError::BadRequest(format!("Invalid notification category ID: {}", category_id)));
+    if !allowed_ids.contains(&category_id) {
+        return Err(AppError::BadRequest(format!("Invalid notification category ID for your role: {}", category_id)));
     }
 
     user_prefs.insert(category_id, os_enabled);
@@ -25,7 +25,8 @@ mod tests {
     /// Helper: create a fresh map and apply one update.
     fn apply(cat: i32, enabled: bool) -> Result<HashMap<i32, bool>, AppError> {
         let mut map = HashMap::new();
-        update_preference(cat, enabled, &mut map)?;
+        let all_ids: Vec<i32> = (1..=4).collect();
+        update_preference(cat, enabled, &mut map, &all_ids)?;
         Ok(map)
     }
 
@@ -47,7 +48,7 @@ mod tests {
 
     #[test]
     fn test_all_valid_ids_accepted() {
-        for id in 1..=8 {
+        for id in 1..=4 {
             let result = apply(id, id % 2 == 0).unwrap();
             assert_eq!(result.len(), 1);
             assert_eq!(*result.get(&id).unwrap(), id % 2 == 0);
@@ -76,9 +77,9 @@ mod tests {
 
     #[test]
     fn test_id_just_above_max_rejected() {
-        let err = apply(9, true).unwrap_err();
+        let err = apply(5, true).unwrap_err();
         match err {
-            AppError::BadRequest(msg) => assert!(msg.contains("9")),
+            AppError::BadRequest(msg) => assert!(msg.contains("5")),
             _ => panic!("Expected BadRequest"),
         }
     }
@@ -115,8 +116,9 @@ mod tests {
     #[test]
     fn test_overwrite_same_category_twice() {
         let mut prefs = HashMap::new();
-        assert!(update_preference(2, true, &mut prefs).is_ok());
-        assert!(update_preference(2, false, &mut prefs).is_ok());
+        let all_ids: Vec<i32> = (1..=4).collect();
+        assert!(update_preference(2, true, &mut prefs, &all_ids).is_ok());
+        assert!(update_preference(2, false, &mut prefs, &all_ids).is_ok());
         assert_eq!(prefs.len(), 1);
         assert!(!prefs.get(&2).copied().unwrap_or(true));
     }
@@ -124,9 +126,10 @@ mod tests {
     #[test]
     fn test_overwrite_preserves_other_categories() {
         let mut prefs = HashMap::new();
-        update_preference(1, false, &mut prefs).unwrap();
-        update_preference(2, false, &mut prefs).unwrap();
-        update_preference(1, true, &mut prefs).unwrap(); // re-enable
+        let all_ids: Vec<i32> = (1..=4).collect();
+        update_preference(1, false, &mut prefs, &all_ids).unwrap();
+        update_preference(2, false, &mut prefs, &all_ids).unwrap();
+        update_preference(1, true, &mut prefs, &all_ids).unwrap(); // re-enable
         assert_eq!(prefs.len(), 2);
         assert!(prefs.get(&1).copied().unwrap_or(false));
         assert!(!prefs.get(&2).copied().unwrap_or(true));
@@ -135,23 +138,25 @@ mod tests {
     #[test]
     fn test_three_state_flip() {
         let mut prefs = HashMap::new();
-        update_preference(5, true, &mut prefs).unwrap();
-        update_preference(5, false, &mut prefs).unwrap();
-        update_preference(5, true, &mut prefs).unwrap();
-        assert!(prefs.get(&5).copied().unwrap_or(false));
+        let all_ids: Vec<i32> = (1..=4).collect();
+        update_preference(3, true, &mut prefs, &all_ids).unwrap();
+        update_preference(3, false, &mut prefs, &all_ids).unwrap();
+        update_preference(3, true, &mut prefs, &all_ids).unwrap();
+        assert!(prefs.get(&3).copied().unwrap_or(false));
     }
 
     #[test]
     fn test_insert_many_categories() {
         let mut prefs = HashMap::new();
-        for id in 1..=8 {
-            update_preference(id, id > 4, &mut prefs).unwrap();
-        }
-        assert_eq!(prefs.len(), 8);
+        let all_ids: Vec<i32> = (1..=4).collect();
         for id in 1..=4 {
+            update_preference(id, id > 2, &mut prefs, &all_ids).unwrap();
+        }
+        assert_eq!(prefs.len(), 4);
+        for id in 1..=2 {
             assert!(!prefs.get(&id).copied().unwrap_or(true));
         }
-        for id in 5..=8 {
+        for id in 3..=4 {
             assert!(prefs.get(&id).copied().unwrap_or(false));
         }
     }
@@ -161,9 +166,10 @@ mod tests {
     #[test]
     fn test_error_does_not_mutate_map() {
         let mut prefs = HashMap::new();
+        let all_ids: Vec<i32> = (1..=4).collect();
         prefs.insert(1, true);
         let original = prefs.clone();
-        let err = update_preference(99, false, &mut prefs).unwrap_err();
+        let err = update_preference(99, false, &mut prefs, &all_ids).unwrap_err();
         assert!(matches!(err, AppError::BadRequest(_)));
         assert_eq!(prefs, original, "Map mutated despite error");
     }
@@ -171,7 +177,8 @@ mod tests {
     #[test]
     fn test_error_on_zero_does_not_mutate_empty_map() {
         let mut prefs: HashMap<i32, bool> = HashMap::new();
-        let _ = update_preference(0, true, &mut prefs).unwrap_err();
+        let all_ids: Vec<i32> = (1..=4).collect();
+        let _ = update_preference(0, true, &mut prefs, &all_ids).unwrap_err();
         assert!(prefs.is_empty());
     }
 
@@ -180,14 +187,16 @@ mod tests {
     #[test]
     fn test_first_category_id_works() {
         let mut prefs = HashMap::new();
-        update_preference(1, false, &mut prefs).unwrap();
+        let all_ids: Vec<i32> = (1..=4).collect();
+        update_preference(1, false, &mut prefs, &all_ids).unwrap();
         assert!(!prefs.get(&1).copied().unwrap_or(true));
     }
 
     #[test]
     fn test_last_category_id_works() {
         let mut prefs = HashMap::new();
-        update_preference(8, false, &mut prefs).unwrap();
-        assert!(!prefs.get(&8).copied().unwrap_or(true));
+        let all_ids: Vec<i32> = (1..=4).collect();
+        update_preference(4, false, &mut prefs, &all_ids).unwrap();
+        assert!(!prefs.get(&4).copied().unwrap_or(true));
     }
 }

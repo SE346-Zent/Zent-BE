@@ -41,7 +41,7 @@ pub async fn refresh_token_handler(
         .one(db.as_ref()).await?
         .ok_or_else(|| AppError::Unauthorized("Invalid token".to_string()))?;
 
-    let client = valkey_client.ok_or_else(|| AppError::Internal(anyhow::anyhow!("Valkey missing")))?;
+    let client = valkey_client.ok_or_else(|| AppError::ServiceUnavailable("Session service temporarily unavailable. Please try again later.".to_string()))?;
     let mut conn = client.get_connection().await?;
     let whitelist_key = format!("whitelist:session:{}", session.id);
     let whitelisted: Option<String> = conn.get(&whitelist_key).await?;

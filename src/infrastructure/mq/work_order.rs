@@ -1,8 +1,10 @@
 use lapin::{
     options::{ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions, BasicPublishOptions},
     types::FieldTable,
-    BasicProperties, ExchangeKind,
+    BasicProperties, ExchangeKind, ConnectionProperties,
 };
+use tracing::warn;
+use crate::core::config::AppConfig;
 use std::sync::Arc;
 
 pub const WORK_ORDER_EXCHANGE: &str = "work_order_exchange";
@@ -80,19 +82,47 @@ impl WorkOrderProducer {
             None => return Ok(()),
         };
 
-        let channel = conn.create_channel().await?;
-        setup_work_order_topology(&channel).await?;
+        // Fast path: try with the shared connection
+        match publish_created_on(conn, payload).await {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                warn!("Work order publish on shared connection failed: {}. Retrying with fresh connection...", e);
+            }
+        }
 
-        let confirm = channel.basic_publish(
-            WORK_ORDER_EXCHANGE,
-            WORK_ORDER_CREATED_ROUTING_KEY,
-            BasicPublishOptions::default(),
-            payload,
-            BasicProperties::default().with_delivery_mode(2),
-        ).await?;
+        // Slow path: shared connection is stale (e.g. after consumer reconnect).
+        // Create a fresh connection for this one publish.
+        let url = super::ensure_heartbeat(&AppConfig::get().rabbitmq_url);
+        let fresh_conn = lapin::Connection::connect(&url, ConnectionProperties::default()).await
+            .map_err(|e| anyhow::anyhow!("Failed to create fresh connection: {}", e))?;
+        publish_created_on(&fresh_conn, payload).await
+    }
+}
 
-        confirm.await?;
-        let _ = channel.close(200, "OK").await;
-        Ok(())
+async fn publish_created_on(conn: &lapin::Connection, payload: &[u8]) -> Result<(), anyhow::Error> {
+    let channel = conn.create_channel().await?;
+    setup_work_order_topology(&channel).await?;
+
+    let confirm = channel.basic_publish(
+        WORK_ORDER_EXCHANGE,
+        WORK_ORDER_CREATED_ROUTING_KEY,
+        BasicPublishOptions::default(),
+        payload,
+        BasicProperties::default().with_delivery_mode(2),
+    ).await?;
+
+    match confirm.await {
+        Ok(lapin::publisher_confirm::Confirmation::Ack(_)) | Ok(lapin::publisher_confirm::Confirmation::NotRequested) => {
+            let _ = channel.close(200, "OK").await;
+            Ok(())
+        }
+        Ok(lapin::publisher_confirm::Confirmation::Nack(_)) => {
+            let _ = channel.close(200, "OK").await;
+            Err(anyhow::anyhow!("Broker returned Nack"))
+        }
+        Err(err) => {
+            let _ = channel.close(200, "OK").await;
+            Err(err.into())
+        }
     }
 }

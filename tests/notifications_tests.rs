@@ -1,11 +1,10 @@
 use axum::{
     body::Body,
     http::{self, Request, StatusCode},
-    routing::{get, post},
+    routing::get,
     Router,
 };
 use chrono::{DateTime, Utc};
-// Migrator not needed — handlers use unimplemented!()
 use sea_orm::{Database, DatabaseConnection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -14,6 +13,9 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 use uuid::Uuid;
+
+use zent_be::core::lookup_tables::LookupTables;
+use zent_be::core::state::{AccessTokenDefaultTTLSeconds, AppState, SessionDefaultTTLSeconds};
 
 // ---------------------------------------------------------
 // Infrastructure Mocking
@@ -189,59 +191,36 @@ impl MockMqProducer {
 }
 
 // ---------------------------------------------------------
-// Categories
-// ---------------------------------------------------------
-
-pub const NOTIFICATION_CATEGORIES: &[(&str, &str)] = &[
-    ("work_order_assigned", "Work Order Assigned"),
-    ("work_order_started", "Work Order Started"),
-    ("work_order_completed", "Work Order Completed"),
-    ("work_order_rejected", "Work Order Rejected"),
-    ("work_order_refusal_approved", "Refusal Approved"),
-    ("work_order_scheduled", "Work Order Scheduled"),
-    ("account_verified", "Account Verified"),
-    ("account_locked", "Account Locked"),
-];
-
-// ---------------------------------------------------------
-// Test State
-// ---------------------------------------------------------
-
-#[derive(Clone)]
-pub struct NotificationTestState {
-    pub notification_repo: MockNotificationRepo,
-    pub outbox_repo: MockOutboxRepo,
-    pub mq_producer: MockMqProducer,
-}
-
-// ---------------------------------------------------------
-// Router
+// Router — uses real AppState with lazy MongoDB
 // ---------------------------------------------------------
 
 async fn setup_test_app(_db: DatabaseConnection) -> Router {
     let _ = tracing_subscriber::fmt::try_init();
-    // Skip DB migrations entirely — notification handlers use unimplemented!()
-    // and don't touch the database. Pure-logic tests (3-5) use mock repos directly.
 
-    let state = NotificationTestState {
-        notification_repo: MockNotificationRepo::new(),
-        outbox_repo: MockOutboxRepo::new(),
-        mq_producer: MockMqProducer::new(),
-    };
+    let mongodb_database = mongodb::Client::with_uri_str("mongodb://localhost:27017")
+        .await
+        .expect("Failed to create MongoDB client")
+        .database("zent_test");
+
+    let state = AppState::new(
+        b"test_secret",
+        LookupTables::empty(),
+        _db,
+        mongodb_database,
+        None,  // valkey
+        None,  // rabbitmq
+        HashMap::new(),
+        AccessTokenDefaultTTLSeconds(900),
+        SessionDefaultTTLSeconds(3600),
+    );
 
     Router::new()
         .route("/api/v1/notifications/preferences",
-            get(zent_be::handlers::v1::notifications::get_preferences)
-                .put(zent_be::handlers::v1::notifications::update_preferences),
+            get(zent_be::handlers::v1::notifications::get_preferences::get_preferences)
+                .put(zent_be::handlers::v1::notifications::update_preferences::update_preferences),
         )
         .route("/api/v1/notifications",
-            get(zent_be::handlers::v1::notifications::list),
-        )
-        .route("/api/v1/notifications/outbox/sync",
-            post(zent_be::handlers::v1::notifications::sync_outbox),
-        )
-        .route("/api/v1/notifications/categories",
-            get(zent_be::handlers::v1::notifications::list_categories),
+            get(zent_be::handlers::v1::notifications::list::list),
         )
         .with_state(state)
 }
@@ -289,7 +268,7 @@ async fn test_preferences_and_categories_workflow() {
     let body: Value = serde_json::from_slice(&axum::body::to_bytes(r.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(body["statusCode"], 200);
     let prefs = body["data"].as_array().unwrap();
-    assert_eq!(prefs.len(), NOTIFICATION_CATEGORIES.len());
+    assert_eq!(prefs.len(), zent_be::services::v1::notifications::NOTIFICATION_CATEGORIES.len());
     for p in prefs {
         assert!(p["categoryId"].is_number());
         assert!(p["categoryName"].is_string());
@@ -318,17 +297,6 @@ async fn test_preferences_and_categories_workflow() {
         &json!({"categoryId": 1}))).await.unwrap();
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
 
-    // ── GET /categories ───────────────────────────────────────────
-    let r = app.clone().oneshot(empty_req(http::Method::GET, "/api/v1/notifications/categories")).await.unwrap();
-    assert_eq!(r.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(&axum::body::to_bytes(r.into_body(), usize::MAX).await.unwrap()).unwrap();
-    let cats = body["data"].as_array().unwrap();
-    assert_eq!(cats.len(), NOTIFICATION_CATEGORIES.len());
-    for c in cats {
-        assert!(c["id"].is_number());
-        assert!(c["name"].is_string());
-        assert!(c["slug"].is_string());
-    }
 }
 
 // =====================================================================

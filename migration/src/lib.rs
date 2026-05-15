@@ -21,6 +21,11 @@ mod m20260509_100000_refactor_state_history;
 mod m20260510_100000_add_checklist;
 mod m20260511_100000_drop_checklist_tables;
 mod m20260512_100000_drop_overtimes;
+mod m20260512_164300_add_fcm_token_and_outbox;
+mod m20260513_100000_add_about_to_start_notified;
+mod m20260514_000000_extend_outbox_records;
+mod m20260515_000000_part_audit_log;mod m20260514_153057_update_internet_time_image;
+
 
 pub struct Migrator;
 
@@ -49,6 +54,11 @@ impl MigratorTrait for Migrator {
             Box::new(m20260510_100000_add_checklist::Migration),
             Box::new(m20260511_100000_drop_checklist_tables::Migration),
             Box::new(m20260512_100000_drop_overtimes::Migration),
+            Box::new(m20260512_164300_add_fcm_token_and_outbox::Migration),
+            Box::new(m20260513_100000_add_about_to_start_notified::Migration),
+            Box::new(m20260514_000000_extend_outbox_records::Migration),
+            Box::new(m20260515_000000_part_audit_log::Migration),
+            Box::new(m20260514_153057_update_internet_time_image::Migration),
         ]
     }
 }

@@ -7,6 +7,7 @@ use crate::{
     entities::{work_orders, work_order_state_history},
 };
 
+#[derive(Debug)]
 pub struct CancelWorkOrderEffect {
     pub work_order: work_orders::ActiveModel,
     pub state_history: work_order_state_history::ActiveModel,
@@ -77,12 +78,13 @@ mod tests {
             city: "".to_string(),
             address: "".to_string(),
             building: None,
-            appointment: Utc::now(),
+            appointment: Utc::now() + chrono::Duration::hours(48), // far future — passes 24h check
             admin_id: None,
             technician_id: None,
             complete_form_id: None,
             work_order_number: "".to_string(),
             reject_form_id: None,
+            about_to_start_notified: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
@@ -93,19 +95,14 @@ mod tests {
     #[test]
     fn test_decide_cancel_success() {
         let customer_id = Uuid::new_v4();
-        let pending_status_id = 1;
-        let cancelled_status_id = 99;
-        let wo = dummy_work_order(customer_id, pending_status_id);
+        let closed_status_id = 4;
+        let wo = dummy_work_order(customer_id, 1);
 
-        let result = decide_cancel(wo, customer_id, cancelled_status_id, pending_status_id);
+        let result = decide_cancel_work_order(wo, closed_status_id, customer_id, 24);
         assert!(result.is_ok());
         let effect = result.unwrap();
 
-        assert_eq!(
-            effect.work_order.work_order_status_id,
-            Set(cancelled_status_id)
-        );
-        assert_eq!(effect.state_history.to_status_id, Set(cancelled_status_id));
+        assert_eq!(effect.work_order.work_order_status_id, Set(closed_status_id));
     }
 
     #[ignore]
@@ -113,53 +110,41 @@ mod tests {
     fn test_decide_cancel_wrong_customer() {
         let customer_id = Uuid::new_v4();
         let wrong_customer_id = Uuid::new_v4();
-        let pending_status_id = 1;
-        let cancelled_status_id = 99;
-        let wo = dummy_work_order(customer_id, pending_status_id);
+        let wo = dummy_work_order(customer_id, 1);
 
-        let result = decide_cancel(
-            wo,
-            wrong_customer_id,
-            cancelled_status_id,
-            pending_status_id,
-        );
+        let result = decide_cancel_work_order(wo, 4, wrong_customer_id, 24);
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::Forbidden(_) => {}
-            _ => panic!("Expected Forbidden"),
+            other => panic!("Expected Forbidden, got {:?}", other),
         }
     }
 
     #[ignore]
     #[test]
-    fn test_decide_cancel_not_pending() {
+    fn test_decide_cancel_too_close_to_appointment() {
         let customer_id = Uuid::new_v4();
-        let in_progress_status_id = 3;
-        let pending_status_id = 1;
-        let cancelled_status_id = 99;
-        let wo = dummy_work_order(customer_id, in_progress_status_id);
+        let mut wo = dummy_work_order(customer_id, 1);
+        // Appointment is only 1 hour away — within the 24h window
+        wo.appointment = Utc::now() + chrono::Duration::hours(1);
 
-        let result = decide_cancel(wo, customer_id, cancelled_status_id, pending_status_id);
+        let result = decide_cancel_work_order(wo, 4, customer_id, 24);
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::BadRequest(_) => {}
-            _ => panic!("Expected BadRequest"),
+            other => panic!("Expected BadRequest, got {:?}", other),
         }
     }
 
     #[ignore]
     #[test]
-    fn test_decide_cancel_already_cancelled() {
+    fn test_decide_cancel_just_before_cutoff() {
         let customer_id = Uuid::new_v4();
-        let pending_status_id = 1;
-        let cancelled_status_id = 99;
-        let wo = dummy_work_order(customer_id, cancelled_status_id);
+        let mut wo = dummy_work_order(customer_id, 1);
+        // Appointment is 25 hours away — just outside the 24h window
+        wo.appointment = Utc::now() + chrono::Duration::hours(25);
 
-        let result = decide_cancel(wo, customer_id, cancelled_status_id, pending_status_id);
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            AppError::Conflict(_) => {}
-            _ => panic!("Expected Conflict"),
-        }
+        let result = decide_cancel_work_order(wo, 4, customer_id, 24);
+        assert!(result.is_ok());
     }
 }

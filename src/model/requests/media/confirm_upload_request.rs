@@ -10,4 +10,7 @@ pub struct ConfirmUploadRequest {
     pub latitude: f64,
     pub longitude: f64,
     pub phase: String,
+    /// Client-side Unix timestamp when the upload was initiated.
+    /// Validated against server time using the `internet_time_drift_minutes` policy.
+    pub internet_time: i64,
 }

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = [".", "migration", "seeder"]
+members = [".", "migration", "mongodb_migration", "seeder"]
 default-members = [".", "migration", "seeder"]
 
 [dependencies]
@@ -80,6 +80,9 @@ uuid = { version = "1.21.0", features = ["serde", "v4"] }
 validator = { version = "0.20.0", features = ["derive"] }
 v_htmlescape = "0.15"
 sysinfo = "0.33.1"
+mongodb = "3.1.1"
+mongodb-migrator = "0.1.8"
+mongodb_migration = { path = "mongodb_migration" }
 migration = { path = "migration" }
 redis = { version = "1.2.0", features = ["tokio-comp"] }
 tokio-cron-scheduler = "0.13.0"

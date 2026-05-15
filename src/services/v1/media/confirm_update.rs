@@ -10,6 +10,7 @@ use crate::utils::geo::is_within_geofence;
 pub struct ConfirmUpdateEffect {
     pub image_id: Uuid,
     pub object_name: String,
+    pub internet_time: i64,
     pub updated_at: DateTime<Utc>,
     pub link_update: work_order_image_links::ActiveModel,
 }
@@ -30,10 +31,24 @@ pub fn decide_confirm_update(
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
-    // 2. Geofencing Check
+    // 2. Internet time drift check
+    let drift_minutes: i64 = policies
+        .get("internet_time_drift_minutes")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
+    let now = Utc::now();
+    let drift_seconds = (now.timestamp() - req.internet_time).abs();
+    if drift_seconds > drift_minutes * 60 {
+        return Err(AppError::BadRequest(format!(
+            "Device time is too far from server time ({} seconds drift, max {} minutes allowed). Please sync your device clock and try again.",
+            drift_seconds, drift_minutes
+        )));
+    }
+
+    // 3. Geofencing Check
     let radius: f64 = policies.get("geofencing_radius")
         .and_then(|v| v.parse().ok())
-        .unwrap_or(500.0);
+        .unwrap_or(2000.0);
 
     let is_verified = is_within_geofence(
         req.latitude,
@@ -47,8 +62,7 @@ pub fn decide_confirm_update(
         return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
     }
 
-    // 3. Prepare Side-Effects
-    let now = Utc::now();
+    // 4. Prepare Side-Effects
     let mut link_active: work_order_image_links::ActiveModel = existing_link.into();
     link_active.latitude = Set(Some(req.latitude));
     link_active.longitude = Set(Some(req.longitude));
@@ -57,6 +71,7 @@ pub fn decide_confirm_update(
     Ok(ConfirmUpdateEffect {
         image_id,
         object_name,
+        internet_time: req.internet_time,
         updated_at: now,
         link_update: link_active,
     })

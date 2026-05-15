@@ -73,7 +73,7 @@ pub async fn seed_random_products(
             object_name: Set(url.to_string()),
             created_at: Set(now),
             updated_at: Set(now),
-            deleted_at: Set(None),
+            ..Default::default()
         }.insert(db).await?;
         product_image_links::ActiveModel {
             image_id: Set(img_id),

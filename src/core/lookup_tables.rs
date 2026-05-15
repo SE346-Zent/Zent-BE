@@ -41,6 +41,9 @@ pub struct LookupTables {
 
     /// `policy.policy_name` → `policy.policy_value`
     pub policies: HashMap<String, String>,
+
+    /// `roles.name` → List of notification category IDs
+    pub notification_categories_by_role: HashMap<String, Vec<i32>>,
 }
 
 impl LookupTables {
@@ -85,6 +88,14 @@ impl LookupTables {
             "Lookup tables loaded into memory"
         );
 
+        let mut notification_categories_by_role: HashMap<String, Vec<i32>> = HashMap::new();
+        // Technician gets: work_order_assigned (1), about_to_start (2)
+        notification_categories_by_role.insert("technician".to_string(), vec![1, 2]);
+        // Customer gets: work_order_assigned (1), about_to_start (2)
+        notification_categories_by_role.insert("customer".to_string(), vec![1, 2]);
+        // Admin gets: work_order_rejection_form (3), add_new_part (4)
+        notification_categories_by_role.insert("admin".to_string(), vec![3, 4]);
+
         Ok(Self {
             roles,
             roles_by_name,
@@ -99,6 +110,7 @@ impl LookupTables {
             part_mfg_statuses,
             part_mfg_statuses_by_name,
             policies,
+            notification_categories_by_role,
         })
     }
 
@@ -118,6 +130,7 @@ impl LookupTables {
             part_mfg_statuses: HashMap::new(),
             part_mfg_statuses_by_name: HashMap::new(),
             policies: HashMap::new(),
+            notification_categories_by_role: HashMap::new(),
         }
     }
 }

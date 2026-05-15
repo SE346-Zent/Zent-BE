@@ -210,7 +210,7 @@ async fn seed_image(db: &DatabaseConnection) -> Result<Uuid> {
         object_name: Set(url),
         created_at: Set(Utc::now()),
         updated_at: Set(Utc::now()),
-        deleted_at: Set(None),
+        ..Default::default()
     }.insert(db).await?;
 
     Ok(id)

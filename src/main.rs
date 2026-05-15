@@ -25,13 +25,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize database (MySQL) via infrastructure layer
     let db: DatabaseConnection = infrastructure::database::init_database(cfg).await?;
 
+    // Initialize MongoDB via infrastructure layer
+    let mongodb_client = infrastructure::mongodb::init_mongodb(cfg).await?;
+    let db_name = mongodb_client
+        .default_database()
+        .map(|db| db.name().to_string())
+        .ok_or("MongoDB connection string must include a database name")?;
+    let mongodb_database = mongodb_client.database(&db_name);
+
+    // Run MongoDB migrations
+    mongodb_migration::run_migrations(&mongodb_database).await?;
+
     // Initialize Valkey cache via infrastructure layer
-    let valkey: Option<Arc<ValkeyClient>> = infrastructure::cache::init_cache(cfg).await
-        .map(Arc::new)
-        .ok();
-    if valkey.is_none() {
-        tracing::warn!("Valkey cache client not initialized - continuing in degraded mode");
-    }
+    let valkey: Option<Arc<ValkeyClient>> = match infrastructure::cache::init_cache(cfg).await {
+        Ok(v) => Some(Arc::new(v)),
+        Err(e) => {
+            tracing::error!("Failed to initialize Valkey cache: {}. Continuing in degraded mode.", e);
+            None
+        }
+    };
 
     // Connect to RabbitMQ using configured URI mapping efficiently
     let rabbitmq: Option<Arc<Connection>> = infrastructure::mq::init_rabbitmq(&cfg.rabbitmq_url).await
@@ -49,14 +61,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .expect("Failed to load lookup tables from database");
 
-    // Pre-load email templates into memory cache
-    let templates: HashMap<String, String> = infrastructure::templates::load_templates().await;
+    // Pre-load email templates into memory cache from the configured directory
+    let templates: HashMap<String, String> = infrastructure::templates::load_templates(&cfg.template_dir).await;
 
     // Initialize AppState with directly injected infrastructure
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
         lookup_tables.clone(),
         db.clone(),
+        mongodb_database.clone(),
         valkey.clone(),
         rabbitmq.clone(),
         templates.clone(),
@@ -66,6 +79,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Start background asynchronous AMQP work order consumer pool
     infrastructure::consumers::work_order::start_work_order_consumer(state.clone()).await;
+
+    // Start background FCM push notification consumer
+    infrastructure::consumers::fcm::start_fcm_consumer(rabbitmq.clone(), db.clone()).await;
+
+    // Start background notification consumer (Phase 2 of outbox pattern)
+    infrastructure::consumers::notification::start_notification_consumer(state.clone()).await;
 
     // Start background cron scheduler for maintenance tasks using pre-loaded LUT
     let app_scheduler: AppScheduler = infrastructure::scheduler::AppScheduler::new()
@@ -108,6 +127,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     app_scheduler.register_job(auto_assign_job)
         .await
         .expect("Failed to register auto assign job");
+
+    let outbox_cleanup_job = infrastructure::cron_tasks::cleanup_outbox::clean_up_outbox_job(
+        db.clone(),
+    ).expect("Failed to build outbox cleanup job");
+
+    app_scheduler.register_job(outbox_cleanup_job)
+        .await
+        .expect("Failed to register outbox cleanup job");
+
+    // Register outbox relay job (runs every 10 seconds)
+    let relay_job = infrastructure::cron_tasks::relay_outbox::relay_outbox_job(
+        db.clone(),
+        rabbitmq.clone(),
+    ).expect("Failed to build outbox relay job");
+
+    app_scheduler.register_job(relay_job)
+        .await
+        .expect("Failed to register outbox relay job");
         
     app_scheduler.start()
         .await

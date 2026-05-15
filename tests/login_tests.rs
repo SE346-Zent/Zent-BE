@@ -47,6 +47,8 @@ fn create_mock_user(email: &str, password_hash: &str, status: AccountStatusEnum)
         account_status: i32::from(status),
         role_id: 1, // References the mocked `role` inserted in setup logic
         province: None,
+        fcm_token: None,
+        installation_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
         deleted_at: None,
@@ -109,6 +111,8 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>
             account_status: Set(u.account_status),
             role_id: Set(u.role_id),
             province: Set(None),
+            fcm_token: Set(None),
+            installation_id: Set(None),
             created_at: Set(u.created_at),
             updated_at: Set(u.updated_at),
             deleted_at: Set(u.deleted_at),
@@ -116,10 +120,15 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>
         active_user.insert(&db).await.unwrap();
     }
 
+    let mongodb_database = mongodb::Client::with_uri_str("mongodb://localhost:27017")
+        .await
+        .expect("Failed to create MongoDB client")
+        .database("zent_test");
     let state = AppState::new(
         b"integration_test_secret_for_tokens",
         LookupTables::empty(),
         db.clone(),
+        mongodb_database,
         None,
         None,
         std::collections::HashMap::new(),
@@ -333,6 +342,8 @@ async fn test_cat2_fk_constraint_blocks_unknown_status() {
         account_status: Set(u.account_status),
         role_id: Set(999), // Invalid role
         province: Set(None),
+        fcm_token: Set(None),
+        installation_id: Set(None),
         created_at: Set(u.created_at),
         updated_at: Set(u.updated_at),
         deleted_at: Set(u.deleted_at),
@@ -365,6 +376,8 @@ async fn test_cat2_unknown_status_legacy_data() {
         account_status: Set(u.account_status),
         role_id: Set(999), // Invalid role
         province: Set(None),
+        fcm_token: Set(None),
+        installation_id: Set(None),
         created_at: Set(u.created_at),
         updated_at: Set(u.updated_at),
         deleted_at: Set(u.deleted_at),
@@ -374,10 +387,15 @@ async fn test_cat2_unknown_status_legacy_data() {
     // Re-enable FK for normal application flow execution
     db.execute_unprepared("PRAGMA foreign_keys = ON;").await.unwrap();
 
+    let mongodb_database = mongodb::Client::with_uri_str("mongodb://localhost:27017")
+        .await
+        .expect("Failed to create MongoDB client")
+        .database("zent_test");
     let state = AppState::new(
         b"integration_test_secret_for_tokens",
         LookupTables::empty(),
         db.clone(),
+        mongodb_database,
         None,
         None,
         std::collections::HashMap::new(),
@@ -497,6 +515,8 @@ async fn test_cat3_12_13_zero_ttl() {
         account_status: Set(u.account_status),
         role_id: Set(u.role_id),
         province: Set(None),
+        fcm_token: Set(None),
+        installation_id: Set(None),
         created_at: Set(u.created_at),
         updated_at: Set(u.updated_at),
         deleted_at: Set(None),
@@ -504,10 +524,15 @@ async fn test_cat3_12_13_zero_ttl() {
     active_user.insert(&db).await.unwrap();
 
 
+    let mongodb_database = mongodb::Client::with_uri_str("mongodb://localhost:27017")
+        .await
+        .expect("Failed to create MongoDB client")
+        .database("zent_test");
     let state = AppState::new(
         b"secret",
         LookupTables::empty(),
         db.clone(),
+        mongodb_database,
         None,
         None,
         std::collections::HashMap::new(),

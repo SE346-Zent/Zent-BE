@@ -1,5 +1,6 @@
 pub mod cache;
 pub mod database;
+pub mod mongodb;
 pub mod mq;
 pub mod scheduler;
 pub mod templates;

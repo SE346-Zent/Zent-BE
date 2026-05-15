@@ -33,6 +33,7 @@ pub async fn upload_closing_form_signature(
     let mut file_name = String::new();
     let mut latitude = None;
     let mut longitude = None;
+    let mut internet_time = None;
 
     while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
         let name = field.name().unwrap_or_default().to_string();
@@ -50,6 +51,10 @@ pub async fn upload_closing_form_signature(
                 let val = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
                 longitude = Some(val.parse::<f64>().map_err(|e| AppError::BadRequest(e.to_string()))?);
             }
+            "internet_time" => {
+                let val = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+                internet_time = Some(val.parse::<i64>().map_err(|e| AppError::BadRequest(e.to_string()))?);
+            }
             _ => {}
         }
     }
@@ -57,6 +62,20 @@ pub async fn upload_closing_form_signature(
     let file_data = file_data.ok_or_else(|| AppError::BadRequest("File is missing".to_string()))?;
     let req_latitude = latitude.ok_or_else(|| AppError::BadRequest("Latitude is missing".to_string()))?;
     let req_longitude = longitude.ok_or_else(|| AppError::BadRequest("Longitude is missing".to_string()))?;
+    let internet_time = internet_time.ok_or_else(|| AppError::BadRequest("internet_time is missing".to_string()))?;
+
+    // Internet time drift check
+    let drift_minutes: i64 = luts.policies
+        .get("internet_time_drift_minutes")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
+    let drift_seconds = (chrono::Utc::now().timestamp() - internet_time).abs();
+    if drift_seconds > drift_minutes * 60 {
+        return Err(AppError::BadRequest(format!(
+            "Device time is too far from server time ({} seconds drift, max {} minutes allowed). Please sync your device clock and try again.",
+            drift_seconds, drift_minutes
+        )));
+    }
 
     let work_order = work_orders::Entity::find_by_id(id)
         .one(db.as_ref()).await?

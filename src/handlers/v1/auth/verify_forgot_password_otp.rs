@@ -27,7 +27,7 @@ pub async fn verify_forgot_password_otp_handler(
 ) -> Result<Json<ApiResponse<VerifyForgotPasswordOtpResponseData>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-    let client = valkey_client.ok_or_else(|| AppError::Internal(anyhow::anyhow!("Valkey missing")))?;
+    let client = valkey_client.ok_or_else(|| AppError::ServiceUnavailable("Verification service temporarily unavailable. Please try again later.".to_string()))?;
     let mut conn = client.get_connection().await?;
     let script_hashes = client.get_script_hashes();
     let script_hash = script_hashes.get("verify_otp")

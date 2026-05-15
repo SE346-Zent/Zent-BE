@@ -75,20 +75,12 @@ pub async fn create(
                         return Ok(Json(ApiResponse::success(201, "Work order created successfully", response)));
                     }
 
-                    // Different payload — the same idempotency key is being used for a new operation.
-                    // Delete the stale cache entry and immediately re-claim as PENDING
-                    // so the handler can proceed to create a new work order.
-                    let _: () = redis::cmd("DEL").arg(&cache_key).query_async(&mut conn).await.unwrap_or_default();
-                    let _: () = redis::cmd("SET")
-                        .arg(&cache_key)
-                        .arg(IDEMPOTENCY_PENDING)
-                        .arg("EX")
-                        .arg(cfg.idempotency_claim_ttl_seconds)
-                        .query_async(&mut conn)
-                        .await
-                        .unwrap_or_default();
-                    claimed = true;
-                    break;
+                    // Different payload — the same idempotency key was used with a
+                    // different request body. Reject to prevent silent overwrites.
+                    return Err(AppError::Conflict(format!(
+                        "Idempotency key '{}' was already used with a different request body",
+                        key
+                    )));
                 }
             }
         }
@@ -126,9 +118,19 @@ pub async fn create(
     if let Some(rmq) = rabbitmq.as_ref() {
         let producer = crate::infrastructure::mq::work_order::WorkOrderProducer::new(Some(rmq.clone()));
         let payload = serde_json::json!({ "id": wo_model.id });
-        if let Ok(payload_bytes) = serde_json::to_vec(&payload) {
-            let _ = producer.publish_created(&payload_bytes).await;
+        match serde_json::to_vec(&payload) {
+            Ok(payload_bytes) => {
+                tracing::info!("Publishing WO {} to MQ for auto-assignment", wo_model.id);
+                if let Err(e) = producer.publish_created(&payload_bytes).await {
+                    tracing::warn!("Failed to publish WO {} to MQ: {} — auto-assign will not run", wo_model.id, e);
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to serialize WO {} for MQ: {} — auto-assign will not run", wo_model.id, e);
+            }
         }
+    } else {
+        tracing::warn!("RabbitMQ not available — WO {} will not be auto-assigned", wo_model.id);
     }
 
     let status_text = "Pending assignment".to_string();

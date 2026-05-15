@@ -2,25 +2,29 @@ use std::collections::HashMap;
 use crate::model::responses::notifications::preference_response::NotificationPreferenceResponse;
 use super::{NOTIFICATION_CATEGORIES, find_category_slug_by_id};
 
-/// Build a list of preference entries for every known category.
+/// Build a list of preference entries for the specified categories.
 ///
-/// `user_prefs` is a map of `category_id → os_enabled`.  Missing entries
-/// default to `true` (OS notifications enabled).
+/// `user_prefs` is a map of `category_id → os_enabled`. Missing entries
+/// default to `true`. `allowed_ids` restricts the list to categories
+/// relevant to the user's role.
 pub fn get_preferences(
     user_prefs: &HashMap<i32, bool>,
+    allowed_ids: &[i32],
 ) -> Vec<NotificationPreferenceResponse> {
-    NOTIFICATION_CATEGORIES.iter().enumerate().map(|(i, (_slug, name))| {
-        let category_id = (i + 1) as i32;
-        let os_enabled = *user_prefs.get(&category_id).unwrap_or(&true);
-        let category_slug = find_category_slug_by_id(category_id).unwrap_or("").to_string();
+    allowed_ids.iter().filter_map(|&category_id| {
+        let category_slug = find_category_slug_by_id(category_id)?;
+        let index = (category_id - 1) as usize;
+        let (_, name) = NOTIFICATION_CATEGORIES[index];
         
-        NotificationPreferenceResponse {
+        let os_enabled = *user_prefs.get(&category_id).unwrap_or(&true);
+        
+        Some(NotificationPreferenceResponse {
             category_id,
-            category_slug,
+            category_slug: category_slug.to_string(),
             category_name: name.to_string(),
             os_enabled,
             updated_at: None,
-        }
+        })
     }).collect()
 }
 
@@ -30,7 +34,8 @@ mod tests {
 
     /// Helper: build a prefs response from a map.
     fn sut(prefs: &HashMap<i32, bool>) -> Vec<NotificationPreferenceResponse> {
-        get_preferences(prefs)
+        let all_ids: Vec<i32> = (1..=NOTIFICATION_CATEGORIES.len() as i32).collect();
+        get_preferences(prefs, &all_ids)
     }
 
     // ── Empty map → everything enabled ─────────────────────────────

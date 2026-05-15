@@ -330,13 +330,11 @@ pub async fn run_cleanup(
 }
 
 pub(crate) async fn try_auto_assign_single(
+    state: &AppState,
     db: Arc<DatabaseConnection>,
-    luts: Arc<LookupTables>,
     wo: work_orders_ent::Model,
-    valkey_client: Option<Arc<ValkeyClient>>,
-    rabbitmq_opt: Option<Arc<lapin::Connection>>,
-    templates: Option<Arc<std::collections::HashMap<String, String>>>,
 ) -> bool {
+    let luts = &state.lookup_tables;
     let tech_role_id = match luts.roles_by_name.get("Technician") {
         Some(id) => *id,
         None => { tracing::warn!("Technician role not found"); return false; }
@@ -376,14 +374,50 @@ pub(crate) async fn try_auto_assign_single(
     })).await { tracing::error!("Auto-assign tx failed for WO {}: {}", wo.work_order_number, e); return false; }
 
     tracing::info!("Auto-assigned WO {} to {}", wo.work_order_number, assigned_tech_id);
-    if let (Some(rmq), Some(tmpl)) = (rabbitmq_opt.as_ref(), templates.as_ref()) {
-        let cust = users::Entity::find_by_id(wo.customer_id).one(db.as_ref()).await.unwrap_or_default();
-        let tech = users::Entity::find_by_id(assigned_tech_id).one(db.as_ref()).await.unwrap_or_default();
+
+    // Send push + in-app notifications to both technician and customer
+    // (mongodb needed — we borrow from the state passed via the closure)
+    let cust = users::Entity::find_by_id(wo.customer_id).one(db.as_ref()).await.unwrap_or_default();
+    let tech = users::Entity::find_by_id(assigned_tech_id).one(db.as_ref()).await.unwrap_or_default();
+    if let (Some(c), Some(t)) = (cust.as_ref(), tech.as_ref()) {
+        let notification_data = serde_json::json!({
+            "workOrderId": wo.id,
+            "workOrderNumber": wo.work_order_number,
+            "technicianName": t.full_name,
+            "appointment": wo.appointment.to_string(),
+        });
+
+        // Notify technician
+        let _ = crate::services::v1::notifications::send_notification::send_notification(
+            state.mongodb.as_ref(),
+            state.valkey.clone(),
+            db.as_ref(),
+            t.id,
+            "work_order_assigned",
+            "New Work Order Assigned",
+            &format!("You have been assigned to work order {}", wo.work_order_number),
+            notification_data.clone(),
+        ).await;
+
+        // Notify customer
+        let _ = crate::services::v1::notifications::send_notification::send_notification(
+            state.mongodb.as_ref(),
+            state.valkey.clone(),
+            db.as_ref(),
+            c.id,
+            "work_order_assigned",
+            "Work Order Assigned",
+            &format!("Your work order {} has been assigned to technician {}", wo.work_order_number, t.full_name),
+            notification_data,
+        ).await;
+    }
+
+    if let Some(rmq) = state.rabbitmq.as_ref() {
         if let (Some(c), Some(t)) = (cust, tech) {
-            let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(rmq, tmpl, &c.email, &c.full_name, &wo.work_order_number, &t.full_name, &wo.appointment.to_string()).await;
+            let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(rmq, &state.templates, &c.email, &c.full_name, &wo.work_order_number, &t.full_name, &wo.appointment.to_string()).await;
         }
     }
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation
-    write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), wo.id).await;
+    write_through_work_order_cache(db.as_ref(), state.valkey.clone(), &state.lookup_tables, wo.id).await;
     true
 }

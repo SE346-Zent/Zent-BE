@@ -27,6 +27,7 @@ use crate::entities::{work_orders as work_orders_ent, users};
 pub async fn assign(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
+    State(mongodb): State<Arc<mongodb::Database>>,
     State(luts): State<Arc<LookupTables>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     State(rabbitmq_opt): State<Option<Arc<lapin::Connection>>>,
@@ -53,11 +54,47 @@ pub async fn assign(
         .await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation
-    super::write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), id).await;
+    super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), id).await;
 
+    let tech = users::Entity::find_by_id(payload.technician_id).one(db.as_ref()).await?;
+    let cust = users::Entity::find_by_id(work_order.customer_id).one(db.as_ref()).await?;
+
+    // Send push + in-app notifications to both technician and customer
+    if let (Some(t), Some(c)) = (tech.as_ref(), cust.as_ref()) {
+        let notification_data = serde_json::json!({
+            "workOrderId": work_order.id,
+            "workOrderNumber": work_order.work_order_number,
+            "technicianName": t.full_name,
+            "appointment": work_order.appointment.to_string(),
+        });
+
+        // Notify the technician
+        let _ = crate::services::v1::notifications::send_notification::send_notification(
+            mongodb.as_ref(),
+            valkey_client.clone(),
+            db.as_ref(),
+            t.id,
+            "work_order_assigned",
+            "New Work Order Assigned",
+            &format!("You have been assigned to work order {}", work_order.work_order_number),
+            notification_data.clone(),
+        ).await;
+
+        // Notify the customer
+        let _ = crate::services::v1::notifications::send_notification::send_notification(
+            mongodb.as_ref(),
+            valkey_client.clone(),
+            db.as_ref(),
+            c.id,
+            "work_order_assigned",
+            "Work Order Assigned",
+            &format!("Your work order {} has been assigned to technician {}", work_order.work_order_number, t.full_name),
+            notification_data,
+        ).await;
+    }
+
+    // Send email notification (existing)
     if let Some(rmq) = rabbitmq_opt.as_ref() {
-        let tech = users::Entity::find_by_id(payload.technician_id).one(db.as_ref()).await?;
-        let cust = users::Entity::find_by_id(work_order.customer_id).one(db.as_ref()).await?;
         if let (Some(t), Some(c)) = (tech, cust) {
             let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(rmq, &templates, &c.email, &c.full_name, &work_order.work_order_number, &t.full_name, &work_order.appointment.to_string()).await;
         }
