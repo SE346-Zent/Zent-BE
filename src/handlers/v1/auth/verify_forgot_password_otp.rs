@@ -21,27 +21,39 @@ use crate::model::responses::auth::verify_forgot_password_otp_response::VerifyFo
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     )
 )]
+/// Handle requests to verify the OTP sent during the forgotten password flow.
+///
+/// This handler executes a Valkey Lua script to verify the OTP against the
+/// cached value. If successful, it generates a password reset token and
+/// stores it in Valkey for the final reset step.
+///
+/// # Arguments
+/// * `valkey_client` - Optional shared Valkey client for OTP verification and token storage.
+/// * `verify_payload` - The request containing the user's email and the OTP code.
+///
+/// # Returns
+/// A result containing the successful `ApiResponse` with the reset token, or an `AppError`.
 pub async fn verify_forgot_password_otp_handler(
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
-    Json(payload): Json<VerifyForgotPasswordOtpRequest>,
+    Json(verify_payload): Json<VerifyForgotPasswordOtpRequest>,
 ) -> Result<Json<ApiResponse<VerifyForgotPasswordOtpResponseData>>, AppError> {
-    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    verify_payload.validate().map_err(|err| AppError::BadRequest(err.to_string()))?;
 
     let client = valkey_client.ok_or_else(|| AppError::ServiceUnavailable("Verification service temporarily unavailable. Please try again later.".to_string()))?;
-    let mut conn = client.get_connection().await?;
+    let mut valkey_conn = client.get_connection().await?;
     let script_hashes = client.get_script_hashes();
-    let script_hash = script_hashes.get("verify_otp")
+    let verify_otp_script_hash = script_hashes.get("verify_otp")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Script hash missing")))?;
 
-    let valkey_key = format!("forgot_password_verification:{}", payload.email);
-    let result: i32 = redis::cmd("EVALSHA")
-        .arg(script_hash).arg(1).arg(&valkey_key).arg(&payload.otp_code)
-        .query_async(&mut conn).await?;
+    let valkey_otp_key = format!("forgot_password_verification:{}", verify_payload.email);
+    let lua_result: i32 = redis::cmd("EVALSHA")
+        .arg(verify_otp_script_hash).arg(1).arg(&valkey_otp_key).arg(&verify_payload.otp_code)
+        .query_async(&mut valkey_conn).await?;
 
-    let reset_token = uuid::Uuid::new_v4().to_string();
-    let effect = verify_forgot_password_otp::decide_verify_forgot_password_otp(result, payload.email, reset_token)?;
+    let new_reset_token = uuid::Uuid::new_v4().to_string();
+    let verify_effect = verify_forgot_password_otp::decide_verify_forgot_password_otp(lua_result, verify_payload.email, new_reset_token)?;
 
-    conn.set_ex::<_, _, ()>(&effect.reset_token_key, &effect.email, effect.ttl_seconds).await?;
+    valkey_conn.set_ex::<_, _, ()>(&verify_effect.reset_token_cache_key, &verify_effect.user_email, verify_effect.token_ttl_seconds).await?;
 
-    Ok(Json(ApiResponse::success(200, "Verified", VerifyForgotPasswordOtpResponseData { reset_token: effect.reset_token })))
+    Ok(Json(ApiResponse::success(200, "Verified", VerifyForgotPasswordOtpResponseData { reset_token: verify_effect.password_reset_token })))
 }
