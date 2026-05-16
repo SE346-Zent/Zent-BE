@@ -3,28 +3,43 @@ use crate::{
     entities::users,
 };
 
-/// Plain struct representing the side-effects that need to be persisted
+/// Represents the calculated results and side-effects of a successful password reset request.
 pub struct ResetPasswordEffect {
+    /// The unique identifier of the user whose password is being reset.
     pub user_id: uuid::Uuid,
-    pub new_hash: String,
-    pub reset_token_key: String,
+    /// The newly generated Argon2 hash of the user's new password.
+    pub new_password_hash: String,
+    /// The cache key of the reset token that should be invalidated.
+    pub reset_token_cache_key: String,
 }
 
-/// Pure logic to decide the outcome of a password reset attempt.
+/// Determine the outcome of a password reset attempt by validating the new password against the current one.
+///
+/// This pure function ensures that users do not reset their password to the exact same 
+/// value they are currently using, enhancing security.
+///
+/// # Arguments
+/// * `user_record` - The database model of the user whose password is being reset.
+/// * `is_new_password_same_as_current` - Boolean indicating if the new password matches the current one.
+/// * `new_password_hash` - The newly generated hash for the user's new password.
+/// * `reset_token_cache_key` - The cache key associated with the used reset token.
+///
+/// # Returns
+/// A result containing the `ResetPasswordEffect` on success, or a `BadRequest` error if the password is the same.
 pub fn decide_reset_password(
-    user_model: &users::Model,
-    is_same_password: bool,
-    new_hash: String,
-    reset_token_key: String,
+    user_record: &users::Model,
+    is_new_password_same_as_current: bool,
+    new_password_hash: String,
+    reset_token_cache_key: String,
 ) -> Result<ResetPasswordEffect, AppError> {
-    if is_same_password {
+    if is_new_password_same_as_current {
         return Err(AppError::BadRequest("New password cannot be the same as current".to_string()));
     }
 
     Ok(ResetPasswordEffect {
-        user_id: user_model.id,
-        new_hash,
-        reset_token_key,
+        user_id: user_record.id,
+        new_password_hash,
+        reset_token_cache_key,
     })
 }
 
@@ -59,24 +74,24 @@ mod tests {
     #[case(false, "Ok")] // Different password
     #[case(true, "BadRequest")] // Same password
     fn test_decide_reset_password_exhaustive(
-        #[case] is_same_password: bool,
+        #[case] is_new_password_same_as_current: bool,
         #[case] expected_result: &str,
         mock_user: users::Model,
     ) {
         let result = decide_reset_password(
             &mock_user,
-            is_same_password,
-            "new_hash".to_string(),
-            "token_key".to_string(),
+            is_new_password_same_as_current,
+            "new_password_hash".to_string(),
+            "reset_token_cache_key".to_string(),
         );
 
         match expected_result {
             "Ok" => {
                 assert!(result.is_ok());
-                let effect = result.unwrap();
-                assert_eq!(effect.user_id, mock_user.id);
-                assert_eq!(effect.new_hash, "new_hash");
-                assert_eq!(effect.reset_token_key, "token_key");
+                let reset_effect = result.unwrap();
+                assert_eq!(reset_effect.user_id, mock_user.id);
+                assert_eq!(reset_effect.new_password_hash, "new_password_hash");
+                assert_eq!(reset_effect.reset_token_cache_key, "reset_token_cache_key");
             }
             "BadRequest" => {
                 assert!(matches!(result, Err(AppError::BadRequest(_))));
