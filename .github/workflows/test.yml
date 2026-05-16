@@ -25,4 +25,4 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Run unit tests (notifications + work orders services)
-        run: cargo nextest run -E 'kind(lib) and (test(services::v1::notifications) or test(services::v1::work_orders))' --fail-fast --test-threads=1
+        run: cargo nextest run --fail-fast --release
