@@ -30,4 +30,6 @@ pub use super::work_order_state_history::Entity as WorkOrderStateHistory;
 pub use super::work_order_statuses::Entity as WorkOrderStatuses;
 pub use super::work_order_symptoms::Entity as WorkOrderSymptoms;
 pub use super::work_orders::Entity as WorkOrders;
+pub use super::work_order_appointment_changes::Entity as WorkOrderAppointmentChanges;
+pub use super::work_order_pause_actions::Entity as WorkOrderPauseActions;
 

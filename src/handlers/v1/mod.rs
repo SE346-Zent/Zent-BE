@@ -23,6 +23,7 @@ pub fn router(state: AppState) -> Router<AppState> {
 fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(work_orders::create))
+        .route("/{id}/complaint", axum::routing::post(work_orders::complaint))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Customer]),
@@ -32,6 +33,7 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/start", axum::routing::post(work_orders::start))
         .route("/{id}/refuse", axum::routing::post(work_orders::refuse))
         .route("/{id}/complete", axum::routing::post(work_orders::complete))
+        .route("/{id}/pause", axum::routing::post(work_orders::pause))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Technician]),
@@ -42,9 +44,11 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/cancel", axum::routing::post(work_orders::cancel))
         .route("/{id}/refusal/approve", axum::routing::post(work_orders::approve_refusal))
         .route("/{id}/refusal/deny", axum::routing::post(work_orders::deny_refusal))
+        .route("/{id}/reassign", axum::routing::post(work_orders::reassign))
+        .route("/{id}/change-appointment", axum::routing::post(work_orders::change_appointment))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_role::<AppState>(&[Role::Admin]),
+            require_role::<AppState>(&[Role::Admin, Role::SuperAdmin]),
         ));
 
     let list_route = Router::new()

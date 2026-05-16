@@ -8,20 +8,23 @@ use crate::{
     services::v1::core::token_service,
 };
 
+use sea_orm::Set;
+use crate::entities::sessions;
 use uuid::Uuid;
 use chrono::Utc;
 use jsonwebtoken::EncodingKey;
 
-/// Plain struct representing the side-effects that need to be persisted
+/// Effect containing the session ActiveModel ready for `.insert()`,
+/// plus response data and convenience fields for downstream use.
 pub struct LoginEffect {
+    pub session: sessions::ActiveModel,
     pub session_id: Uuid,
-    pub user_id: Uuid,
     pub refresh_token_hash: String,
-    pub expires_at: chrono::DateTime<Utc>,
     pub response_data: LoginResponseData,
 }
 
 /// Pure logic to decide the outcome of a login attempt.
+/// Returns a `sessions::ActiveModel` ready for `.insert()`.
 pub fn decide_login(
     user_model: &users::Model,
     is_password_valid: bool,
@@ -58,16 +61,26 @@ pub fn decide_login(
         encoding_key,
     )?;
 
-    // 5. Prepare session data
+    // 5. Prepare session ActiveModel
     let session_id = Uuid::new_v4();
     let session_ttl_seconds = session_ttl.0;
     let expires_at = Utc::now() + chrono::Duration::seconds(session_ttl_seconds as i64);
 
+    let session = sessions::ActiveModel {
+        id: Set(session_id),
+        user_id: Set(user_model.id),
+        refresh_token_hash: Set(token_bundle.refresh_token_hash.clone()),
+        ip_address: Set(String::new()), // filled by handler with real IP
+        device_fingerprint: Set(user_model.id.to_string()),
+        created_at: Set(Utc::now()),
+        expires_at: Set(expires_at),
+        ..Default::default()
+    };
+
     Ok(LoginEffect {
+        session,
         session_id,
-        user_id: user_model.id,
         refresh_token_hash: token_bundle.refresh_token_hash,
-        expires_at,
         response_data: LoginResponseData {
             user: UserInfo {
                 full_name: user_model.full_name.clone(),

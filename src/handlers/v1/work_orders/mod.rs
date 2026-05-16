@@ -3,6 +3,7 @@ pub mod list;
 pub mod get_details;
 pub mod assign;
 pub mod complete;
+pub mod reassign;
 pub mod refuse;
 pub mod start;
 pub mod approve_refusal;
@@ -10,7 +11,11 @@ pub mod deny_refusal;
 pub mod history;
 pub mod cancel;
 pub mod complaint;
+pub mod change_appointment;
+pub mod pause;
 
+pub use change_appointment::change_appointment;
+pub use pause::pause;
 pub use complaint::complaint;
 pub use create::create;
 pub use list::list;
@@ -22,6 +27,7 @@ pub use start::start;
 pub use approve_refusal::approve_refusal;
 pub use deny_refusal::deny_refusal;
 pub use history::history;
+pub use reassign::reassign;
 pub use cancel::cancel;
 
 // Re-export __path_* items for utoipa OpenApi derive
@@ -35,8 +41,11 @@ pub use start::__path_start;
 pub use approve_refusal::__path_approve_refusal;
 pub use deny_refusal::__path_deny_refusal;
 pub use history::__path_history;
+pub use reassign::__path_reassign;
 pub use cancel::__path_cancel;
 pub use complaint::__path_complaint;
+pub use change_appointment::__path_change_appointment;
+pub use pause::__path_pause;
 
 use axum::{Router, middleware};
 use std::collections::HashMap;
@@ -85,6 +94,7 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/assign", axum::routing::post(assign))
         .route("/{id}/refusal/approve", axum::routing::post(approve_refusal))
         .route("/{id}/refusal/deny", axum::routing::post(deny_refusal))
+        .route("/{id}/reassign", axum::routing::post(reassign))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Admin]),

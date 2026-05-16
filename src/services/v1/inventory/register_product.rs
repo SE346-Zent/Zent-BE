@@ -1,12 +1,12 @@
+use sea_orm::Set;
 use crate::core::errors::AppError;
+use crate::entities::products;
 use crate::model::requests::inventory::register_product_request::RegisterProductRequest;
 
+/// Effect containing the products::ActiveModel ready for `.insert()`,
+/// plus metadata for downstream use (email, re-registration flag).
 pub struct RegisterProductEffect {
-    pub product_id: uuid::Uuid,
-    pub customer_id: uuid::Uuid,
-    pub product_name: String,
-    pub model_code: String,
-    pub serial_number: String,
+    pub product: products::ActiveModel,
     pub should_send_email: bool,
     pub email: String,
     pub customer_name: String,
@@ -26,28 +26,41 @@ pub fn decide_register_product(
     let model_name = model_name_from_catalog
         .ok_or_else(|| AppError::BadRequest(format!("Model name not found for serial '{}'", req.serial_number)))?;
 
+    let effective_country = if req.country.is_empty() { "Vietnam".to_string() } else { req.country.clone() };
+    let product_name = format!("{} {} {}", model_name, effective_country, now.format("%Y"));
+
     if let Some(pid) = existing_product_id {
         // Re-registration — returns existing ID, no email
-        let effective_country = if req.country.is_empty() { "Vietnam".to_string() } else { req.country.clone() };
+        let product = products::ActiveModel {
+            id: Set(pid),
+            product_model_code: Set(model_code),
+            customer_id: Set(user_id),
+            product_name: Set(product_name),
+            serial_number: Set(req.serial_number.clone()),
+            updated_at: Set(now),
+            ..Default::default()
+        };
         return Ok(RegisterProductEffect {
-            product_id: pid,
-            customer_id: user_id,
-            product_name: format!("{} {} {}", model_name, effective_country, now.format("%Y")),
-            model_code,
-            serial_number: req.serial_number.clone(),
+            product,
             should_send_email: false,
             email: req.email.clone(),
             customer_name: customer_name.to_string(),
         });
     }
 
-    let effective_country = if req.country.is_empty() { "Vietnam".to_string() } else { req.country.clone() };
+    let product = products::ActiveModel {
+        id: Set(uuid::Uuid::new_v4()),
+        product_model_code: Set(model_code),
+        customer_id: Set(user_id),
+        product_name: Set(product_name),
+        serial_number: Set(req.serial_number.clone()),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    };
+
     Ok(RegisterProductEffect {
-        product_id: uuid::Uuid::new_v4(),
-        customer_id: user_id,
-        product_name: format!("{} {} {}", model_name, effective_country, now.format("%Y")),
-        model_code,
-        serial_number: req.serial_number.clone(),
+        product,
         should_send_email: req.send_email_confirmation && !req.email.is_empty(),
         email: req.email.clone(),
         customer_name: customer_name.to_string(),

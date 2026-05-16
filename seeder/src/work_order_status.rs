@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use zent_be::entities::work_order_statuses;
 use chrono::Utc;
 
-pub const WO_STATUSES: &[&str] = &["Pending", "Assigned", "InProg", "Closed", "Reject_InReview", "Rejected"];
+pub const WO_STATUSES: &[&str] = &["Pending", "Assigned", "InProg", "Closed", "Reject_InReview", "Rejected", "Paused"];
 
 pub async fn seed_work_order_statuses(db: &DatabaseConnection) -> Result<HashMap<String, i32>> {
     let mut map: HashMap<String, i32> = HashMap::new();

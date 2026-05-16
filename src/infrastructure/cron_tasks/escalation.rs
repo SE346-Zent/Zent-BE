@@ -53,6 +53,10 @@ async fn run_escalation_check(
         .get("InProg")
         .ok_or_else(|| anyhow::anyhow!("'InProg' status not found"))?;
 
+    let paused_id = luts.work_order_statuses_by_name
+        .get("Paused")
+        .copied();
+
     let super_admin_role_id = *luts.roles_by_name
         .get("SuperAdmin")
         .ok_or_else(|| anyhow::anyhow!("'SuperAdmin' role not found"))?;
@@ -67,19 +71,26 @@ async fn run_escalation_check(
         .and_then(|v| v.parse().ok())
         .unwrap_or(60);
 
-    // ── Batch 1: all InProg work orders ────────────────────────────
-    let in_prog_wos = work_orders::Entity::find()
-        .filter(work_orders::Column::WorkOrderStatusId.eq(in_prog_id))
+    // ── Batch 1: all InProg and Paused work orders ─────────────────
+    use sea_orm::Condition;
+    let mut status_cond = Condition::any()
+        .add(work_orders::Column::WorkOrderStatusId.eq(in_prog_id));
+    if let Some(pid) = paused_id {
+        status_cond = status_cond.add(work_orders::Column::WorkOrderStatusId.eq(pid));
+    }
+
+    let active_wos = work_orders::Entity::find()
+        .filter(status_cond)
         .all(db)
         .await?;
 
-    if in_prog_wos.is_empty() {
+    if active_wos.is_empty() {
         return Ok(());
     }
 
-    let wo_ids: Vec<Uuid> = in_prog_wos.iter().map(|wo| wo.id).collect();
+    let wo_ids: Vec<Uuid> = active_wos.iter().map(|wo| wo.id).collect();
 
-    info!("Escalation check: {} InProg work orders found", in_prog_wos.len());
+    info!("Escalation check: {} active (InProg/Paused) work orders found", active_wos.len());
 
     // ── Batch 2: highest escalation level per WO (one query) ───────
     let existing_escalations = work_order_escalations::Entity::find()
@@ -96,10 +107,16 @@ async fn run_escalation_check(
         }
     }
 
-    // ── Batch 3: state_history "InProg" transitions for all WOs ────
+    // ── Batch 3: state_history "InProg" or "Paused" transitions ───
+    let mut trans_cond = Condition::any()
+        .add(work_order_state_history::Column::ToStatusId.eq(in_prog_id));
+    if let Some(pid) = paused_id {
+        trans_cond = trans_cond.add(work_order_state_history::Column::ToStatusId.eq(pid));
+    }
+
     let all_start_entries = work_order_state_history::Entity::find()
         .filter(work_order_state_history::Column::WorkOrderId.is_in(wo_ids.clone()))
-        .filter(work_order_state_history::Column::ToStatusId.eq(in_prog_id))
+        .filter(trans_cond)
         .order_by_desc(work_order_state_history::Column::ChangedAt)
         .all(db)
         .await?;
@@ -134,7 +151,7 @@ async fn run_escalation_check(
     // ── Process each InProg WO ─────────────────────────────────────
     let now: DateTimeUtc = Utc::now().into();
 
-    for wo in &in_prog_wos {
+    for wo in &active_wos {
         // Get start time (skip if never transitioned to InProg)
         let start_time = match start_times.get(&wo.id) {
             Some(t) => *t,

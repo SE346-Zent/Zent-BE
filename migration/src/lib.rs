@@ -28,6 +28,9 @@ mod m20260515_000000_part_audit_log;
 mod m20260514_153057_update_internet_time_image;
 mod m20260516_100000_add_work_order_complaint;
 mod m20260518_100000_add_work_order_escalations;
+mod m20260517_100000_add_escalation_level;
+mod m20260519_100000_add_work_order_appointment_changes;
+mod m20260519_110000_add_work_order_pause;
 
 
 pub struct Migrator;
@@ -64,6 +67,9 @@ impl MigratorTrait for Migrator {
             Box::new(m20260514_153057_update_internet_time_image::Migration),
             Box::new(m20260516_100000_add_work_order_complaint::Migration),
             Box::new(m20260518_100000_add_work_order_escalations::Migration),
+            Box::new(m20260517_100000_add_escalation_level::Migration),
+            Box::new(m20260519_100000_add_work_order_appointment_changes::Migration),
+            Box::new(m20260519_110000_add_work_order_pause::Migration),
         ]
     }
 }

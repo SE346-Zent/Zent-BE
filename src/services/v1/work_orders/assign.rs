@@ -54,6 +54,13 @@ pub fn decide_assign_work_order(
         )));
     }
 
+    // Ensure the work order doesn't already have a technician (use reassign instead)
+    if work_order.technician_id.is_some() {
+        return Err(AppError::BadRequest(
+            "Work order already has a technician — use reassign instead".into(),
+        ));
+    }
+
     // Ensure we don't assign a completed or rejected work order
     if work_order.work_order_status_id == done_status_id {
         return Err(AppError::BadRequest(
