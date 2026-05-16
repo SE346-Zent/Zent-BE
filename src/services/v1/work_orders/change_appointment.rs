@@ -99,12 +99,13 @@ mod tests {
     #[test]
     fn test_change_appointment_pending() {
         let wo = dummy_work_order(1); // Pending
+        let old_appointment = wo.appointment; // capture before wo is consumed
         let new_appt = Utc::now() + chrono::Duration::days(1);
         let result = decide_change_appointment(wo, new_appt, 1, 2, Uuid::new_v4());
         assert!(result.is_ok());
         let effect = result.unwrap();
         assert_eq!(effect.work_order.appointment, Set(new_appt));
-        assert_eq!(effect.audit.old_appointment, Set(dummy_work_order(1).appointment));
+        assert_eq!(effect.audit.old_appointment, Set(old_appointment));
     }
 
     #[test]

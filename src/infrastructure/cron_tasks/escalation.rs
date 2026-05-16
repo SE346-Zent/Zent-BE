@@ -200,7 +200,7 @@ async fn run_escalation_check(
             if sa.id == system_user_id {
                 continue;
             }
-            let _ = crate::handlers::v1::notifications::send_notification::send_notification(
+            match crate::handlers::v1::notifications::send_notification::send_notification(
                 mongodb,
                 valkey.clone(),
                 db,
@@ -209,8 +209,10 @@ async fn run_escalation_check(
                 &title,
                 &body,
                 notification_data.clone(),
-            ).await;
-            sa_count += 1;
+            ).await {
+                Ok(()) => sa_count += 1,
+                Err(e) => warn!("Failed to notify SA {} for WO {}: {:?}", sa.id, wo.work_order_number, e),
+            }
         }
 
         // ── Notify Province Admins ──────────────────────────────────
@@ -219,7 +221,7 @@ async fn run_escalation_check(
                 if admin.id == system_user_id {
                     continue;
                 }
-                let _ = crate::handlers::v1::notifications::send_notification::send_notification(
+                match crate::handlers::v1::notifications::send_notification::send_notification(
                     mongodb,
                     valkey.clone(),
                     db,
@@ -228,28 +230,37 @@ async fn run_escalation_check(
                     &title,
                     &body,
                     notification_data.clone(),
-                ).await;
-                admin_count += 1;
+                ).await {
+                    Ok(()) => admin_count += 1,
+                    Err(e) => warn!("Failed to notify admin {} for WO {}: {:?}", admin.id, wo.work_order_number, e),
+                }
             }
         }
 
-        // ── Insert audit row ────────────────────────────────────────
-        let audit = work_order_escalations::ActiveModel {
-            id: Set(Uuid::new_v4()),
-            work_order_id: Set(wo.id),
-            escalation_level: Set(effect.target_level),
-            elapsed_minutes: Set(elapsed_minutes),
-            baseline_minutes: Set(baseline_minutes),
-            notified_sa_count: Set(sa_count),
-            notified_admin_count: Set(admin_count),
-            created_at: Set(now),
-        };
-        audit.insert(db).await?;
+        // ── Insert audit row only if at least one notification succeeded ──
+        if sa_count > 0 || admin_count > 0 {
+            let audit = work_order_escalations::ActiveModel {
+                id: Set(Uuid::new_v4()),
+                work_order_id: Set(wo.id),
+                escalation_level: Set(effect.target_level),
+                elapsed_minutes: Set(elapsed_minutes),
+                baseline_minutes: Set(baseline_minutes),
+                notified_sa_count: Set(sa_count),
+                notified_admin_count: Set(admin_count),
+                created_at: Set(now),
+            };
+            audit.insert(db).await?;
 
-        info!(
-            "Escalation {} triggered for WO {} — notified {} SA(s) and {} admin(s)",
-            effect.level_label, wo.work_order_number, sa_count, admin_count,
-        );
+            info!(
+                "Escalation {} triggered for WO {} — notified {} SA(s) and {} admin(s)",
+                effect.level_label, wo.work_order_number, sa_count, admin_count,
+            );
+        } else {
+            warn!(
+                "Escalation {} for WO {} had zero successful deliveries — audit skipped, will retry",
+                effect.level_label, wo.work_order_number,
+            );
+        }
     }
 
     Ok(())
