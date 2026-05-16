@@ -393,8 +393,6 @@ async fn test_cat2_unknown_status_legacy_data() {
     assert_eq!(r.status(), StatusCode::FORBIDDEN);
 }
 
-
-
 // ==============================================================
 // Category 3: Session Management & Token Generation (14 cases)
 // ==============================================================
@@ -443,8 +441,6 @@ async fn test_cat3_session_properties() {
     assert_eq!(db_session.device_fingerprint, user_id.to_string()); // 11. Fallback verification
     assert_eq!(db_session.ip_address, "12.34.56.78");
 }
-
-
 
 // Note: Test 14 (JWT encoding failure) triggers gracefully via AppState invalid decoding sequences mapping cleanly into 500 when it's forcibly injected through explicit error cases.
 
@@ -673,11 +669,11 @@ async fn test_cat6_security_payload_edges(#[case] email: &str) {
 }
 
 #[rstest]
-#[ignore = "DinD only: requires real DB due to sqlite::memory migration issues with extreme date boundaries"]
 #[case(0, 0, 0)] // Zero TTL (Immediate expiration)
 #[case(1, 1, 1)] // 1 Second TTL
 #[case(31536000, 31536000, 31536000)] // 1 Year TTL
 #[case(900, 3153600000, 3153600000)] // 100 Years TTL
+#[ignore = "DinD only: requires real DB due to sqlite::memory migration issues with extreme date boundaries"]
 #[tokio::test]
 async fn test_dind_login_ttl_boundaries(
     #[case] access_ttl: i64,
@@ -687,7 +683,7 @@ async fn test_dind_login_ttl_boundaries(
     // Connect using environment variable or fallback for DinD environments
     let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string());
     let db: DatabaseConnection = Database::connect(&db_url).await.unwrap();
-    
+
     Migrator::up(&db, None).await.unwrap();
     seed_test_db(&db).await;
 
@@ -718,7 +714,7 @@ async fn test_dind_login_ttl_boundaries(
         .await
         .expect("Failed to create MongoDB client")
         .database("zent_test");
-        
+
     let state = AppState::new(
         b"secret",
         LookupTables::empty(),
@@ -729,8 +725,8 @@ async fn test_dind_login_ttl_boundaries(
         std::collections::HashMap::new(),
         AccessTokenDefaultTTLSeconds(access_ttl),
         SessionDefaultTTLSeconds(session_ttl),
-    ); 
-    
+    );
+
     let app = Router::new()
         .route("/login", post(login_handler))
         .with_state(state);
@@ -739,12 +735,12 @@ async fn test_dind_login_ttl_boundaries(
     let req_body = serde_json::json!({ "email": VALID_EMAIL, "password": VALID_PASS });
     let req = create_json_request("/login", &req_body);
     let r = app.oneshot(req).await.unwrap();
-    
+
     assert_eq!(r.status(), StatusCode::OK);
 
     let session = sessions::Entity::find().one(&db).await.unwrap().unwrap();
     let duration = (session.expires_at - before_call).num_seconds();
-    
+
     // Validate boundaries within a 2-second execution margin
     assert!(duration >= expected_duration && duration <= expected_duration + 2);
 }
