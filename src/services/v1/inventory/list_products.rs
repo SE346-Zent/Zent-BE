@@ -137,9 +137,9 @@ mod tests {
 
     fn make_entry(id: &str, mc: &str, sn: &str, cust: &str) -> ProductEntry {
         ProductEntry {
-            product: prod::Model { id: u(id), product_model_code: mc.into(), customer_id: u(cust), product_name: format!("Product {mc}"), serial_number: sn.into(), created_at: t(), updated_at: t(), deleted_at: None },
-            model: product_models::Model { model_code: mc.into(), model_name: format!("Model {mc}"), description: None, created_at: t(), updated_at: t(), deleted_at: None },
-            parts: vec![],
+            product_record: prod::Model { id: u(id), product_model_code: mc.into(), customer_id: u(cust), product_name: format!("Product {mc}"), serial_number: sn.into(), created_at: t(), updated_at: t(), deleted_at: None },
+            model_definition: product_models::Model { model_code: mc.into(), model_name: format!("Model {mc}"), description: None, created_at: t(), updated_at: t(), deleted_at: None },
+            installed_parts: vec![],
         }
     }
 

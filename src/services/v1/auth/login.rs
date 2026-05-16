@@ -232,7 +232,7 @@ mod tests {
         assert!(result.is_ok());
         let effect = result.unwrap();
 
-        let duration = (effect.expires_at - before_call).num_seconds();
+        let duration = (effect.session_expires_at - before_call).num_seconds();
 
         // Allow a 1-2 second buffer for execution time depending on system speed
         assert!(duration >= expected_duration && duration <= expected_duration + 2);
