@@ -9,4 +9,3 @@ pub mod complete_request;
 pub mod cancel_request;
 pub mod complaint_request;
 pub mod change_appointment_request;
-pub mod pause_request;

@@ -33,7 +33,6 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/start", axum::routing::post(work_orders::start))
         .route("/{id}/refuse", axum::routing::post(work_orders::refuse))
         .route("/{id}/complete", axum::routing::post(work_orders::complete))
-        .route("/{id}/pause", axum::routing::post(work_orders::pause))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Technician]),

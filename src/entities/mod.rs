@@ -35,6 +35,5 @@ pub mod work_order_symptoms;
 pub mod work_order_escalations;
 pub mod work_orders;
 pub mod work_order_appointment_changes;
-pub mod work_order_pause_actions;
 pub mod policy;
 

@@ -31,6 +31,7 @@ mod m20260518_100000_add_work_order_escalations;
 mod m20260517_100000_add_escalation_level;
 mod m20260519_100000_add_work_order_appointment_changes;
 mod m20260519_110000_add_work_order_pause;
+mod m20260519_120000_drop_work_order_pause;
 
 
 pub struct Migrator;
@@ -70,6 +71,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260517_100000_add_escalation_level::Migration),
             Box::new(m20260519_100000_add_work_order_appointment_changes::Migration),
             Box::new(m20260519_110000_add_work_order_pause::Migration),
+            Box::new(m20260519_120000_drop_work_order_pause::Migration),
         ]
     }
 }

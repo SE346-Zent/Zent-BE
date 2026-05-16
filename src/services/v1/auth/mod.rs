@@ -1,5 +1,4 @@
 // Internal logic modules made public for handler orchestration
-pub mod auto_login;
 pub mod login;
 pub mod register;
 pub mod verify_otp;

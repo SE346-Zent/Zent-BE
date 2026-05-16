@@ -12,10 +12,8 @@ pub mod history;
 pub mod cancel;
 pub mod complaint;
 pub mod change_appointment;
-pub mod pause;
 
 pub use change_appointment::change_appointment;
-pub use pause::pause;
 pub use complaint::complaint;
 pub use create::create;
 pub use list::list;
@@ -45,7 +43,6 @@ pub use reassign::__path_reassign;
 pub use cancel::__path_cancel;
 pub use complaint::__path_complaint;
 pub use change_appointment::__path_change_appointment;
-pub use pause::__path_pause;
 
 use axum::{Router, middleware};
 use std::collections::HashMap;
