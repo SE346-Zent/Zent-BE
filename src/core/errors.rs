@@ -6,17 +6,22 @@ use axum::{
 use serde_json::json;
 
 /// Centralized application error type.
-///
-/// Services return `AppError` variants; handlers let the `IntoResponse`
-/// implementation convert them into a consistent JSON envelope.
 pub enum AppError {
+    /// 400 Bad Request: The request is malformed or invalid.
     BadRequest(String),
+    /// 401 Unauthorized: Authentication is required or failed.
     Unauthorized(String),
+    /// 403 Forbidden: The authenticated user lacks permission.
     Forbidden(String),
+    /// 404 Not Found: The requested resource does not exist.
     NotFound(String),
+    /// 409 Conflict: The request conflicts with the current state (e.g., duplicate email).
     Conflict(String),
+    /// 422 Unprocessable Entity: Request validation failed.
     ValidationError(String),
+    /// 503 Service Unavailable: A required dependency (e.g., DB, MQ) is unavailable.
     ServiceUnavailable(String),
+    /// 500 Internal Server Error: An unexpected error occurred.
     Internal(anyhow::Error),
 }
 

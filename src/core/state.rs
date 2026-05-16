@@ -15,20 +15,28 @@ pub struct AccessTokenDefaultTTLSeconds(pub i64);
 #[derive(Clone, Copy)]
 pub struct SessionDefaultTTLSeconds(pub i64);
 
-/// AppState holds infrastructure resources (db, cache, mq) directly.
-/// This enables Handlers to act as Actors by extracting infrastructure
-/// directly using FromRef and executing side-effects.
+/// Shared application state containing all infrastructure resources and global configuration.
 #[derive(Clone)]
 pub struct AppState {
+    /// MySQL database connection pool (via SeaORM).
     pub db: Arc<DatabaseConnection>,
+    /// MongoDB database connection for document-oriented data.
     pub mongodb: Arc<MongoDatabase>,
+    /// Valkey/Redis client for caching and session management.
     pub valkey: Option<Arc<ValkeyClient>>,
+    /// RabbitMQ connection for asynchronous message processing.
     pub rabbitmq: Option<Arc<Connection>>,
+    /// Pre-loaded HTML email templates.
     pub templates: Arc<HashMap<String, String>>,
+    /// Default Time-To-Live for access tokens.
     pub access_token_ttl: AccessTokenDefaultTTLSeconds,
+    /// Default Time-To-Live for user sessions.
     pub session_ttl: SessionDefaultTTLSeconds,
+    /// Key used for decoding/verifying JWT tokens.
     pub decoding_key: DecodingKey,
+    /// Key used for encoding/signing JWT tokens.
     pub encoding_key: EncodingKey,
+    /// In-memory cache of frequently used lookup tables.
     pub lookup_tables: Arc<LookupTables>,
 }
 
