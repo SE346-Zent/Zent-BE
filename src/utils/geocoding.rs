@@ -2,9 +2,12 @@ use serde::Deserialize;
 use crate::core::config::AppConfig;
 use crate::core::errors::AppError;
 
+/// Represents a geographical location with latitude and longitude coordinates.
 #[derive(Debug, serde::Deserialize, Clone, Copy)]
 pub struct Location {
+    /// Latitude coordinate.
     pub lat: f64,
+    /// Longitude coordinate.
     pub lng: f64,
 }
 
@@ -14,6 +17,7 @@ struct NominatimResponse {
     lon: String,
 }
 
+/// Convert a structured physical address into geographical coordinates (lat/lng) using the Nominatim API.
 pub async fn geocode_address(
     address: &str,
     city: &str,

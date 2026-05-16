@@ -2,6 +2,9 @@ use crate::core::config::AppConfig;
 use crate::core::errors::AppError;
 use reqwest::header::CONTENT_TYPE;
 
+/// Upload a binary object to Oracle Cloud Infrastructure (OCI) Object Storage using a Pre-Authenticated Request (PAR).
+///
+/// Returns the name of the uploaded object on success.
 pub async fn upload_object(
     object_name: &str,
     data: Vec<u8>,

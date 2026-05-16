@@ -4,7 +4,10 @@ use argon2::{
 };
 use crate::core::errors::AppError;
 
-/// Hash a plain text password using Argon2.
+/// Hash a plain text password using the Argon2 hashing algorithm.
+///
+/// This function is computationally expensive and is executed on a dedicated
+/// blocking thread pool to avoid blocking the async runtime.
 pub async fn hash_password(password: String) -> Result<String, AppError> {
     let password_bytes = password.into_bytes();
     tokio::task::spawn_blocking(move || {
