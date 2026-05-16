@@ -52,9 +52,9 @@ pub fn list_notifications(
     (paginated, PaginationResponse {
         current_page: page as u64,
         limit: limit as u64,
-        total_pages: total_pages as u64,
+        total_pages: total_pages,
         total_records: total_records as u64,
-        has_next: (page as u64) < (total_pages as u64),
+        has_next: (page as u64) < total_pages,
     })
 }
 

@@ -360,7 +360,7 @@ pub(crate) async fn try_auto_assign_single(
     let mut technician_agendas: HashMap<Uuid, Vec<work_orders_ent::Model>> = HashMap::new();
     for a in agendas { if let Some(tid) = a.technician_id { technician_agendas.entry(tid).or_default().push(a); } }
 
-    let effect = match crate::services::v1::work_orders::auto_assign::decide_auto_assign(wo.clone(), technicians, technician_agendas, &policies, assigned_status_id, done_status_id, system_user_id) {
+    let effect = match crate::services::v1::work_orders::auto_assign::decide_auto_assign(wo.clone(), technicians, technician_agendas, policies, assigned_status_id, done_status_id, system_user_id) {
         Ok(Some(eff)) => eff,
         Ok(None) => { tracing::info!("Auto-assign: no suitable tech for WO {} — admin needed", wo.work_order_number); return false; }
         Err(e) => { tracing::error!("Auto-assign failed for WO {}: {}", wo.work_order_number, e); return false; }

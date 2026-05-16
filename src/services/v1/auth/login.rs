@@ -63,7 +63,7 @@ pub fn decide_login(
     // 5. Prepare session data
     let session_id = Uuid::new_v4();
     let session_ttl_seconds = session_ttl.0;
-    let expires_at = Utc::now() + chrono::Duration::seconds(session_ttl_seconds as i64);
+    let expires_at = Utc::now() + chrono::Duration::seconds(session_ttl_seconds);
 
     Ok(LoginEffect {
         session_id,

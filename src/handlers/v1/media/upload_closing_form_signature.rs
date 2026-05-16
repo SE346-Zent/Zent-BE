@@ -100,7 +100,7 @@ pub async fn upload_closing_form_signature(
         return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
     }
 
-    let extension = file_name.split('.').last().unwrap_or("png");
+    let extension = file_name.split('.').next_back().unwrap_or("png");
     let unique_file_name = format!(
         "{}/sig/{}.{}", id, chrono::Utc::now().timestamp(), extension
     );
