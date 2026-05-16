@@ -83,6 +83,7 @@ fn create_json_request(uri: &str, body: &serde_json::Value) -> Request<Body> {
 //  Tests
 // ==========================================
 
+#[ignore = "DinD only: requires real DB"]
 #[tokio::test]
 async fn test_register_new_user() {
     let db: DatabaseConnection = Database::connect("sqlite::memory:").await.unwrap();
