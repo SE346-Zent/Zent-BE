@@ -116,31 +116,32 @@ mod tests {
 
     #[rstest]
     // Success cases
-    #[case(false, false, true, "Success")]
+    #[case(false, false, Some(true), "Success")]
     // Failure cases: Unauthorized (Revoked/Expired)
-    #[case(true, true, true, "Unauthorized")]
-    #[case(true, true, false, "Unauthorized")]
-    #[case(true, false, true, "Unauthorized")]
-    #[case(true, false, false, "Unauthorized")]
-    #[case(false, true, true, "Unauthorized")]
-    #[case(false, true, false, "Unauthorized")]
+    #[case(true, true, Some(true), "Unauthorized")]
+    #[case(true, true, Some(false), "Unauthorized")]
+    #[case(true, false, Some(true), "Unauthorized")]
+    #[case(true, false, Some(false), "Unauthorized")]
+    #[case(false, true, Some(true), "Unauthorized")]
+    #[case(false, true, Some(false), "Unauthorized")]
     // Failure case: Reuse attack
-    #[case(false, false, false, "ReuseAttack")]
+    #[case(false, false, Some(false), "ReuseAttack")]
+    #[case(false, false, None, "ReuseAttack")]
     /// Control whether active_refresh_token_hash input to decide function will match fixed current_hash value
     fn test_decide_refresh_token_exhaustive(
         #[case] revoked: bool,
         #[case] expired: bool,
-        #[case] hash_matches: bool,
+        #[case] hash_matches: Option<bool>,
         #[case] expected: &str,
         mock_user: users::Model,
         mock_key: EncodingKey,
     ) {
         let expires_in = if expired { -10 } else { 3600 };
         let session = mock_session(mock_user.id, expires_in, revoked);
-        let active_refresh_token_hash = if hash_matches {
-            Some("valid_hash".to_string())
-        } else {
-            Some("different_hash".to_string())
+        let active_refresh_token_hash = match hash_matches {
+            Some(true) => Some("valid_hash".to_string()),
+            Some(false) => Some("different_hash".to_string()),
+            None => None,
         };
 
         let result = decide_refresh_token(

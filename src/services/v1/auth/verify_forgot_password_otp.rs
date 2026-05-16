@@ -57,6 +57,8 @@ mod tests {
                 let effect = result.unwrap();
                 assert_eq!(effect.email, "test@example.com");
                 assert_eq!(effect.reset_token, "token");
+                assert_eq!(effect.reset_token_key, "password_reset_token:token");
+                assert_eq!(effect.ttl_seconds, 900);
             }
             "BadRequest" => {
                 assert!(matches!(result, Err(AppError::BadRequest(_))));
