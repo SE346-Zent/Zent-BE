@@ -7,54 +7,61 @@ use crate::model::{
 };
 use super::NotificationRecord;
 
-/// Paginate and return notifications for a user.
+/// Assemble a paginated list of notifications for a user based on query filters.
 ///
-/// Results are sorted newest-first.  Ownership is NOT checked here —
-/// the caller must filter by `user_id` before passing `notifs`.
+/// This function performs in-memory filtering by category, sorting (newest first),
+/// and pagination on a pre-fetched set of `NotificationRecord` data.
+///
+/// # Arguments
+/// * `notification_records` - The list of raw notification records retrieved from the database.
+/// * `list_query` - The query parameters for filtering and pagination.
+///
+/// # Returns
+/// A tuple containing the list of `NotificationListItem` and the `PaginationResponse` metadata.
 pub fn list_notifications(
-    notifs: &[NotificationRecord],
-    query: &NotificationListQuery,
+    notification_records: &[NotificationRecord],
+    list_query: &NotificationListQuery,
 ) -> (Vec<NotificationListItem>, PaginationResponse) {
-    let page = query.page.unwrap_or(1);
-    let limit = query.limit.unwrap_or(20);
+    let current_page = list_query.page.unwrap_or(1);
+    let page_limit = list_query.limit.unwrap_or(20);
     
-    let mut filtered: Vec<_> = notifs.iter()
-        .filter(|n| {
-            if let Some(cat_id) = query.category_id {
-                n.category_id == cat_id
+    let mut filtered_notifications: Vec<_> = notification_records.iter()
+        .filter(|notification| {
+            if let Some(category_id) = list_query.category_id {
+                notification.category_id == category_id
             } else {
                 true
             }
         })
         .collect();
 
-    filtered.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    filtered_notifications.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
-    let total_records = filtered.len();
-    let offset = (page - 1) * limit;
-    let paginated = filtered.into_iter()
-        .skip(offset as usize)
-        .take(limit as usize)
-        .map(|n| NotificationListItem {
-            notification_id: n.notification_id.to_string(),
-            category_id: n.category_id,
-            category_name: super::find_category_slug_by_id(n.category_id).unwrap_or("").to_string(),
-            title: n.title.clone(),
-            body: n.body.clone(),
-            data: Some(n.data.clone()),
-            is_read: n.is_read,
-            created_at: n.created_at.to_string(),
+    let total_records = filtered_notifications.len();
+    let page_offset = (current_page - 1) * page_limit;
+    let paginated_items = filtered_notifications.into_iter()
+        .skip(page_offset as usize)
+        .take(page_limit as usize)
+        .map(|notification| NotificationListItem {
+            notification_id: notification.notification_id.to_string(),
+            category_id: notification.category_id,
+            category_name: super::find_category_slug_by_id(notification.category_id).unwrap_or("").to_string(),
+            title: notification.title.clone(),
+            body: notification.body.clone(),
+            data: Some(notification.data.clone()),
+            is_read: notification.is_read,
+            created_at: notification.created_at.to_string(),
         })
         .collect();
 
-    let total_pages = (total_records as f64 / limit as f64).ceil() as u64;
+    let total_pages = (total_records as f64 / page_limit as f64).ceil() as u64;
 
-    (paginated, PaginationResponse {
-        current_page: page as u64,
-        limit: limit as u64,
-        total_pages: total_pages,
+    (paginated_items, PaginationResponse {
+        current_page: current_page as u64,
+        limit: page_limit as u64,
+        total_pages,
         total_records: total_records as u64,
-        has_next: (page as u64) < total_pages,
+        has_next: (current_page as u64) < total_pages,
     })
 }
 

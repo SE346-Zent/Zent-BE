@@ -23,77 +23,89 @@ use crate::extractor::auth_user::AuthUser;
     tag = "notifications",
     security(("bearer_auth" = []))
 )]
+/// Handle requests to retrieve the total count of unread notifications for the authenticated user.
+///
+/// This handler first checks the Valkey cache (key: `unread:{user_id}`). If the
+/// count is not cached, it falls back to MongoDB, iterates through notification
+/// buckets for the user, and sums the unread entries before updating the cache.
+///
+/// # Arguments
+/// * `authenticated_user` - The currently authenticated user.
+/// * `app_state` - Shared application state containing Valkey and MongoDB connections.
+///
+/// # Returns
+/// A result containing the successful `ApiResponse` with the unread count, or an `AppError`.
 pub async fn get_unread_noti_count(
-    auth: AuthUser,
-    State(state): State<AppState>,
+    authenticated_user: AuthUser,
+    State(app_state): State<AppState>,
 ) -> Result<Json<ApiResponse<u64>>, AppError> {
-    let user_id = auth.user.id;
-    let valkey_key = format!("unread:{}", user_id);
+    let target_user_id = authenticated_user.user.id;
+    let cache_key_name = format!("unread:{}", target_user_id);
 
     // 1. Try Valkey first
-    if let Some(valkey) = &state.valkey {
-        if let Ok(mut conn) = valkey.get_connection().await {
+    if let Some(valkey_instance) = &app_state.valkey {
+        if let Ok(mut valkey_conn) = valkey_instance.get_connection().await {
             match redis::cmd("GET")
-                .arg(&valkey_key)
-                .query_async::<Option<i64>>(&mut conn)
+                .arg(&cache_key_name)
+                .query_async::<Option<i64>>(&mut valkey_conn)
                 .await
             {
-                Ok(Some(count)) if count >= 0 => {
+                Ok(Some(cached_count)) if cached_count >= 0 => {
                     return Ok(Json(ApiResponse::success(
                         200,
                         "Unread count retrieved",
-                        count as u64,
+                        cached_count as u64,
                     )));
                 }
                 Ok(_) => {
                     // Key doesn't exist or has unexpected value → fallback to MongoDB
                 }
-                Err(e) => {
-                    tracing::warn!("Valkey GET failed for {}: {:?}. Falling back to MongoDB.", valkey_key, e);
+                Err(err) => {
+                    tracing::warn!("Valkey GET failed for {}: {:?}. Falling back to MongoDB.", cache_key_name, err);
                 }
             }
         }
     }
 
     // 2. Fallback: count unread notifications from MongoDB
-    let collection = state.mongodb
+    let notification_collection = app_state.mongodb
         .collection::<mongodb::bson::Document>("notifications");
 
     // Bucket pattern: iterate all buckets for this user, count unread notifications
-    let filter = doc! { "user_id": user_id.to_string() };
-    let cursor = collection
-        .find(filter)
+    let search_filter = doc! { "user_id": target_user_id.to_string() };
+    let cursor = notification_collection
+        .find(search_filter)
         .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("MongoDB error: {}", e)))?;
+        .map_err(|err| AppError::Internal(anyhow::anyhow!("MongoDB error: {}", err)))?;
 
     let bucket_docs: Vec<mongodb::bson::Document> = cursor
         .try_collect()
         .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("MongoDB error: {}", e)))?;
+        .map_err(|err| AppError::Internal(anyhow::anyhow!("MongoDB error: {}", err)))?;
 
-    let mut unread_count: u64 = 0;
-    for bucket_doc in &bucket_docs {
-        let notifs: Vec<&mongodb::bson::Bson> = bucket_doc
+    let mut unread_total_count: u64 = 0;
+    for bucket_document in &bucket_docs {
+        let notification_array: Vec<&mongodb::bson::Bson> = bucket_document
             .get_array("notifications")
             .map(|arr| arr.iter().collect())
             .unwrap_or_default();
 
-        for item in notifs {
-            if let Some(notif_doc) = item.as_document() {
-                if !notif_doc.get_bool("is_read").unwrap_or(false) {
-                    unread_count += 1;
+        for item in notification_array {
+            if let Some(notification_doc) = item.as_document() {
+                if !notification_doc.get_bool("is_read").unwrap_or(false) {
+                    unread_total_count += 1;
                 }
             }
         }
     }
 
     // 3. Write count to Valkey for future requests
-    if let Some(valkey) = &state.valkey {
-        if let Ok(mut conn) = valkey.get_connection().await {
+    if let Some(valkey_instance) = &app_state.valkey {
+        if let Ok(mut valkey_conn) = valkey_instance.get_connection().await {
             let _ = redis::cmd("SET")
-                .arg(&valkey_key)
-                .arg(unread_count as i64)
-                .query_async::<()>(&mut conn)
+                .arg(&cache_key_name)
+                .arg(unread_total_count as i64)
+                .query_async::<()>(&mut valkey_conn)
                 .await;
         }
     }
@@ -101,6 +113,6 @@ pub async fn get_unread_noti_count(
     Ok(Json(ApiResponse::success(
         200,
         "Unread count retrieved",
-        unread_count,
+        unread_total_count,
     )))
 }

@@ -37,22 +37,37 @@ pub struct NotificationRecord {
 
 // ── Shared Helper Functions ───────────────────────────────────────────
 
-/// Look up a category id by its slug.
-pub fn find_category_id_by_slug(slug: &str) -> Option<i32> {
-    NOTIFICATION_CATEGORIES.iter().position(|(s, _)| *s == slug).map(|i| (i + 1) as i32)
+/// Look up a unique category ID by its slug.
+///
+/// # Arguments
+/// * `category_slug` - The human-readable slug (e.g., "work_order_assigned").
+///
+/// # Returns
+/// The 1-based integer ID if found, or `None`.
+pub fn find_category_id_by_slug(category_slug: &str) -> Option<i32> {
+    NOTIFICATION_CATEGORIES.iter().position(|(slug, _)| *slug == category_slug).map(|index| (index + 1) as i32)
 }
 
-/// Look up a category slug by its id (1-based).
-pub fn find_category_slug_by_id(id: i32) -> Option<&'static str> {
-    if id < 1 || id > NOTIFICATION_CATEGORIES.len() as i32 {
+/// Look up a category slug by its unique 1-based ID.
+///
+/// # Arguments
+/// * `category_id` - The 1-based integer ID of the category.
+///
+/// # Returns
+/// The static slug string if valid, or `None`.
+pub fn find_category_slug_by_id(category_id: i32) -> Option<&'static str> {
+    if category_id < 1 || category_id > NOTIFICATION_CATEGORIES.len() as i32 {
         return None;
     }
-    Some(NOTIFICATION_CATEGORIES[(id - 1) as usize].0)
+    Some(NOTIFICATION_CATEGORIES[(category_id - 1) as usize].0)
 }
 
-/// Check whether a category id is valid.
-pub fn is_valid_category_id(id: i32) -> bool {
-    id >= 1 && id <= NOTIFICATION_CATEGORIES.len() as i32
+/// Validate whether a category ID exists within the defined system categories.
+///
+/// # Arguments
+/// * `category_id` - The integer ID to validate.
+pub fn is_valid_category_id(category_id: i32) -> bool {
+    category_id >= 1 && category_id <= NOTIFICATION_CATEGORIES.len() as i32
 }
 
 
