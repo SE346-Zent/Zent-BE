@@ -137,44 +137,83 @@ mod tests {
     }
 
     #[rstest]
-    #[case(AccountStatusEnum::Active, true, true)]
-    #[case(AccountStatusEnum::Pending, true, true)]
-    #[case(AccountStatusEnum::Locked, true, true)]
-    #[case(AccountStatusEnum::Inactive, true, true)]
-    #[case(AccountStatusEnum::Terminated, true, true)]
-    #[case(AccountStatusEnum::from(10), true, true)]
-    #[case(AccountStatusEnum::Pending, true, false)]
-    #[case(AccountStatusEnum::Locked, true, false)]
-    #[case(AccountStatusEnum::Inactive, true, false)]
-    #[case(AccountStatusEnum::Terminated, true, false)]
-    #[case(AccountStatusEnum::from(11), true, false)]
-    #[case(AccountStatusEnum::Active, false, true)]
-    #[case(AccountStatusEnum::Pending, false, true)]
-    #[case(AccountStatusEnum::Locked, false, true)]
-    #[case(AccountStatusEnum::Inactive, false, true)]
-    #[case(AccountStatusEnum::Terminated, false, true)]
-    #[case(AccountStatusEnum::from(12), false, true)]
-    #[case(AccountStatusEnum::Active, false, false)]
-    #[case(AccountStatusEnum::Pending, false, false)]
-    #[case(AccountStatusEnum::Locked, false, false)]
-    #[case(AccountStatusEnum::Inactive, false, false)]
-    #[case(AccountStatusEnum::Terminated, false, false)]
-    #[case(AccountStatusEnum::from(13), false, false)]
+    // If user is deleted, it's always Unauthorized
+    #[case(AccountStatusEnum::Active, true, true, "Unauthorized")]
+    #[case(AccountStatusEnum::Pending, true, true, "Unauthorized")]
+    #[case(AccountStatusEnum::Locked, true, true, "Unauthorized")]
+    #[case(AccountStatusEnum::Inactive, true, true, "Unauthorized")]
+    #[case(AccountStatusEnum::Terminated, true, true, "Unauthorized")]
+    #[case(AccountStatusEnum::from(10), true, true, "Unauthorized")]
+    // If user is deleted AND password invalid, it's Unauthorized (checks deleted first)
+    #[case(AccountStatusEnum::Active, false, true, "Unauthorized")]
+    #[case(AccountStatusEnum::Pending, false, true, "Unauthorized")]
+    #[case(AccountStatusEnum::Locked, false, true, "Unauthorized")]
+    #[case(AccountStatusEnum::Inactive, false, true, "Unauthorized")]
+    #[case(AccountStatusEnum::Terminated, false, true, "Unauthorized")]
+    #[case(AccountStatusEnum::from(12), false, true, "Unauthorized")]
+    // If user is NOT deleted but password invalid, it's Unauthorized
+    #[case(AccountStatusEnum::Active, false, false, "Unauthorized")]
+    #[case(AccountStatusEnum::Pending, false, false, "Unauthorized")]
+    #[case(AccountStatusEnum::Locked, false, false, "Unauthorized")]
+    #[case(AccountStatusEnum::Inactive, false, false, "Unauthorized")]
+    #[case(AccountStatusEnum::Terminated, false, false, "Unauthorized")]
+    #[case(AccountStatusEnum::from(13), false, false, "Unauthorized")]
+    // If user is NOT deleted, password IS valid, but account status is not Active, it's Forbidden
+    #[case(AccountStatusEnum::Pending, true, false, "Forbidden")]
+    #[case(AccountStatusEnum::Locked, true, false, "Forbidden")]
+    #[case(AccountStatusEnum::Inactive, true, false, "Forbidden")]
+    #[case(AccountStatusEnum::Terminated, true, false, "Forbidden")]
+    #[case(AccountStatusEnum::from(11), true, false, "Forbidden")]
     fn test_decide_login_invalid_cases(
         #[case] account_status: AccountStatusEnum,
         #[case] is_password_valid: bool,
         #[case] is_user_deleted: bool,
+        #[case] expected_error: &str,
         mock_key: EncodingKey,
     ) {
         let mock_user = mock_user(account_status, is_user_deleted);
         let result = decide_login(
             &mock_user,
-            is_password_valid, // invalid password
+            is_password_valid,
             AccessTokenDefaultTTLSeconds(900),
             SessionDefaultTTLSeconds(3600),
             &mock_key,
         );
 
-        assert!(matches!(result, Err(AppError::Unauthorized(_))));
+        match expected_error {
+            "Unauthorized" => assert!(matches!(result, Err(AppError::Unauthorized(_)))),
+            "Forbidden" => assert!(matches!(result, Err(AppError::Forbidden(_)))),
+            _ => panic!("Unknown expected error type"),
+        }
+    }
+
+    #[rstest]
+    #[case(0, 0, 0)] // Zero TTL (Immediate expiration)
+    #[case(1, 1, 1)] // 1 Second TTL
+    #[case(31536000, 31536000, 31536000)] // 1 Year TTL
+    #[case(900, 3153600000, 3153600000)] // 100 Years TTL
+    fn test_decide_login_ttl_boundaries(
+        #[case] access_ttl: i64,
+        #[case] session_ttl: i64,
+        #[case] expected_duration: i64,
+        mock_user: users::Model,
+        mock_key: EncodingKey,
+    ) {
+        let before_call = Utc::now();
+        let result = decide_login(
+            &mock_user,
+            true,
+            AccessTokenDefaultTTLSeconds(access_ttl),
+            SessionDefaultTTLSeconds(session_ttl),
+            &mock_key,
+        );
+
+        assert!(result.is_ok());
+        let effect = result.unwrap();
+
+        let duration = (effect.expires_at - before_call).num_seconds();
+
+        // Allow a 1-2 second buffer for execution time depending on system speed
+        assert!(duration >= expected_duration && duration <= expected_duration + 2);
     }
 }
