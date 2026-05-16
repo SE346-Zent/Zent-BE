@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     core::errors::AppError,
-    entities::{work_order_appointment_changes, work_order_state_history, work_orders},
+    entities::{work_order_appointment_changes, work_orders},
 };
 
 #[derive(Debug)]

@@ -141,10 +141,10 @@ pub async fn reassign(
         ).await;
     }
 
-    // Send email notifications
+    // Send email notification to customer about reassignment
     if let Some(rmq) = rabbitmq_opt.as_ref() {
         if let (Some(nt), Some(c)) = (new_tech, cust) {
-            let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(
+            let _ = crate::services::v1::core::email_service::send_work_order_reassigned_email(
                 rmq, &templates, &c.email, &c.full_name,
                 &work_order.work_order_number, &nt.full_name,
                 &work_order.appointment.to_string(),
