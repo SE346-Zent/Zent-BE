@@ -25,33 +25,48 @@ use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     )
 )]
+/// Handle requests to initiate the forgotten password recovery flow.
+///
+/// This handler validates the request, checks for user existence, and if the
+/// user is found, generates a recovery OTP, caches it in Valkey, and queues
+/// a recovery email via RabbitMQ.
+///
+/// # Arguments
+/// * `db_connection` - Shared database connection pool.
+/// * `valkey_client` - Optional shared Valkey client for OTP caching.
+/// * `rabbitmq_connection` - Optional shared RabbitMQ connection for email delivery.
+/// * `email_templates` - Shared pre-loaded HTML email templates.
+/// * `forgot_password_payload` - The recovery request containing the user's email.
+///
+/// # Returns
+/// A result containing a successful message-only `ApiResponse`, or an `AppError`.
 pub async fn forgot_password_handler(
-    State(db): State<Arc<DatabaseConnection>>,
+    State(db_connection): State<Arc<DatabaseConnection>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
-    State(rabbitmq): State<Option<Arc<lapin::Connection>>>,
-    State(templates): State<Arc<std::collections::HashMap<String, String>>>,
-    Json(payload): Json<ForgotPasswordRequest>,
+    State(rabbitmq_connection): State<Option<Arc<lapin::Connection>>>,
+    State(email_templates): State<Arc<std::collections::HashMap<String, String>>>,
+    Json(forgot_password_payload): Json<ForgotPasswordRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    forgot_password_payload.validate().map_err(|err| AppError::BadRequest(err.to_string()))?;
 
-    let user = users::Entity::find()
-        .filter(users::Column::Email.eq(&payload.email))
-        .one(db.as_ref()).await?;
+    let user_record = users::Entity::find()
+        .filter(users::Column::Email.eq(&forgot_password_payload.email))
+        .one(db_connection.as_ref()).await?;
 
-    let effect = forgot_password::decide_forgot_password(user.as_ref(), payload)?;
+    let forgot_password_effect = forgot_password::decide_forgot_password(user_record.as_ref(), forgot_password_payload)?;
 
-    if let Some(effect) = effect {
+    if let Some(effect) = forgot_password_effect {
         if let Some(client) = valkey_client {
             if let Ok(mut conn) = client.get_connection().await {
-                let valkey_key = format!("forgot_password_verification:{}", effect.email);
-                let valkey_data = serde_json::json!({ "code": effect.otp_code, "attempts": 5 }).to_string();
+                let valkey_key = format!("forgot_password_verification:{}", effect.email_address);
+                let valkey_data = serde_json::json!({ "code": effect.recovery_otp, "attempts": 5 }).to_string();
                 let _ = conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await;
             } else {
                 tracing::warn!("Valkey unavailable — forgot-password OTP not cached");
             }
         }
-        if let Some(rmq) = rabbitmq {
-            email_service::send_forgot_password_email(&rmq, &templates, &effect.email, &effect.full_name, &effect.otp_code).await?;
+        if let Some(rabbitmq) = rabbitmq_connection {
+            email_service::send_forgot_password_email(&rabbitmq, &email_templates, &effect.email_address, &effect.full_name, &effect.recovery_otp).await?;
         }
     }
 
