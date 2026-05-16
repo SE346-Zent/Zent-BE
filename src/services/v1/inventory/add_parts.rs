@@ -8,62 +8,83 @@ use crate::{
     model::requests::inventory::add_parts_request::AddPartsRequest,
 };
 
+/// Represents the calculated results and side-effects of a successful part addition request.
+///
+/// This structure prepares the database models for the new part form, the
+/// associated images, and the links between them, which will later be persisted
+/// in a single transaction.
 #[derive(Debug)]
 pub struct AddPartsEffect {
-    pub new_part_form: new_part_forms::ActiveModel,
-    pub images: Vec<images::ActiveModel>,
-    pub image_links: Vec<new_part_form_image_links::ActiveModel>,
+    /// The database model for the part registration form.
+    pub part_form_model: new_part_forms::ActiveModel,
+    /// A list of database models for the uploaded part photos.
+    pub image_models: Vec<images::ActiveModel>,
+    /// A list of database models linking the part form to its photos.
+    pub image_link_models: Vec<new_part_form_image_links::ActiveModel>,
 }
 
+/// Determine the outcome of a part addition request by validating technician assignment and preparing data.
+///
+/// This pure function ensures that only the technician currently assigned to the
+/// work order can add parts, and prepares the models for the registration form
+/// and its associated images.
+///
+/// # Arguments
+/// * `add_parts_payload` - The request containing part details and photo filenames.
+/// * `work_order_record` - The database model representing the associated work order.
+/// * `requesting_technician_id` - The unique identifier of the technician attempting the addition.
+///
+/// # Returns
+/// A result containing the `AddPartsEffect` on success, or a `Forbidden` error if the technician is not assigned.
 pub fn decide_add_parts(
-    payload: AddPartsRequest,
-    work_order: work_orders::Model,
-    technician_id: Uuid,
+    add_parts_payload: AddPartsRequest,
+    work_order_record: work_orders::Model,
+    requesting_technician_id: Uuid,
 ) -> Result<AddPartsEffect, AppError> {
-    if work_order.technician_id != Some(technician_id) {
+    if work_order_record.technician_id != Some(requesting_technician_id) {
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
-    let now = Utc::now();
-    let form_id = Uuid::new_v4();
+    let current_timestamp = Utc::now();
+    let new_form_id = Uuid::new_v4();
 
-    let new_part_form = new_part_forms::ActiveModel {
-        id: Set(form_id),
-        part_number: Set(payload.part_number),
-        part_types_id: Set(payload.part_types_id),
-        model_code: Set(payload.model_code),
-        serial_number: Set(payload.serial_number),
-        description: Set(payload.description),
-        work_order_id: Set(work_order.id),
-        created_at: Set(now),
-        updated_at: Set(now),
+    let part_form_model = new_part_forms::ActiveModel {
+        id: Set(new_form_id),
+        part_number: Set(add_parts_payload.part_number),
+        part_types_id: Set(add_parts_payload.part_types_id),
+        model_code: Set(add_parts_payload.model_code),
+        serial_number: Set(add_parts_payload.serial_number),
+        description: Set(add_parts_payload.description),
+        work_order_id: Set(work_order_record.id),
+        created_at: Set(current_timestamp),
+        updated_at: Set(current_timestamp),
         deleted_at: Set(None),
     };
 
-    // Create image + link records for each photo filename
-    let mut images_to_insert = Vec::new();
-    let mut image_links_to_insert = Vec::new();
+    // Create image + link records for each photo object name
+    let mut image_models = Vec::new();
+    let mut image_link_models = Vec::new();
 
-    for object_name in payload.photos {
+    for photo_object_name in add_parts_payload.photos {
         let image_id = Uuid::new_v4();
-        images_to_insert.push(images::ActiveModel {
+        image_models.push(images::ActiveModel {
             id: Set(image_id),
-            object_name: Set(object_name),
-            created_at: Set(now),
-            updated_at: Set(now),
+            object_name: Set(photo_object_name),
+            created_at: Set(current_timestamp),
+            updated_at: Set(current_timestamp),
             ..Default::default()
         });
 
-        image_links_to_insert.push(new_part_form_image_links::ActiveModel {
+        image_link_models.push(new_part_form_image_links::ActiveModel {
             image_id: Set(image_id),
-            new_part_form_id: Set(form_id),
+            new_part_form_id: Set(new_form_id),
         });
     }
 
     Ok(AddPartsEffect {
-        new_part_form,
-        images: images_to_insert,
-        image_links: image_links_to_insert,
+        part_form_model,
+        image_models,
+        image_link_models,
     })
 }
 
@@ -104,10 +125,10 @@ mod tests {
 
     #[test]
     fn test_decide_add_parts_success() {
-        let tech_id = Uuid::new_v4();
-        let wo = dummy_work_order(tech_id);
+        let technician_id = Uuid::new_v4();
+        let work_order_record = dummy_work_order(technician_id);
 
-        let req = AddPartsRequest {
+        let payload = AddPartsRequest {
             part_number: "PN-123".to_string(),
             part_types_id: 1,
             model_code: Some("MC-123".to_string()),
@@ -116,25 +137,25 @@ mod tests {
             photos: vec!["img.png".to_string()],
         };
 
-        let result = decide_add_parts(req, wo.clone(), tech_id);
+        let result = decide_add_parts(payload, work_order_record.clone(), technician_id);
         assert!(result.is_ok());
-        let effect = result.unwrap();
+        let add_parts_effect = result.unwrap();
 
-        assert_eq!(effect.new_part_form.part_number, Set("PN-123".to_string()));
-        assert_eq!(effect.new_part_form.work_order_id, Set(wo.id));
+        assert_eq!(add_parts_effect.part_form_model.part_number, Set("PN-123".to_string()));
+        assert_eq!(add_parts_effect.part_form_model.work_order_id, Set(work_order_record.id));
         
-        assert_eq!(effect.images.len(), 1);
-        assert_eq!(effect.images[0].object_name, Set("img.png".to_string()));
-        assert_eq!(effect.image_links.len(), 1);
+        assert_eq!(add_parts_effect.image_models.len(), 1);
+        assert_eq!(add_parts_effect.image_models[0].object_name, Set("img.png".to_string()));
+        assert_eq!(add_parts_effect.image_link_models.len(), 1);
     }
 
     #[test]
     fn test_decide_add_parts_forbidden() {
-        let tech_id = Uuid::new_v4();
-        let wrong_tech_id = Uuid::new_v4();
-        let wo = dummy_work_order(tech_id);
+        let technician_id = Uuid::new_v4();
+        let unauthorized_technician_id = Uuid::new_v4();
+        let work_order_record = dummy_work_order(technician_id);
 
-        let req = AddPartsRequest {
+        let payload = AddPartsRequest {
             part_number: "PN-123".to_string(),
             part_types_id: 1,
             model_code: None,
@@ -143,7 +164,7 @@ mod tests {
             photos: vec![],
         };
 
-        let result = decide_add_parts(req, wo, wrong_tech_id);
+        let result = decide_add_parts(payload, work_order_record, unauthorized_technician_id);
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::Forbidden(_) => {},
