@@ -1,4 +1,8 @@
-use crate::{core::errors::AppError, entities::users, model::requests::users::UserCreateRequest};
+use crate::{
+    core::errors::AppError,
+    entities::users,
+    model::requests::users::UserCreateRequest,
+};
 
 /// Represents the side-effects for creating a new user.
 #[derive(Debug)]
@@ -8,10 +12,7 @@ pub struct CreateUserEffect {
 }
 
 /// Validate and prepare user creation.
-pub fn decide_can_create_user(
-    _current_user: users::Model,
-    _req: UserCreateRequest,
-) -> Result<CreateUserEffect, AppError> {
+pub fn decide_can_create_user(_current_user: users::Model, _req: UserCreateRequest) -> Result<CreateUserEffect, AppError> {
     unimplemented!()
 }
 
@@ -20,8 +21,13 @@ mod tests {
     use super::*;
     use chrono::Utc;
     use rstest::{fixture, rstest};
-    use sea_orm::Set;
     use uuid::Uuid;
+    use sea_orm::Set;
+
+    const ROLE_ADMIN: i32 = 1;
+    const ROLE_SUPER_ADMIN: i32 = 2;
+    const ROLE_CUSTOMER: i32 = 3;
+    const ROLE_TECHNICIAN: i32 = 4;
 
     #[fixture]
     fn mock_user(#[default(3)] role_id: i32) -> users::Model {
@@ -43,20 +49,20 @@ mod tests {
     }
 
     #[rstest]
-    #[case(2, 2, "forbidden")] // SA -> SA
-    #[case(1, 4, "ok")] // Admin -> Tech
-    #[case(1, 2, "forbidden")] // Admin -> SA
-    #[case(1, 1, "forbidden")] // Admin -> Admin
-    #[case(1, 3, "forbidden")] // Admin -> Customer
-    #[case(2, 3, "forbidden")] // SuperAdmin -> Customer
-    #[case(2, 1, "ok")] // SuperAdmin -> Admin
-    #[case(2, 4, "ok")] // SuperAdmin -> Tech
-    fn test_decide_can_create_user_rbac(
-        #[case] current_role: i32,
-        #[case] target_role: i32,
-        #[case] expected: &str,
-    ) {
-        let user = mock_user(current_role);
+    // SA can create everyone
+    #[case(ROLE_SUPER_ADMIN, ROLE_SUPER_ADMIN, "ok")]
+    #[case(ROLE_SUPER_ADMIN, ROLE_ADMIN, "ok")]
+    #[case(ROLE_SUPER_ADMIN, ROLE_TECHNICIAN, "ok")]
+    // Admin can create Tech and Customer
+    #[case(ROLE_ADMIN, ROLE_TECHNICIAN, "ok")]
+    #[case(ROLE_ADMIN, ROLE_CUSTOMER, "ok")]
+    // Admin CANNOT create Admin or SA
+    #[case(ROLE_ADMIN, ROLE_ADMIN, "forbidden")]
+    #[case(ROLE_ADMIN, ROLE_SUPER_ADMIN, "forbidden")]
+    // Others can't create anyone
+    #[case(ROLE_TECHNICIAN, ROLE_CUSTOMER, "forbidden")]
+    fn test_decide_can_create_user_rbac(#[case] current_role: i32, #[case] target_role: i32, #[case] expected: &str) {
+        let current_user = mock_user(current_role);
         let req = UserCreateRequest {
             role_id: target_role,
             full_name: "New".to_string(),
@@ -65,13 +71,13 @@ mod tests {
             password: None,
             generate_password: Some(true),
         };
-        let res = decide_can_create_user(user, req);
-
+        let res = decide_can_create_user(current_user, req);
+        
         match expected {
             "ok" => {
-                let effect = res.unwrap();
+                let effect = res.expect("Should be OK");
                 assert_eq!(effect.user_active_model.role_id, Set(target_role));
-            }
+            },
             "forbidden" => assert!(matches!(res, Err(AppError::Forbidden(_)))),
             _ => panic!(),
         }

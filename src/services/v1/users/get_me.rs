@@ -18,36 +18,48 @@ pub fn decide_get_me(_user: users::Model) -> GetMeEffect {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
+    use chrono::{Utc, TimeZone};
     use rstest::{fixture, rstest};
     use uuid::Uuid;
 
     #[fixture]
-    fn mock_user() -> users::Model {
+    fn mock_user(
+        #[default("John Doe")] name: &str,
+        #[default("john@example.com")] email: &str,
+        #[default("+1234567890")] phone: &str,
+    ) -> users::Model {
         users::Model {
             id: Uuid::new_v4(),
-            full_name: "John Doe".to_string(),
-            email: "john@example.com".to_string(),
+            full_name: name.to_string(),
+            email: email.to_string(),
             password_hash: "hash".to_string(),
-            phone_number: "+1234567890".to_string(),
+            phone_number: phone.to_string(),
             account_status: 1,
             role_id: 3,
             province: None,
             fcm_token: None,
             installation_id: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: Utc.with_ymd_and_hms(2026, 5, 17, 12, 0, 0).unwrap(),
+            updated_at: Utc.with_ymd_and_hms(2026, 5, 17, 12, 0, 0).unwrap(),
             deleted_at: None,
         }
     }
 
     #[rstest]
-    fn test_decide_get_me_mapping(mock_user: users::Model) {
-        let effect = decide_get_me(mock_user.clone());
+    #[case("John Doe", "john@zent.com", "+111")]
+    #[case("Jane Smith", "jane@zent.com", "+222")]
+    #[case("OnlyName", "only@zent.com", "+333")]
+    fn test_decide_get_me_mapping(
+        #[case] name: &str,
+        #[case] email: &str,
+        #[case] phone: &str,
+    ) {
+        let user = mock_user(name, email, phone);
+        let effect = decide_get_me(user.clone());
         let res = effect.response_data;
         
-        assert_eq!(res.full_name, mock_user.full_name);
-        assert_eq!(res.email, mock_user.email);
-        assert_eq!(res.phone, Some(mock_user.phone_number));
+        assert_eq!(res.full_name, name);
+        assert_eq!(res.email, email);
+        assert_eq!(res.phone, Some(phone.to_string()));
     }
 }

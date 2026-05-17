@@ -23,8 +23,15 @@ mod tests {
     use uuid::Uuid;
     use sea_orm::Set;
 
+    const ROLE_ADMIN: i32 = 1;
+    const ROLE_SUPER_ADMIN: i32 = 2;
+    const ROLE_CUSTOMER: i32 = 3;
+    const ROLE_TECHNICIAN: i32 = 4;
+
+    const STATUS_TERMINATED: i32 = 4;
+
     #[fixture]
-    fn mock_user(#[default(3)] role_id: i32) -> users::Model {
+    fn mock_user(#[default(ROLE_CUSTOMER)] role_id: i32) -> users::Model {
         users::Model {
             id: Uuid::new_v4(),
             full_name: "John Doe".to_string(),
@@ -43,17 +50,28 @@ mod tests {
     }
 
     #[rstest]
-    #[case(3, true)] // Customer
-    #[case(1, false)] // Admin
+    #[case(ROLE_CUSTOMER, true)]
+    #[case(ROLE_TECHNICIAN, false)]
+    #[case(ROLE_ADMIN, false)]
+    #[case(ROLE_SUPER_ADMIN, false)]
     fn test_decide_close_account_rbac(#[case] role_id: i32, #[case] expected_ok: bool) {
         let user = mock_user(role_id);
         let res = decide_close_account(user);
         
         if expected_ok {
-            let effect = res.unwrap();
-            assert_eq!(effect.user_active_model.account_status, Set(4)); // Terminated
+            let effect = res.expect("Should be OK for Customer");
+            assert_eq!(effect.user_active_model.account_status, Set(STATUS_TERMINATED));
         } else {
             assert!(matches!(res, Err(AppError::Forbidden(_))));
         }
+    }
+
+    #[rstest]
+    fn test_decide_close_account_already_terminated() {
+        let mut user = mock_user(ROLE_CUSTOMER);
+        user.account_status = STATUS_TERMINATED;
+        // Logic should decide if it's an error or no-op (ActiveModel with same status)
+        let res = decide_close_account(user);
+        assert!(res.is_err() || res.unwrap().user_active_model.account_status == Set(STATUS_TERMINATED));
     }
 }

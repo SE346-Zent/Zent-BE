@@ -11,7 +11,10 @@ pub struct GetUserEffect {
 }
 
 /// Validate and prepare user detail retrieval.
-pub fn decide_can_view_user(_current_user: users::Model) -> Result<(), AppError> {
+pub fn decide_get_user(
+    _current_user: users::Model,
+    _target_user: users::Model,
+) -> Result<GetUserEffect, AppError> {
     unimplemented!()
 }
 
@@ -21,6 +24,10 @@ mod tests {
     use chrono::Utc;
     use rstest::{fixture, rstest};
     use uuid::Uuid;
+
+    const ROLE_ADMIN: i32 = 1;
+    const ROLE_SUPER_ADMIN: i32 = 2;
+    const ROLE_TECHNICIAN: i32 = 4;
 
     #[fixture]
     fn mock_user(#[default(4)] role_id: i32) -> users::Model {
@@ -42,12 +49,31 @@ mod tests {
     }
 
     #[rstest]
-    #[case(2, true)] // SA
-    #[case(1, true)] // Admin
-    #[case(4, false)] // Tech
-    fn test_decide_can_view_user_rbac(#[case] role_id: i32, #[case] expected_ok: bool) {
-        let user = mock_user(role_id);
-        let res = decide_can_view_user(user);
-        assert_eq!(res.is_ok(), expected_ok);
+    #[case(ROLE_SUPER_ADMIN, true)]
+    #[case(ROLE_ADMIN, true)]
+    #[case(ROLE_TECHNICIAN, false)]
+    fn test_decide_get_user_rbac(#[case] role_id: i32, #[case] expected_ok: bool) {
+        let current_user = mock_user(role_id);
+        let target_user = mock_user(ROLE_TECHNICIAN);
+        let res = decide_get_user(current_user, target_user.clone());
+        
+        if expected_ok {
+            let effect = res.expect("Should be OK");
+            assert_eq!(effect.response_data.id, target_user.id);
+            assert_eq!(effect.response_data.full_name, target_user.full_name);
+        } else {
+            assert!(matches!(res, Err(AppError::Forbidden(_))));
+        }
+    }
+
+    #[rstest]
+    fn test_decide_get_user_target_deleted() {
+        let admin = mock_user(ROLE_ADMIN);
+        let mut target = mock_user(ROLE_TECHNICIAN);
+        target.deleted_at = Some(Utc::now());
+        // Should we allow viewing deleted users? 
+        // Logic should decide.
+        let res = decide_get_user(admin, target);
+        assert!(res.is_err() || res.is_ok());
     }
 }

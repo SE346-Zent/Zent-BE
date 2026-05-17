@@ -13,7 +13,11 @@ pub struct ListUsersEffect {
 }
 
 /// Validate and prepare user listing.
-pub fn decide_can_list_users(_user: users::Model) -> Result<(), AppError> {
+pub fn decide_list_users(
+    _current_user: users::Model,
+    _users: Vec<users::Model>,
+    _total: u64,
+) -> Result<ListUsersEffect, AppError> {
     unimplemented!()
 }
 
@@ -24,8 +28,13 @@ mod tests {
     use rstest::{fixture, rstest};
     use uuid::Uuid;
 
+    const ROLE_ADMIN: i32 = 1;
+    const ROLE_SUPER_ADMIN: i32 = 2;
+    const ROLE_CUSTOMER: i32 = 3;
+    const ROLE_TECHNICIAN: i32 = 4;
+
     #[fixture]
-    fn mock_user(#[default(3)] role_id: i32) -> users::Model {
+    fn mock_user(#[default(ROLE_CUSTOMER)] role_id: i32) -> users::Model {
         users::Model {
             id: Uuid::new_v4(),
             full_name: "John Doe".to_string(),
@@ -44,12 +53,29 @@ mod tests {
     }
 
     #[rstest]
-    #[case(2, true)] // SA
-    #[case(1, true)] // Admin
-    #[case(3, false)] // Customer
-    fn test_decide_can_list_users_rbac(#[case] role_id: i32, #[case] expected_ok: bool) {
-        let user = mock_user(role_id);
-        let res = decide_can_list_users(user);
-        assert_eq!(res.is_ok(), expected_ok);
+    #[case(ROLE_SUPER_ADMIN, true)]
+    #[case(ROLE_ADMIN, true)]
+    #[case(ROLE_TECHNICIAN, false)]
+    #[case(ROLE_CUSTOMER, false)]
+    fn test_decide_list_users_rbac(#[case] role_id: i32, #[case] expected_ok: bool) {
+        let current_user = mock_user(role_id);
+        let models = vec![mock_user(ROLE_TECHNICIAN)];
+        let res = decide_list_users(current_user, models, 1);
+        
+        if expected_ok {
+            let effect = res.unwrap();
+            assert_eq!(effect.users.len(), 1);
+            assert_eq!(effect.total, 1);
+        } else {
+            assert!(matches!(res, Err(AppError::Forbidden(_))));
+        }
+    }
+
+    #[rstest]
+    fn test_decide_list_users_empty_results(#[values(ROLE_ADMIN, ROLE_SUPER_ADMIN)] role_id: i32) {
+        let current_user = mock_user(role_id);
+        let res = decide_list_users(current_user, vec![], 0).unwrap();
+        assert_eq!(res.users.len(), 0);
+        assert_eq!(res.total, 0);
     }
 }

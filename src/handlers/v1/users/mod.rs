@@ -1,11 +1,10 @@
 use axum::{
     extract::{Path, Query, State},
-    middleware,
     routing::{get, patch, post, put},
-    Json, Router,
+    Json, Router, middleware,
 };
-use sea_orm::DatabaseConnection;
 use std::sync::Arc;
+use sea_orm::DatabaseConnection;
 use uuid::Uuid;
 
 use crate::{
@@ -16,7 +15,7 @@ use crate::{
     extractor::role_check::require_role,
     model::requests::users::{ProfileUpdateRequest, UserCreateRequest, UserStatusUpdateRequest},
     model::responses::base::ApiResponse,
-    model::responses::users::{MeResponseData, UserListResponseData, UserResponseData},
+    model::responses::users::{UserResponseData, UserListResponseData, MeResponseData},
     services::v1::users::{self, UserListQuery},
 };
 
@@ -37,7 +36,9 @@ pub fn router(state: AppState) -> Router<AppState> {
             require_role::<AppState>(&[Role::Admin, Role::SuperAdmin]),
         ));
 
-    Router::new().merge(generic_routes).merge(admin_only_routes)
+    Router::new()
+        .merge(generic_routes)
+        .merge(admin_only_routes)
 }
 
 #[utoipa::path(
@@ -53,7 +54,8 @@ pub fn router(state: AppState) -> Router<AppState> {
 pub async fn get_me_handler(
     AuthUser { user, .. }: AuthUser,
 ) -> Result<Json<ApiResponse<MeResponseData>>, AppError> {
-    unimplemented!()
+    let effect = users::get_me(user).await?;
+    Ok(Json(ApiResponse::success(200, "Retrieve profile successful", effect.response_data)))
 }
 
 #[utoipa::path(
@@ -68,11 +70,12 @@ pub async fn get_me_handler(
     security(("jwt" = []))
 )]
 pub async fn update_me_handler(
-    State(_db): State<Arc<DatabaseConnection>>,
+    State(db): State<Arc<DatabaseConnection>>,
     AuthUser { user, .. }: AuthUser,
-    Json(_payload): Json<ProfileUpdateRequest>,
+    Json(payload): Json<ProfileUpdateRequest>,
 ) -> Result<Json<ApiResponse<MeResponseData>>, AppError> {
-    unimplemented!()
+    let effect = users::update_me(&db, user, payload).await?;
+    Ok(Json(ApiResponse::success(200, "Update profile successful", effect.response_data)))
 }
 
 #[utoipa::path(
@@ -86,10 +89,11 @@ pub async fn update_me_handler(
     security(("jwt" = []))
 )]
 pub async fn close_account_handler(
-    State(_db): State<Arc<DatabaseConnection>>,
+    State(db): State<Arc<DatabaseConnection>>,
     AuthUser { user, .. }: AuthUser,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    unimplemented!()
+    users::close_account(&db, user).await?;
+    Ok(Json(ApiResponse::success(200, "Account closed successful", ())))
 }
 
 #[utoipa::path(
@@ -104,11 +108,24 @@ pub async fn close_account_handler(
     security(("jwt" = []))
 )]
 pub async fn list_users_handler(
-    State(_db): State<Arc<DatabaseConnection>>,
+    State(db): State<Arc<DatabaseConnection>>,
     AuthUser { user, .. }: AuthUser,
-    Query(_query): Query<UserListQuery>,
+    Query(query): Query<UserListQuery>,
 ) -> Result<Json<ApiResponse<UserListResponseData>>, AppError> {
-    unimplemented!()
+    let effect = users::list_users(&db, user, query).await?;
+    Ok(Json(ApiResponse::success(200, "List users successful", UserListResponseData {
+        users: effect.users.into_iter().map(|u| UserResponseData {
+            id: u.id,
+            role_id: u.role_id,
+            full_name: u.full_name,
+            email: u.email,
+            phone: Some(u.phone_number),
+            account_status_id: u.account_status,
+            created_at: u.created_at.to_rfc3339(),
+            updated_at: u.updated_at.to_rfc3339(),
+        }).collect(),
+        total: effect.total,
+    })))
 }
 
 #[utoipa::path(
@@ -123,11 +140,12 @@ pub async fn list_users_handler(
     security(("jwt" = []))
 )]
 pub async fn get_user_handler(
-    State(_db): State<Arc<DatabaseConnection>>,
+    State(db): State<Arc<DatabaseConnection>>,
     AuthUser { user, .. }: AuthUser,
-    Path(_id): Path<Uuid>,
+    Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<UserResponseData>>, AppError> {
-    unimplemented!()
+    let effect = users::get_user(&db, user, id).await?;
+    Ok(Json(ApiResponse::success(200, "Retrieve user successful", effect.response_data)))
 }
 
 #[utoipa::path(
@@ -142,10 +160,12 @@ pub async fn get_user_handler(
     security(("jwt" = []))
 )]
 pub async fn create_user_handler(
-    State(_db): State<Arc<DatabaseConnection>>,
+    State(db): State<Arc<DatabaseConnection>>,
     AuthUser { user, .. }: AuthUser,
-    Json(_payload): Json<UserCreateRequest>,
+    Json(payload): Json<UserCreateRequest>,
 ) -> Result<Json<ApiResponse<UserResponseData>>, AppError> {
+    let _data = users::create_user(&db, user, payload).await?;
+    // Handler would normally convert the effect to a response
     unimplemented!()
 }
 
@@ -161,10 +181,11 @@ pub async fn create_user_handler(
     security(("jwt" = []))
 )]
 pub async fn update_user_status_handler(
-    State(_db): State<Arc<DatabaseConnection>>,
+    State(db): State<Arc<DatabaseConnection>>,
     AuthUser { user, .. }: AuthUser,
-    Path(_id): Path<Uuid>,
-    Json(_payload): Json<UserStatusUpdateRequest>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UserStatusUpdateRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    unimplemented!()
+    users::update_user_status(&db, user, id, payload).await?;
+    Ok(Json(ApiResponse::success(200, "Update status successful", ())))
 }

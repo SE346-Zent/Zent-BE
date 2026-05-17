@@ -23,6 +23,10 @@ mod tests {
     use uuid::Uuid;
     use sea_orm::Set;
 
+    const ROLE_ADMIN: i32 = 1;
+    const ROLE_SUPER_ADMIN: i32 = 2;
+    const ROLE_TECHNICIAN: i32 = 4;
+
     #[fixture]
     fn mock_user(#[default(1)] role_id: i32) -> users::Model {
         users::Model {
@@ -43,16 +47,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case(2, "ok")] // SA
-    #[case(1, "ok")] // Admin
-    #[case(4, "forbidden")] // Tech
-    fn test_decide_can_update_status_rbac(#[case] role_id: i32, #[case] expected: &str) {
+    #[case(ROLE_SUPER_ADMIN, 2, "ok")]
+    #[case(ROLE_ADMIN, 3, "ok")]
+    #[case(ROLE_TECHNICIAN, 1, "forbidden")]
+    fn test_decide_can_update_status_rbac(#[case] role_id: i32, #[case] target_status: i32, #[case] expected: &str) {
         let user = mock_user(role_id);
-        let req = UserStatusUpdateRequest { account_status_id: 2 };
+        let req = UserStatusUpdateRequest { account_status_id: target_status };
         let res = decide_can_update_status(user, req);
         
         match expected {
-            "ok" => assert_eq!(res.unwrap().user_active_model.account_status, Set(2)),
+            "ok" => {
+                let effect = res.expect("Should be OK");
+                assert_eq!(effect.user_active_model.account_status, Set(target_status));
+            },
             "forbidden" => assert!(matches!(res, Err(AppError::Forbidden(_)))),
             _ => panic!(),
         }
