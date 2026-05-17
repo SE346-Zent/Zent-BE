@@ -4,6 +4,7 @@ pub mod media;
 pub mod notifications;
 pub mod work_orders;
 pub mod inventory;
+pub mod chat;
 
 use axum::{Router, middleware};
 use crate::core::state::AppState;
@@ -17,7 +18,8 @@ pub fn router(state: AppState) -> Router<AppState> {
         .nest("/work_orders", work_orders_router(state.clone()))
         .nest("/inventory", inventory::router(state.clone()))
         .nest("/notifications", notifications::router(state.clone()))
-        .nest("/media", media::media_router(state))
+        .nest("/media", media::media_router(state.clone()))
+        .nest("/chat", chat::router(state))
 }
 
 fn work_orders_router(state: AppState) -> Router<AppState> {

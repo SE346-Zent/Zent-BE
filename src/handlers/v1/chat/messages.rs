@@ -1,0 +1,166 @@
+use axum::{extract::{State, Path, Query}, Json, Extension};
+use std::sync::Arc;
+use sea_orm::DatabaseConnection;
+use mongodb::{bson::{doc, oid::ObjectId}, options::FindOptions, Database as MongoDatabase};
+use futures::TryStreamExt;
+use serde::Deserialize;
+use uuid::Uuid;
+use crate::core::errors::{AppError, ErrorResponse};
+use crate::extractor::auth_user::AuthUser;
+use crate::model::responses::base::ApiResponse;
+use crate::model::responses::chat::message_response::{MessageResponse, ReactionEntry};
+use crate::entities::users;
+
+#[derive(Deserialize, Debug, utoipa::IntoParams)]
+pub struct GetMessagesQuery {
+    /// Cursor: the ObjectId of the last message from the previous page (for forward pagination).
+    /// Omit to fetch the most recent messages.
+    pub cursor: Option<String>,
+    /// Max messages to return (default 50).
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+}
+
+fn default_limit() -> i64 { 50 }
+
+#[utoipa::path(
+    get, path = "/api/chat/rooms/{id}/messages", params(GetMessagesQuery),
+    responses(
+        (status = 200, description = "Paginated message history", body = ApiResponse<Vec<MessageResponse>>),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Room not found", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn get_messages(
+    Extension(auth): Extension<AuthUser>,
+    State(mongo): State<Arc<MongoDatabase>>,
+    State(db): State<Arc<DatabaseConnection>>,
+    Path(room_id): Path<String>,
+    Query(query): Query<GetMessagesQuery>,
+) -> Result<Json<ApiResponse<Vec<MessageResponse>>>, AppError> {
+    // Build filter: room_id + optional cursor
+    let mut filter = doc! { "room_id": &room_id };
+    if let Some(ref cursor) = query.cursor {
+        if let Ok(oid) = ObjectId::parse_str(cursor) {
+            filter.insert("_id", doc! { "$lt": oid });
+        }
+    }
+
+    let opts = FindOptions::builder()
+        .sort(doc! { "_id": -1 })
+        .limit(query.limit)
+        .build();
+
+    let col = mongo.collection::<mongodb::bson::Document>("messages");
+    let mut cursor = col.find(filter).with_options(opts).await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("MongoDB error: {}", e)))?;
+
+    let mut messages: Vec<mongodb::bson::Document> = Vec::new();
+    while let Some(doc) = cursor.try_next().await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("MongoDB cursor error: {}", e)))? {
+        messages.push(doc);
+    }
+
+    // Collect sender IDs for batch fetch
+    let sender_ids: Vec<String> = messages.iter()
+        .filter_map(|m| m.get_str("sender_id").ok())
+        .map(|s| s.to_string())
+        .collect();
+
+    let sender_map = if sender_ids.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        let sender_uuids: Vec<Uuid> = sender_ids.iter()
+            .filter_map(|s| Uuid::parse_str(s).ok())
+            .collect();
+        users::Entity::find()
+            .filter(users::Column::Id.is_in(sender_uuids))
+            .all(db.as_ref())
+            .await?
+            .into_iter()
+            .map(|u| (u.id.to_string(), u.full_name))
+            .collect::<std::collections::HashMap<_, _>>()
+    };
+
+    let data: Vec<MessageResponse> = messages
+        .into_iter()
+        .map(|m| {
+            let id = m.get_object_id("_id").map(|o| o.to_hex()).unwrap_or_default();
+            let sender_id = m.get_str("sender_id").unwrap_or("").to_string();
+            let sender_name = sender_map.get(&sender_id).cloned().unwrap_or_else(|| "Unknown".to_string());
+            crate::services::v1::chat::messages::map_to_message_response(
+                id,
+                m.get_str("room_id").unwrap_or("").to_string(),
+                sender_id,
+                sender_name,
+                m.get_str("content").ok().map(|s| s.to_string()),
+                m.get_str("image_url").ok().map(|s| s.to_string()),
+                m.get_str("reply_to").ok().map(|s| s.to_string()),
+                m.get_datetime("created_at").map(|d| d.to_string()).unwrap_or_default(),
+                m.get_datetime("edited_at").ok().map(|d| d.to_string()),
+                vec![], // reactions fetched separately if needed
+                vec![], // read receipts fetched separately if needed
+            )
+        })
+        .collect();
+
+    Ok(Json(ApiResponse::success(200, "Messages retrieved successfully", data)))
+}
+
+#[utoipa::path(
+    post, path = "/api/chat/rooms/{id}/messages",
+    request_body = crate::model::requests::chat::send_message_request::SendMessageRequest,
+    responses(
+        (status = 201, description = "Message sent", body = ApiResponse<MessageResponse>),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn send_message(
+    Extension(auth): Extension<AuthUser>,
+    State(mongo): State<Arc<MongoDatabase>>,
+    State(db): State<Arc<DatabaseConnection>>,
+    Path(room_id): Path<String>,
+    Json(payload): Json<crate::model::requests::chat::send_message_request::SendMessageRequest>,
+) -> Result<Json<ApiResponse<MessageResponse>>, AppError> {
+    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+    let now = mongodb::bson::DateTime::now();
+    let doc = doc! {
+        "room_id": &room_id,
+        "sender_id": auth.user.id.to_string(),
+        "content": payload.content.as_deref().unwrap_or(""),
+        "image_url": payload.image_url.as_deref(),
+        "reply_to": payload.reply_to.as_deref(),
+        "created_at": now,
+        "edited_at": mongodb::bson::Bson::Null,
+    };
+
+    let col = mongo.collection::<mongodb::bson::Document>("messages");
+    let result = col.insert_one(doc).await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("MongoDB insert error: {}", e)))?;
+
+    let message_id = result.inserted_id.as_object_id()
+        .map(|o| o.to_hex())
+        .unwrap_or_default();
+
+    let response = crate::services::v1::chat::messages::map_to_message_response(
+        message_id,
+        room_id,
+        auth.user.id.to_string(),
+        auth.user.full_name.clone(),
+        payload.content,
+        payload.image_url,
+        payload.reply_to,
+        now.to_string(),
+        None,
+        vec![],
+        vec![],
+    );
+
+    Ok(Json(ApiResponse::success(201, "Message sent successfully", response)))
+}

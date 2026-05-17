@@ -25,6 +25,7 @@ mod m20260512_164300_add_fcm_token_and_outbox;
 mod m20260513_100000_add_about_to_start_notified;
 mod m20260514_000000_extend_outbox_records;
 mod m20260515_000000_part_audit_log;mod m20260514_153057_update_internet_time_image;
+mod m20260520_100000_add_chat_tables;
 
 
 pub struct Migrator;
@@ -59,6 +60,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260514_000000_extend_outbox_records::Migration),
             Box::new(m20260515_000000_part_audit_log::Migration),
             Box::new(m20260514_153057_update_internet_time_image::Migration),
+            Box::new(m20260520_100000_add_chat_tables::Migration),
         ]
     }
 }

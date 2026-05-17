@@ -34,4 +34,7 @@ pub mod work_order_statuses;
 pub mod work_order_symptoms;
 pub mod work_orders;
 pub mod policy;
+pub mod chat_rooms;
+pub mod chat_room_members;
+pub mod user_blocks;
 

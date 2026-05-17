@@ -169,6 +169,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build();
 
     let app = Router::new()
+        .route("/chat", axum::routing::get(handlers::v1::chat::ws::ws_handler))
         .nest("/api/v1", handlers::v1::router(state.clone()))
         .route_layer(axum::middleware::from_fn(move |req: axum::extract::Request, next: axum::middleware::Next| {
             let requests_counter = requests_counter.clone();
