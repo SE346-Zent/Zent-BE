@@ -1,10 +1,7 @@
 use crate::{
-    core::{
-        errors::AppError,
-        state::AccessTokenDefaultTTLSeconds,
-    },
+    core::{errors::AppError, state::AccessTokenDefaultTTLSeconds},
     entities::{sessions, users},
-    model::responses::auth::login_response::{UserInfo, AccountStatusEnum},
+    model::responses::auth::login_response::{AccountStatusEnum, UserInfo},
     services::v1::core::token_service,
 };
 use chrono::Utc;
@@ -27,20 +24,28 @@ pub enum RefreshTokenEffect {
 pub fn decide_refresh_token(
     session: &sessions::Model,
     user: &users::Model,
-    whitelisted_hash: Option<String>,
-    current_hash: &str,
+    active_refresh_token_hash: Option<String>,
+    refresh_token_hash: &str,
     access_token_ttl: AccessTokenDefaultTTLSeconds,
     encoding_key: &EncodingKey,
 ) -> Result<RefreshTokenEffect, AppError> {
     if session.revoked_at.is_some() || session.expires_at < Utc::now() {
-        return Err(AppError::Unauthorized("Session invalid or expired".to_string()));
+        return Err(AppError::Unauthorized(
+            "Session invalid or expired".to_string(),
+        ));
     }
 
-    if whitelisted_hash.as_deref() != Some(current_hash) {
-        return Ok(RefreshTokenEffect::ReuseAttack { session_id: session.id });
+    if active_refresh_token_hash.as_deref() != Some(refresh_token_hash) {
+        return Ok(RefreshTokenEffect::ReuseAttack {
+            session_id: session.id,
+        });
     }
 
-    let token_bundle = token_service::generate_token_bundle(&user.id.to_string(), access_token_ttl.0, encoding_key)?;
+    let token_bundle = token_service::generate_token_bundle(
+        &user.id.to_string(),
+        access_token_ttl.0,
+        encoding_key,
+    )?;
 
     let remaining = (session.expires_at.timestamp() - Utc::now().timestamp()).max(0) as u64;
 
@@ -56,4 +61,119 @@ pub fn decide_refresh_token(
         session_id: session.id,
         remaining_ttl: remaining,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::entities::{sessions, users};
+    use chrono::Utc;
+    use jsonwebtoken::EncodingKey;
+    use rstest::{fixture, rstest};
+    use uuid::Uuid;
+
+    #[fixture]
+    fn mock_key() -> EncodingKey {
+        EncodingKey::from_secret(b"secret")
+    }
+
+    #[fixture]
+    fn mock_user() -> users::Model {
+        users::Model {
+            id: Uuid::new_v4(),
+            full_name: "John Doe".to_string(),
+            email: "john@example.com".to_string(),
+            password_hash: "hash".to_string(),
+            phone_number: "123".to_string(),
+            account_status: 1,
+            role_id: 1,
+            province: None,
+            fcm_token: None,
+            installation_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        }
+    }
+
+    #[fixture]
+    fn mock_session(
+        #[default(Uuid::new_v4())] user_id: Uuid,
+        #[default(3600)] expires_in_sec: i64,
+        #[default(false)] revoked: bool,
+    ) -> sessions::Model {
+        sessions::Model {
+            id: Uuid::new_v4(),
+            user_id,
+            refresh_token_hash: "valid_hash".to_string(),
+            ip_address: "127.0.0.1".to_string(),
+            device_fingerprint: "fp".to_string(),
+            created_at: Utc::now(),
+            expires_at: Utc::now() + chrono::Duration::seconds(expires_in_sec),
+            revoked_at: if revoked { Some(Utc::now()) } else { None },
+        }
+    }
+
+    #[rstest]
+    // Success cases
+    #[case(false, false, Some(true), "Success")]
+    // Failure cases: Unauthorized (Revoked/Expired)
+    #[case(true, true, Some(true), "Unauthorized")]
+    #[case(true, true, Some(false), "Unauthorized")]
+    #[case(true, false, Some(true), "Unauthorized")]
+    #[case(true, false, Some(false), "Unauthorized")]
+    #[case(false, true, Some(true), "Unauthorized")]
+    #[case(false, true, Some(false), "Unauthorized")]
+    // Failure case: Reuse attack
+    #[case(false, false, Some(false), "ReuseAttack")]
+    #[case(false, false, None, "ReuseAttack")]
+    /// Control whether active_refresh_token_hash input to decide function will match fixed current_hash value
+    fn test_decide_refresh_token_exhaustive(
+        #[case] revoked: bool,
+        #[case] expired: bool,
+        #[case] hash_matches: Option<bool>,
+        #[case] expected: &str,
+        mock_user: users::Model,
+        mock_key: EncodingKey,
+    ) {
+        let expires_in = if expired { -10 } else { 3600 };
+        let session = mock_session(mock_user.id, expires_in, revoked);
+        let active_refresh_token_hash = match hash_matches {
+            Some(true) => Some("valid_hash".to_string()),
+            Some(false) => Some("different_hash".to_string()),
+            None => None,
+        };
+
+        let result = decide_refresh_token(
+            &session,
+            &mock_user,
+            active_refresh_token_hash,
+            "valid_hash",
+            AccessTokenDefaultTTLSeconds(900),
+            &mock_key,
+        );
+
+        match expected {
+            "Success" => {
+                assert!(result.is_ok());
+                if let RefreshTokenEffect::Success { user_info, .. } = result.unwrap() {
+                    assert_eq!(user_info.email, mock_user.email);
+                } else {
+                    panic!("Expected Success effect");
+                }
+            }
+            "ReuseAttack" => {
+                assert!(result.is_ok());
+                if let RefreshTokenEffect::ReuseAttack { session_id } = result.unwrap() {
+                    assert_eq!(session_id, session.id);
+                } else {
+                    panic!("Expected ReuseAttack effect");
+                }
+            }
+            "Unauthorized" => {
+                assert!(matches!(result, Err(AppError::Unauthorized(_))));
+            }
+            _ => panic!("Unknown expected result type"),
+        }
+    }
 }

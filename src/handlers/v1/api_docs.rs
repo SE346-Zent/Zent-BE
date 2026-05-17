@@ -169,8 +169,7 @@ async fn check_docs_auth(
         .and_then(|h| h.to_str().ok());
 
     if let Some(auth) = auth_header {
-        if auth.starts_with("Basic ") {
-            let encoded = &auth[6..];
+        if let Some(encoded) = auth.strip_prefix("Basic ") {
             if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(encoded) {
                 if let Ok(credentials) = String::from_utf8(decoded) {
                     let parts: Vec<&str> = credentials.splitn(2, ':').collect();

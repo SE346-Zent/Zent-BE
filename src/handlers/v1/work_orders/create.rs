@@ -89,7 +89,7 @@ pub async fn create(
         conn_opt = Some(conn);
     }
 
-    if !products::Entity::find_by_id(payload.product_id).one(db.as_ref()).await?.is_some() {
+    if products::Entity::find_by_id(payload.product_id).one(db.as_ref()).await?.is_none() {
         return Err(AppError::NotFound(format!("Product with ID {} not found", payload.product_id)));
     }
     if let Some(ref_id) = payload.reference_ticket_id {
