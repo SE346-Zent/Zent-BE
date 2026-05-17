@@ -15,7 +15,7 @@ use crate::{
     extractor::role_check::require_role,
     model::requests::users::{ProfileUpdateRequest, UserCreateRequest, UserStatusUpdateRequest},
     model::responses::base::ApiResponse,
-    model::responses::users::{UserResponseData, UserListResponseData},
+    model::responses::users::{UserResponseData, UserListResponseData, MeResponseData},
     services::v1::users::{self, UserListQuery},
 };
 
@@ -40,18 +40,41 @@ pub fn router(state: AppState) -> Router<AppState> {
         .merge(admin_routes)
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/me",
+    responses(
+        (status = 200, description = "Retrieve profile successful", body = ApiResponse<MeResponseData>),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    security(("jwt" = []))
+)]
 pub async fn get_me_handler(
-    _auth: AuthUser,
-) -> Result<Json<ApiResponse<UserResponseData>>, AppError> {
-    unimplemented!()
+    AuthUser { user, .. }: AuthUser,
+) -> Result<Json<ApiResponse<MeResponseData>>, AppError> {
+    let data = users::get_me(user).await?;
+    Ok(Json(ApiResponse::success(200, "Retrieve profile successful", data)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/users/me",
+    request_body = ProfileUpdateRequest,
+    responses(
+        (status = 200, description = "Update profile successful", body = ApiResponse<MeResponseData>),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    security(("jwt" = []))
+)]
 pub async fn update_me_handler(
-    _db: State<Arc<DatabaseConnection>>,
-    _auth: AuthUser,
-    _payload: Json<ProfileUpdateRequest>,
-) -> Result<Json<ApiResponse<UserResponseData>>, AppError> {
-    unimplemented!()
+    State(db): State<Arc<DatabaseConnection>>,
+    AuthUser { user, .. }: AuthUser,
+    Json(payload): Json<ProfileUpdateRequest>,
+) -> Result<Json<ApiResponse<MeResponseData>>, AppError> {
+    let data = users::update_me(&db, user, payload).await?;
+    Ok(Json(ApiResponse::success(200, "Update profile successful", data)))
 }
 
 pub async fn close_account_handler(

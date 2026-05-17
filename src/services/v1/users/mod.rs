@@ -3,7 +3,7 @@ use crate::{
     entities::users,
     model::{
         requests::users::{ProfileUpdateRequest, UserCreateRequest, UserStatusUpdateRequest},
-        responses::users::{UserResponseData, UserListResponseData},
+        responses::users::{UserResponseData, UserListResponseData, MeResponseData},
     },
 };
 use uuid::Uuid;
@@ -17,7 +17,7 @@ pub mod get_user;
 pub mod create_user;
 pub mod update_status;
 
-pub async fn get_me(_user: users::Model) -> Result<UserResponseData, AppError> {
+pub async fn get_me(_user: users::Model) -> Result<MeResponseData, AppError> {
     unimplemented!()
 }
 
@@ -25,7 +25,7 @@ pub async fn update_me(
     _db: &DatabaseConnection,
     _user: users::Model,
     _req: ProfileUpdateRequest,
-) -> Result<UserResponseData, AppError> {
+) -> Result<MeResponseData, AppError> {
     unimplemented!()
 }
 
