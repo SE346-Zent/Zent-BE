@@ -3,19 +3,25 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "chat_room_members")]
+#[sea_orm(table_name = "chat_room_image_links")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub room_id: Uuid,
+    pub image_id: Uuid,
     #[sea_orm(primary_key, auto_increment = false)]
-    pub user_id: Uuid,
+    pub room_id: Uuid,
     pub created_at: DateTimeUtc,
-    pub updated_at: Option<DateTimeUtc>,
-    pub deleted_at: Option<DateTimeUtc>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::images::Entity",
+        from = "Column::ImageId",
+        to = "super::images::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    Images,
     #[sea_orm(
         belongs_to = "super::chat_rooms::Entity",
         from = "Column::RoomId",
@@ -24,25 +30,17 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     ChatRooms,
-    #[sea_orm(
-        belongs_to = "super::users::Entity",
-        from = "Column::UserId",
-        to = "super::users::Column::Id",
-        on_update = "Cascade",
-        on_delete = "Cascade"
-    )]
-    Users,
+}
+
+impl Related<super::images::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Images.def()
+    }
 }
 
 impl Related<super::chat_rooms::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ChatRooms.def()
-    }
-}
-
-impl Related<super::users::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Users.def()
     }
 }
 

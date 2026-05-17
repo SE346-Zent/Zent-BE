@@ -73,36 +73,12 @@ impl MongoMigration for InitChatSchema {
             .build();
         rr_col.create_index(idx_msg).await?;
 
-        // 3. Create `message_reactions` collection
-        let reactions_schema = doc! {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": ["message_id", "user_id", "emoji"],
-                "properties": {
-                    "message_id": { "bsonType": "string" },
-                    "user_id": { "bsonType": "string" },
-                    "emoji": { "bsonType": "string" }
-                }
-            }
-        };
-        db.create_collection("message_reactions")
-            .validator(reactions_schema)
-            .await?;
-
-        let mr_col = db.collection::<mongodb::bson::Document>("message_reactions");
-        let idx_mr = IndexModel::builder()
-            .keys(doc! { "message_id": 1, "user_id": 1 })
-            .options(mongodb::options::IndexOptions::builder().unique(true).build())
-            .build();
-        mr_col.create_index(idx_mr).await?;
-
         Ok(())
     }
 
     async fn down(&self, db: &Database) -> Result<(), MongoError> {
         db.collection::<mongodb::bson::Document>("messages").drop().await?;
         db.collection::<mongodb::bson::Document>("read_receipts").drop().await?;
-        db.collection::<mongodb::bson::Document>("message_reactions").drop().await?;
         Ok(())
     }
 }

@@ -4,3 +4,7 @@ pub mod observability_metrics;
 pub mod cleanup_work_order;
 pub mod cleanup_outbox;
 pub mod relay_outbox;
+pub mod ws_heartbeat;
+pub mod ws_expiry;
+pub mod cleanup_chat_rooms;
+pub mod cleanup_ws;

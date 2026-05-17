@@ -1,7 +1,6 @@
-use crate::model::responses::chat::message_response::{MessageResponse, ReactionEntry};
+use crate::model::responses::chat::message_response::MessageResponse;
 
-/// Pure logic: maps a MongoDB message document into a response DTO.
-/// The handler is responsible for fetching sender names and read receipts from the DB.
+/// Pure logic: maps MongoDB message fields into a response DTO.
 pub fn map_to_message_response(
     id: String,
     room_id: String,
@@ -12,7 +11,6 @@ pub fn map_to_message_response(
     reply_to: Option<String>,
     created_at: String,
     edited_at: Option<String>,
-    reactions: Vec<ReactionEntry>,
     read_by: Vec<String>,
 ) -> MessageResponse {
     MessageResponse {
@@ -25,7 +23,6 @@ pub fn map_to_message_response(
         reply_to,
         created_at,
         edited_at,
-        reactions,
         read_by,
     }
 }

@@ -18,6 +18,7 @@ pub struct Model {
     pub province: Option<String>,
     pub fcm_token: Option<String>,
     pub installation_id: Option<String>,
+    pub avatar_url: Option<String>,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,

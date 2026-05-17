@@ -9,7 +9,10 @@ pub struct Model {
     pub id: Uuid,
     pub room_name: String,
     pub created_by: Uuid,
+    pub work_order_id: Option<Uuid>,
     pub created_at: DateTimeUtc,
+    pub updated_at: Option<DateTimeUtc>,
+    pub deleted_at: Option<DateTimeUtc>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -24,6 +27,16 @@ pub enum Relation {
     Users,
     #[sea_orm(has_many = "super::chat_room_members::Entity")]
     ChatRoomMembers,
+    #[sea_orm(has_many = "super::chat_room_image_links::Entity")]
+    ChatRoomImageLinks,
+    #[sea_orm(
+        belongs_to = "super::work_orders::Entity",
+        from = "Column::WorkOrderId",
+        to = "super::work_orders::Column::Id",
+        on_update = "Cascade",
+        on_delete = "SetNull"
+    )]
+    WorkOrders,
 }
 
 impl Related<super::users::Entity> for Entity {
@@ -35,6 +48,18 @@ impl Related<super::users::Entity> for Entity {
 impl Related<super::chat_room_members::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ChatRoomMembers.def()
+    }
+}
+
+impl Related<super::chat_room_image_links::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ChatRoomImageLinks.def()
+    }
+}
+
+impl Related<super::work_orders::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WorkOrders.def()
     }
 }
 

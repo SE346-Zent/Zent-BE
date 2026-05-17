@@ -16,6 +16,8 @@ impl MigrationTrait for Migration {
                     .col(string(ChatRooms::RoomName))
                     .col(uuid(ChatRooms::CreatedBy))
                     .col(timestamp(ChatRooms::CreatedAt).default(SimpleExpr::Keyword(Keyword::CurrentTimestamp)))
+                    .col(timestamp_null(ChatRooms::UpdatedAt))
+                    .col(timestamp_null(ChatRooms::DeletedAt))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_chat_room_created_by")
@@ -36,7 +38,9 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(uuid(ChatRoomMembers::RoomId))
                     .col(uuid(ChatRoomMembers::UserId))
-                    .col(timestamp(ChatRoomMembers::JoinedAt).default(SimpleExpr::Keyword(Keyword::CurrentTimestamp)))
+                    .col(timestamp(ChatRoomMembers::CreatedAt).default(SimpleExpr::Keyword(Keyword::CurrentTimestamp)))
+                    .col(timestamp_null(ChatRoomMembers::UpdatedAt))
+                    .col(timestamp_null(ChatRoomMembers::DeletedAt))
                     .primary_key(
                         Index::create()
                             .col(ChatRoomMembers::RoomId)
@@ -62,47 +66,10 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // 3. user_blocks table
-        manager
-            .create_table(
-                Table::create()
-                    .table(UserBlocks::Table)
-                    .if_not_exists()
-                    .col(uuid(UserBlocks::BlockerId))
-                    .col(uuid(UserBlocks::BlockedId))
-                    .col(timestamp(UserBlocks::CreatedAt).default(SimpleExpr::Keyword(Keyword::CurrentTimestamp)))
-                    .primary_key(
-                        Index::create()
-                            .col(UserBlocks::BlockerId)
-                            .col(UserBlocks::BlockedId),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_user_block_blocker")
-                            .from(UserBlocks::Table, UserBlocks::BlockerId)
-                            .to(Users::Table, Users::Id)
-                            .on_update(ForeignKeyAction::Cascade)
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_user_block_blocked")
-                            .from(UserBlocks::Table, UserBlocks::BlockedId)
-                            .to(Users::Table, Users::Id)
-                            .on_update(ForeignKeyAction::Cascade)
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table(UserBlocks::Table).to_owned())
-            .await?;
         manager
             .drop_table(Table::drop().table(ChatRoomMembers::Table).to_owned())
             .await?;
@@ -120,6 +87,8 @@ enum ChatRooms {
     RoomName,
     CreatedBy,
     CreatedAt,
+    UpdatedAt,
+    DeletedAt,
 }
 
 #[derive(DeriveIden)]
@@ -127,15 +96,9 @@ enum ChatRoomMembers {
     Table,
     RoomId,
     UserId,
-    JoinedAt,
-}
-
-#[derive(DeriveIden)]
-enum UserBlocks {
-    Table,
-    BlockerId,
-    BlockedId,
     CreatedAt,
+    UpdatedAt,
+    DeletedAt,
 }
 
 #[derive(DeriveIden)]

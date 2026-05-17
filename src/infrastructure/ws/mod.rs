@@ -21,12 +21,6 @@ pub enum WsOutgoing {
         reply_to: Option<String>,
         created_at: String,
     },
-    /// Typing indicator
-    Typing {
-        room_id: String,
-        user_id: String,
-        user_name: String,
-    },
     /// Read receipt notification
     ReadReceipt {
         message_id: String,
@@ -59,10 +53,12 @@ pub enum WsIncoming {
         image_url: Option<String>,
         reply_to: Option<String>,
     },
-    /// Typing indicator
-    Typing {
+    /// User is viewing a chat room (resets unread)
+    Viewing {
         room_id: String,
     },
+    /// User left a chat room
+    Leaving,
     /// Mark messages as read
     MarkRead {
         message_ids: Vec<String>,

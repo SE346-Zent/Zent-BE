@@ -36,5 +36,6 @@ pub mod work_orders;
 pub mod policy;
 pub mod chat_rooms;
 pub mod chat_room_members;
-pub mod user_blocks;
+pub mod chat_room_image_links;
+
 
