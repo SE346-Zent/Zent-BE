@@ -5,20 +5,17 @@ use crate::{
 };
 use uuid::Uuid;
 
-/// Plain struct representing the side-effects that need to be persisted
+use sea_orm::Set;
+
+/// Effect containing the ActiveModel ready for persistence, plus OTP metadata.
 pub struct RegisterEffect {
-    pub user_id: Uuid,
-    pub full_name: String,
-    pub email: String,
-    pub phone_number: String,
-    pub role_id: i32,
-    pub account_status: i32,
-    pub hashed_password: String,
+    pub user: users::ActiveModel,
     pub is_new: bool,
     pub otp_code: String,
 }
 
 /// Pure logic to decide the outcome of a registration attempt.
+/// Returns a `users::ActiveModel` ready for `.insert()` or `.update()`.
 pub fn decide_register(
     req: UserRegistrationRequest,
     existing_user: Option<&users::Model>,
@@ -46,17 +43,20 @@ pub fn decide_register(
     // 3. OTP
     let otp_code = otp::generate_6digit_otp();
 
-    Ok(RegisterEffect {
-        user_id,
-        full_name: req.full_name,
-        email: req.email,
-        phone_number: req.phone_number,
-        role_id: customer_role_id,
-        account_status: pending_status_id,
-        hashed_password,
-        is_new,
-        otp_code,
-    })
+    let now = chrono::Utc::now();
+    let user = users::ActiveModel {
+        id: Set(user_id),
+        full_name: Set(req.full_name),
+        email: Set(req.email),
+        phone_number: Set(req.phone_number),
+        role_id: Set(customer_role_id),
+        account_status: Set(pending_status_id),
+        password_hash: Set(hashed_password),
+        updated_at: Set(now),
+        ..Default::default()
+    };
+
+    Ok(RegisterEffect { user, is_new, otp_code })
 }
 
 #[cfg(test)]

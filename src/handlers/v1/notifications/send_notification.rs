@@ -31,7 +31,7 @@ pub async fn send_notification(
     data: serde_json::Value,
 ) -> Result<(), AppError> {
     // ── Resolve category id ────────────────────────────────────────
-    let category_id = super::find_category_id_by_slug(category_slug)
+    let category_id = crate::services::v1::notifications::find_category_id_by_slug(category_slug)
         .ok_or_else(|| AppError::BadRequest(format!("Invalid category slug: {}", category_slug)))?;
 
     let notification_id = Uuid::new_v4();

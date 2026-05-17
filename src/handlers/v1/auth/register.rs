@@ -49,19 +49,11 @@ pub async fn register_handler(
     let hashed_password = hasher::hash_password(payload.password.clone()).await?;
     let effect = register::decide_register(payload, existing.as_ref(), pending_status_id, customer_role_id, hashed_password)?;
 
-    let now = Utc::now();
-    let mut user_active = users::ActiveModel {
-        id: Set(effect.user_id),
-        full_name: Set(effect.full_name.clone()),
-        email: Set(effect.email.clone()),
-        password_hash: Set(effect.hashed_password),
-        phone_number: Set(effect.phone_number),
-        role_id: Set(effect.role_id),
-        account_status: Set(effect.account_status),
-        updated_at: Set(now),
-        ..Default::default()
-    };
+    let email = effect.user.email.clone().unwrap();
+    let full_name = effect.user.full_name.clone().unwrap();
 
+    let now = Utc::now();
+    let mut user_active = effect.user;
     if effect.is_new {
         user_active.created_at = Set(now);
         user_active.insert(db.as_ref()).await?;
@@ -71,7 +63,7 @@ pub async fn register_handler(
 
     if let Some(client) = valkey_client {
         if let Ok(mut conn) = client.get_connection().await {
-            let valkey_key = format!("register_verification:{}", effect.email);
+            let valkey_key = format!("register_verification:{}", email);
             let valkey_data = serde_json::json!({ "code": effect.otp_code, "attempts": 5 }).to_string();
             let _ = conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await;
         } else {
@@ -80,7 +72,7 @@ pub async fn register_handler(
     }
 
     if let Some(rmq) = rabbitmq {
-        email_service::send_verification_email(&rmq, &templates, &effect.email, &effect.full_name, &effect.otp_code).await?;
+        email_service::send_verification_email(&rmq, &templates, &email, &full_name, &effect.otp_code).await?;
     }
 
     Ok(Json(ApiResponse::message_only(201, "Registration successful")))

@@ -3,13 +3,20 @@ pub mod list;
 pub mod get_details;
 pub mod assign;
 pub mod complete;
+pub mod reassign;
 pub mod refuse;
 pub mod start;
 pub mod approve_refusal;
 pub mod deny_refusal;
 pub mod history;
 pub mod cancel;
+pub mod complaint;
+pub mod change_appointment;
+pub mod reject_form_list;
+pub mod reject_form_detail;
 
+pub use change_appointment::change_appointment;
+pub use complaint::complaint;
 pub use create::create;
 pub use list::list;
 pub use get_details::get_details;
@@ -20,7 +27,10 @@ pub use start::start;
 pub use approve_refusal::approve_refusal;
 pub use deny_refusal::deny_refusal;
 pub use history::history;
+pub use reassign::reassign;
 pub use cancel::cancel;
+pub use reject_form_list::reject_form_list;
+pub use reject_form_detail::reject_form_detail;
 
 // Re-export __path_* items for utoipa OpenApi derive
 pub use create::__path_create;
@@ -33,7 +43,12 @@ pub use start::__path_start;
 pub use approve_refusal::__path_approve_refusal;
 pub use deny_refusal::__path_deny_refusal;
 pub use history::__path_history;
+pub use reassign::__path_reassign;
 pub use cancel::__path_cancel;
+pub use complaint::__path_complaint;
+pub use change_appointment::__path_change_appointment;
+pub use reject_form_list::__path_reject_form_list;
+pub use reject_form_detail::__path_reject_form_detail;
 
 use axum::{Router, middleware};
 use std::collections::HashMap;
@@ -82,6 +97,9 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/assign", axum::routing::post(assign))
         .route("/{id}/refusal/approve", axum::routing::post(approve_refusal))
         .route("/{id}/refusal/deny", axum::routing::post(deny_refusal))
+        .route("/{id}/reassign", axum::routing::post(reassign))
+        .route("/reject_forms", axum::routing::get(reject_form_list))
+        .route("/reject_forms/{id}", axum::routing::get(reject_form_detail))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Admin]),
@@ -214,6 +232,7 @@ pub(crate) async fn fetch_paginated_work_orders(
     technician_id: Option<Uuid>,
     province_filter: Option<String>,
     customer_id: Option<Uuid>,
+    date_filter: Option<chrono::NaiveDate>,
 ) -> Result<axum::Json<ApiResponse<Vec<WorkOrderListItem>>>, AppError> {
     let mut conn_opt = None;
     let mut full_cache_key = String::new();
@@ -222,8 +241,8 @@ pub(crate) async fn fetch_paginated_work_orders(
         if let Ok(mut conn) = client.get_connection().await {
             let gen: u64 = conn.get("cache:work_orders:generation").await.unwrap_or(0);
             full_cache_key = format!(
-                "cache:work_orders:gen:{}:prefix:{}:p:{}:l:{}",
-                gen, cache_key_prefix, pagination.page, pagination.limit
+                "cache:work_orders:gen:{}:prefix:{}:p:{}:l:{}:d:{:?}",
+                gen, cache_key_prefix, pagination.page, pagination.limit, date_filter
             );
             if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&full_cache_key).await {
                 if let Ok((data, meta)) = serde_json::from_str::<(Vec<WorkOrderListItem>, PaginationResponse)>(&cached_json) {
@@ -238,6 +257,11 @@ pub(crate) async fn fetch_paginated_work_orders(
     if let Some(tech_id) = technician_id { query = query.filter(work_orders_ent::Column::TechnicianId.eq(tech_id)); }
     if let Some(province) = province_filter { query = query.filter(work_orders_ent::Column::Province.eq(province)); }
     if let Some(cust_id) = customer_id { query = query.filter(work_orders_ent::Column::CustomerId.eq(cust_id)); }
+    if let Some(ref date) = date_filter {
+        let start = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let end = date.and_hms_opt(23, 59, 59).unwrap().and_utc();
+        query = query.filter(work_orders_ent::Column::Appointment.between(start, end));
+    }
 
     let paginator = query.clone().order_by_desc(work_orders_ent::Column::CreatedAt).paginate(db.as_ref(), pagination.limit);
     let total_records = paginator.num_items().await?;
@@ -388,7 +412,7 @@ pub(crate) async fn try_auto_assign_single(
         });
 
         // Notify technician
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             state.mongodb.as_ref(),
             state.valkey.clone(),
             db.as_ref(),
@@ -400,7 +424,7 @@ pub(crate) async fn try_auto_assign_single(
         ).await;
 
         // Notify customer
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             state.mongodb.as_ref(),
             state.valkey.clone(),
             db.as_ref(),

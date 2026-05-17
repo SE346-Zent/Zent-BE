@@ -8,11 +8,10 @@ use std::sync::Arc;
 use sea_orm::{DatabaseConnection, *};
 use jsonwebtoken::EncodingKey;
 use validator::Validate;
-use chrono::Utc;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
 use crate::infrastructure::cache::ValkeyClient;
-use crate::entities::{users, sessions};
+use crate::entities::users;
 use crate::utils::hasher;
 use crate::services::v1::auth::login;
 use crate::model::requests::auth::user_login_request::UserLoginRequest;
@@ -50,19 +49,11 @@ pub async fn login_handler(
         .ok_or_else(|| AppError::Unauthorized("Invalid credentials".to_string()))?;
 
     let is_valid = hasher::verify_password(payload.password, user_model.password_hash.clone()).await?;
-    let effect = login::decide_login(&user_model, is_valid, access_token_ttl, session_ttl, &encoding_key)?;
+    let mut effect = login::decide_login(&user_model, is_valid, access_token_ttl, session_ttl, &encoding_key)?;
 
-    let active_session = sessions::ActiveModel {
-        id: Set(effect.session_id),
-        user_id: Set(effect.user_id),
-        refresh_token_hash: Set(effect.refresh_token_hash.clone()),
-        ip_address: Set(ip_address),
-        device_fingerprint: Set(effect.user_id.to_string()),
-        created_at: Set(Utc::now()),
-        expires_at: Set(effect.expires_at),
-        ..Default::default()
-    };
-    active_session.insert(db.as_ref()).await?;
+    // Fill in the real IP address before persisting
+    effect.session.ip_address = Set(ip_address);
+    effect.session.insert(db.as_ref()).await?;
 
     if let Some(client) = valkey_client {
         if let Ok(mut conn) = client.get_connection().await {

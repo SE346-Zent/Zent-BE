@@ -1,7 +1,7 @@
 use crate::{
     core::lookup_tables::LookupTables,
-    entities::{users, work_order_state_history},
-    model::responses::work_orders::history_response::WorkOrderStateHistoryEntry,
+    entities::{users, work_order_state_history, work_orders, work_order_closing_forms},
+    model::responses::work_orders::history_response::{WorkOrderStateHistoryEntry, WorkOrderHistoryDetail, ClosingFormEntry, ComplaintEntry},
 };
 
 /// Pure logic: maps raw state-history rows and lookup tables into response entries.
@@ -31,6 +31,37 @@ pub fn decide_get_history(
     }
 
     entries
+}
+
+/// Pure logic: maps history rows, work order, and optional closing form into the full
+/// history detail response (state transitions + closing form + complaint).
+pub fn decide_get_history_detail(
+    history_rows: Vec<(work_order_state_history::Model, Option<users::Model>)>,
+    luts: &LookupTables,
+    wo: work_orders::Model,
+    closing_form: Option<work_order_closing_forms::Model>,
+) -> WorkOrderHistoryDetail {
+    let state_history = decide_get_history(history_rows, luts);
+
+    let closing_form = closing_form.map(|cf| ClosingFormEntry {
+        id: cf.id,
+        mtm: cf.mtm,
+        serial_number: cf.serial_number,
+        diagnosis: cf.diagnosis,
+        signature_file_name: cf.signature_file_name,
+        created_at: cf.created_at,
+    });
+
+    let complaint = wo.customer_complaint.map(|message| ComplaintEntry {
+        message,
+        submitted_at: wo.customer_complaint_at.unwrap_or(wo.updated_at),
+    });
+
+    WorkOrderHistoryDetail {
+        state_history,
+        closing_form,
+        complaint,
+    }
 }
 
 #[cfg(test)]

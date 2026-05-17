@@ -29,8 +29,12 @@ pub async fn approve_refusal(
     // Write-through: use the cache for individual work order instead of querying DB
     let wo = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
 
-    if auth.role.name == "Admin"
-        && auth.user.province.as_ref() != Some(&wo.province) { return Err(AppError::Forbidden("You can only manage work orders in your area".into())); }
+    // Province check: only regular Admins are province-scoped; SuperAdmin can manage any
+    let admin_role_id = luts.roles_by_name.get("Admin").copied();
+    if Some(auth.user.role_id) == admin_role_id {
+        let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Admin has no province assigned".to_string()))?;
+        if p != &wo.province { return Err(AppError::Forbidden("Admin province does not match work order province".to_string())); }
+    }
     let rf_id = wo.reject_form_id.ok_or_else(|| AppError::BadRequest("No rejection form".to_string()))?;
     let rf = crate::entities::work_order_reject_forms::Entity::find_by_id(rf_id).one(db.as_ref()).await?.ok_or_else(|| AppError::NotFound("Rejection form not found".to_string()))?;
     let rejected_id = *luts.work_order_statuses_by_name.get("Rejected").ok_or_else(|| AppError::Internal(anyhow::anyhow!("Rejected status not found")))?;

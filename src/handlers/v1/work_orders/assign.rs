@@ -39,7 +39,9 @@ pub async fn assign(
     // Write-through: use the cache for individual work order instead of querying DB
     let work_order = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
 
-    if auth.role.name == "Admin" {
+    // Province check: only regular Admins are province-scoped; SuperAdmin can assign anywhere
+    let admin_role_id = luts.roles_by_name.get("Admin").copied();
+    if Some(auth.user.role_id) == admin_role_id {
         let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Admin has no province assigned".to_string()))?;
         if p != &work_order.province { return Err(AppError::Forbidden("Admin province does not match work order province".to_string())); }
     }
@@ -69,7 +71,7 @@ pub async fn assign(
         });
 
         // Notify the technician
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             mongodb.as_ref(),
             valkey_client.clone(),
             db.as_ref(),
@@ -81,7 +83,7 @@ pub async fn assign(
         ).await;
 
         // Notify the customer
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             mongodb.as_ref(),
             valkey_client.clone(),
             db.as_ref(),

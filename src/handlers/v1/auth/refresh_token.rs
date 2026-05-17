@@ -42,9 +42,11 @@ pub async fn refresh_token_handler(
         .ok_or_else(|| AppError::Unauthorized("Invalid token".to_string()))?;
 
     let client = valkey_client.ok_or_else(|| AppError::ServiceUnavailable("Session service temporarily unavailable. Please try again later.".to_string()))?;
-    let mut conn = client.get_connection().await?;
     let whitelist_key = format!("whitelist:session:{}", session.id);
-    let whitelisted: Option<String> = conn.get(&whitelist_key).await?;
+    let whitelisted: Option<String> = {
+        let mut conn = client.get_connection().await?;
+        conn.get(&whitelist_key).await?
+    };
 
     let user = users::Entity::find_by_id(session.user_id)
         .one(db.as_ref()).await?
@@ -63,7 +65,10 @@ pub async fn refresh_token_handler(
             if rotation_result.rows_affected == 0 {
                 return Err(AppError::Unauthorized("Rotation failed".to_string()));
             }
-            let _: () = conn.set_ex(&whitelist_key, &token_bundle.refresh_token_hash, remaining_ttl).await?;
+            {
+                let mut conn2 = client.get_connection().await?;
+                let _: () = conn2.set_ex(&whitelist_key, &token_bundle.refresh_token_hash, remaining_ttl).await?;
+            }
             Ok(Json(ApiResponse::success(200, "Refreshed", LoginResponseData {
                 user: user_info, access_token: token_bundle.access_token, refresh_token: token_bundle.refresh_token,
             })))
