@@ -10,6 +10,8 @@ use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::work_orders::start_request::StartWorkOrderRequest;
 use crate::model::responses::base::ApiResponse;
 
+/// Start work on a work order, performing geofencing validation to ensure technician presence.
+
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/start", request_body = StartWorkOrderRequest,
     responses(
@@ -40,7 +42,7 @@ pub async fn start(
     ).await?;
 
     let effect = crate::services::v1::work_orders::start::decide_start(payload, wo, auth.user.id, in_prog_id, &luts.policies, target_location.lat, target_location.lng).await?;
-    db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order.update(txn).await?; effect.state_history.insert(txn).await?; Ok(()) }))
+    db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order_model.update(txn).await?; effect.state_history_model.insert(txn).await?; Ok(()) }))
         .await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation

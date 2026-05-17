@@ -1,3 +1,9 @@
+//! Work Order Domain Services (v1)
+//!
+//! This module provides pure domain logic for managing the work order lifecycle,
+//! including creation, assignment, status transitions (start, complete, cancel),
+//! and specialized workflows like refusal handling and history tracking.
+
 pub mod create;
 pub mod list;
 pub mod get_details;

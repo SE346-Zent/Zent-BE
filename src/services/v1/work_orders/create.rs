@@ -7,62 +7,80 @@ use crate::{
 use uuid::Uuid;
 use chrono::Utc;
 
+/// Represents the calculated results and side-effects of a successful work order creation.
+
 #[derive(Debug)]
 pub struct CreateWorkOrderEffect {
-    pub work_order: work_orders::ActiveModel,
-    pub state_history: work_order_state_history::ActiveModel,
+    /// The database model for the new work order record.
+    pub work_order_model: work_orders::ActiveModel,
+    /// The database model for the initial state history entry (creation event).
+    pub state_history_model: work_order_state_history::ActiveModel,
 }
 
+/// Determine the outcome of a work order creation request by validating location policies.
+///
+/// This pure function ensures that the requested service location is within
+/// supported cities (currently HCM and HN), generates a unique work order number,
+/// and prepares the database models for the work order and its initial state history.
+///
+/// # Arguments
+/// * `creation_payload` - The request containing work order details (customer info, product, symptom).
+/// * `requesting_customer_id` - The unique identifier of the customer creating the work order.
+/// * `initial_status_id` - The ID of the default 'Pending' status for new work orders.
+///
+/// # Returns
+/// A result containing the `CreateWorkOrderEffect` on success, or an `AppError` for policy violations.
+
 pub fn decide_create_work_order(
-    req: CreateWorkOrderRequest,
-    customer_id: Uuid,
-    pending_status_id: i32,
+    creation_payload: CreateWorkOrderRequest,
+    requesting_customer_id: Uuid,
+    initial_status_id: i32,
 ) -> Result<CreateWorkOrderEffect, AppError> {
     // 1. Location Policy Validation
-    if req.city != "HCM" && req.city != "HN" {
+    if creation_payload.city != "HCM" && creation_payload.city != "HN" {
         return Err(AppError::BadRequest("Only HCM and HN are supported at this time".to_string()));
     }
 
     // 2. ID and Number Generation
-    let now = Utc::now();
-    let wo_id = Uuid::new_v4();
-    let work_order_number = format!("WO-{}", &wo_id.to_string()[..6].to_uppercase());
+    let current_timestamp = Utc::now();
+    let work_order_id = Uuid::new_v4();
+    let work_order_number = format!("WO-{}", &work_order_id.to_string()[..6].to_uppercase());
 
     
-    let work_order = work_orders::ActiveModel {
-        id: Set(wo_id),
-        work_order_status_id: Set(pending_status_id),
-        customer_id: Set(customer_id),
-        product_id: Set(req.product_id),
-        reference_ticket_id: Set(req.reference_ticket_id),
-        work_order_symptom_id: Set(req.work_order_symptom_id),
-        description: Set(req.description),
-        first_name: Set(req.first_name),
-        last_name: Set(req.last_name),
-        email: Set(req.email),
-        phone_number: Set(req.phone_number),
-        country: Set(req.country),
-        province: Set(req.province),
-        city: Set(req.city),
-        address: Set(req.address),
-        building: Set(req.building),
-        appointment: Set(req.appointment),
+    let work_order_active_model = work_orders::ActiveModel {
+        id: Set(work_order_id),
+        work_order_status_id: Set(initial_status_id),
+        customer_id: Set(requesting_customer_id),
+        product_id: Set(creation_payload.product_id),
+        reference_ticket_id: Set(creation_payload.reference_ticket_id),
+        work_order_symptom_id: Set(creation_payload.work_order_symptom_id),
+        description: Set(creation_payload.description),
+        first_name: Set(creation_payload.first_name),
+        last_name: Set(creation_payload.last_name),
+        email: Set(creation_payload.email),
+        phone_number: Set(creation_payload.phone_number),
+        country: Set(creation_payload.country),
+        province: Set(creation_payload.province),
+        city: Set(creation_payload.city),
+        address: Set(creation_payload.address),
+        building: Set(creation_payload.building),
+        appointment: Set(creation_payload.appointment),
         work_order_number: Set(work_order_number),
-        created_at: Set(now),
-        updated_at: Set(now),
+        created_at: Set(current_timestamp),
+        updated_at: Set(current_timestamp),
         ..Default::default()
     };
 
-    let state_history = work_order_state_history::ActiveModel {
+    let state_history_active_model = work_order_state_history::ActiveModel {
         id: Set(Uuid::new_v4()),
-        work_order_id: Set(wo_id),
+        work_order_id: Set(work_order_id),
         from_status_id: Set(None), // Initial creation — no previous status
-        to_status_id: Set(pending_status_id),
-        changed_by_id: Set(customer_id),
-        changed_at: Set(now),
+        to_status_id: Set(initial_status_id),
+        changed_by_id: Set(requesting_customer_id),
+        changed_at: Set(current_timestamp),
     };
 
-    Ok(CreateWorkOrderEffect { work_order, state_history })
+    Ok(CreateWorkOrderEffect { work_order_model: work_order_active_model, state_history_model: state_history_active_model })
 }
 
 #[cfg(test)]
@@ -95,10 +113,10 @@ mod tests {
         assert!(result.is_ok());
         let effect = result.unwrap();
 
-        assert_eq!(effect.work_order.work_order_status_id, Set(pending_status_id));
-        assert_eq!(effect.work_order.city, Set("HCM".to_string()));
-        assert_eq!(effect.state_history.to_status_id, Set(pending_status_id));
-        assert_eq!(effect.state_history.from_status_id, Set(None));
+        assert_eq!(effect.work_order_model.work_order_status_id, Set(pending_status_id));
+        assert_eq!(effect.work_order_model.city, Set("HCM".to_string()));
+        assert_eq!(effect.state_history_model.to_status_id, Set(pending_status_id));
+        assert_eq!(effect.state_history_model.from_status_id, Set(None));
     }
 
     #[test]

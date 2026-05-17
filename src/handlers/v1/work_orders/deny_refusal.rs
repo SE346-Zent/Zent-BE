@@ -9,6 +9,8 @@ use crate::infrastructure::cache::ValkeyClient;
 use crate::model::responses::base::ApiResponse;
 use crate::entities::users;
 
+/// Deny a technician's refusal, resetting the work order to 'Pending' for reassignment.
+
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/refusal/deny",
     responses(
@@ -40,7 +42,7 @@ pub async fn deny_refusal(
     let wo_number = wo.work_order_number.clone();
     let effect = crate::services::v1::work_orders::deny_refusal::decide_deny_refusal(wo, rf, auth.user.id, pending_id)?;
 
-    db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order.update(txn).await?; effect.reject_form.update(txn).await?; effect.state_history.insert(txn).await?; Ok(()) }))
+    db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order_model.update(txn).await?; effect.reject_form_model.update(txn).await?; effect.state_history_model.insert(txn).await?; Ok(()) }))
         .await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation

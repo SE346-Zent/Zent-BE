@@ -4,44 +4,54 @@ use crate::model::requests::pagination::PaginationRequest;
 use crate::entities::{work_orders, products, work_order_symptoms, work_order_statuses};
 use crate::core::lookup_tables::LookupTables;
 
+/// Transform a database work order model and its related entities into a high-level summary for list displays.
+///
+/// This function handles the concatenation of names and addresses, and provides 
+/// fallback values if related entities like products or statuses are missing.
+
 pub fn map_to_list_item(
-    wo: work_orders::Model,
+    work_order: work_orders::Model,
     product: Option<products::Model>,
     _symptom: Option<work_order_symptoms::Model>,
     status: Option<work_order_statuses::Model>,
 ) -> WorkOrderListItem {
     WorkOrderListItem {
-        id: wo.id,
-        work_order_num: wo.work_order_number,
+        id: work_order.id,
+        work_order_num: work_order.work_order_number,
         status: status.map(|s| s.name).unwrap_or_else(|| "Unknown".to_string()),
-        customer_name: format!("{} {}", wo.first_name, wo.last_name),
+        customer_name: format!("{} {}", work_order.first_name, work_order.last_name),
         product_name: product.map(|p| p.product_name).unwrap_or_else(|| "Unknown Product".to_string()),
-        address: format!("{}, {}, {}", wo.address, wo.city, wo.province),
-        appointment: Some(wo.appointment),
-        created_at: wo.created_at,
+        address: format!("{}, {}, {}", work_order.address, work_order.city, work_order.province),
+        appointment: Some(work_order.appointment),
+        created_at: work_order.created_at,
     }
 }
 
+/// Apply pagination and lookup table data to a list of work order models.
+///
+/// This function converts raw database records (tuples of work order, product, and symptom)
+/// into a paginated response containing human-readable `WorkOrderListItem` objects.
+
 pub fn decide_list(
-    models: Vec<(work_orders::Model, Option<products::Model>, Option<work_order_symptoms::Model>)>,
+    work_order_tuples: Vec<(work_orders::Model, Option<products::Model>, Option<work_order_symptoms::Model>)>,
     lookup_tables: &LookupTables,
     pagination: &PaginationRequest,
     total_records: u64,
 ) -> (Vec<WorkOrderListItem>, PaginationResponse) {
-    let data = models
+    let list_items = work_order_tuples
         .into_iter()
-        .map(|(wo, product, symptom)| {
-            let status_name = lookup_tables.work_order_statuses.get(&wo.work_order_status_id).cloned();
+        .map(|(work_order, product, symptom)| {
+            let status_name = lookup_tables.work_order_statuses.get(&work_order.work_order_status_id).cloned();
             let status = status_name.map(|name| work_order_statuses::Model {
-                id: wo.work_order_status_id,
+                id: work_order.work_order_status_id,
                 name,
             });
-            map_to_list_item(wo, product, symptom, status)
+            map_to_list_item(work_order, product, symptom, status)
         })
         .collect();
 
     (
-        data,
+        list_items,
         PaginationResponse::new(pagination.limit, pagination.page, total_records),
     )
 }
@@ -98,11 +108,11 @@ mod tests {
 
     #[test]
     fn test_map_to_list_item_full() {
-        let wo = dummy_work_order();
-        let prod = dummy_product();
+        let work_order = dummy_work_order();
+        let product = dummy_product();
         let status = work_order_statuses::Model { id: 1, name: "Pending".to_string() };
 
-        let item = map_to_list_item(wo, Some(prod), None, Some(status));
+        let item = map_to_list_item(work_order, Some(product), None, Some(status));
         assert_eq!(item.work_order_num, "WO-123");
         assert_eq!(item.customer_name, "John Doe");
         assert_eq!(item.product_name, "Super Widget");
@@ -112,8 +122,8 @@ mod tests {
 
     #[test]
     fn test_map_to_list_item_missing_relations() {
-        let wo = dummy_work_order();
-        let item = map_to_list_item(wo, None, None, None);
+        let work_order = dummy_work_order();
+        let item = map_to_list_item(work_order, None, None, None);
         assert_eq!(item.product_name, "Unknown Product");
         assert_eq!(item.status, "Unknown");
     }
@@ -123,8 +133,8 @@ mod tests {
         let mut luts = LookupTables::empty();
         luts.work_order_statuses.insert(1, "Pending".to_string());
 
-        let wo = dummy_work_order();
-        let models = vec![(wo, None, None)];
+        let work_order = dummy_work_order();
+        let models = vec![(work_order, None, None)];
 
         let req = PaginationRequest { limit: 10, page: 2 };
         let (items, pag) = decide_list(models, &luts, &req, 100);

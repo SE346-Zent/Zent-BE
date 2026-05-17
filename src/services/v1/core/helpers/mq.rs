@@ -6,11 +6,11 @@ use serde_json::Value;
 
 /// Helper to publish an email payload to RabbitMQ with standardized error handling.
 pub async fn publish_email_task(
-    rabbitmq: &Arc<Connection>,
+    rabbitmq_connection: &Arc<Connection>,
     payload: Value,
     task_name: &str,
 ) -> Result<(), AppError> {
-    let producer = EmailProducer::new(Some(rabbitmq.clone()));
+    let producer = EmailProducer::new(Some(rabbitmq_connection.clone()));
     
     producer.publish(payload.to_string().as_bytes()).await
         .map_err(|e| {

@@ -8,20 +8,43 @@ use sea_orm::Set;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+/// Represents the calculated results and side-effects of a successful work order assignment.
+
 #[derive(Debug)]
 pub struct AssignWorkOrderEffect {
-    pub work_order: work_orders::ActiveModel,
-    pub state_history: work_order_state_history::ActiveModel,
+    /// The database model for the updated work order record (now assigned to a technician).
+    pub work_order_model: work_orders::ActiveModel,
+    /// The database model for the state history entry recording this assignment.
+    pub state_history_model: work_order_state_history::ActiveModel,
 }
 
+/// Determine the outcome of a work order assignment request by validating workday hours, conflicts, and status.
+///
+/// This pure function ensures that assignments are only made within valid
+/// working hours (as defined by system policies), that the technician does not
+/// have a conflicting appointment at the same time, and that the work order is
+/// in a valid state for assignment.
+///
+/// # Arguments
+/// * `assignment_payload` - The request containing the target technician's ID.
+/// * `work_order` - The database model representing the work order to be assigned.
+/// * `existing_technician_work_orders` - A list of other work orders already assigned to the technician.
+/// * `system_policies` - A map of configuration policies (e.g., workday start/end hours).
+/// * `target_assigned_status_id` - The database ID for the 'Assigned' status.
+/// * `completed_status_id` - The database ID for the 'Completed' status (to prevent re-assignment).
+/// * `admin_user_id` - The unique ID of the administrator performing the assignment.
+///
+/// # Returns
+/// A result containing the `AssignWorkOrderEffect` on success, or an `AppError` for violations.
+
 pub fn decide_assign_work_order(
-    req: AssignWorkOrderRequest,
+    assignment_payload: AssignWorkOrderRequest,
     work_order: work_orders::Model,
-    technician_work_orders: Vec<work_orders::Model>,
+    existing_technician_work_orders: Vec<work_orders::Model>,
     policies: &HashMap<String, String>,
-    assigned_status_id: i32,
-    done_status_id: i32,
-    changed_by_id: Uuid,
+    target_assigned_status_id: i32,
+    completed_status_id: i32,
+    admin_user_id: Uuid,
 ) -> Result<AssignWorkOrderEffect, AppError> {
     let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap(); // GMT+7
     let appointment_local = work_order.appointment.with_timezone(&tz_offset);
@@ -55,18 +78,18 @@ pub fn decide_assign_work_order(
     }
 
     // Ensure we don't assign a completed or rejected work order
-    if work_order.work_order_status_id == done_status_id {
+    if work_order.work_order_status_id == completed_status_id {
         return Err(AppError::BadRequest(
             "Cannot assign a completed work order".into(),
         ));
     }
 
-    for other_wo in technician_work_orders {
+    for other_wo in existing_technician_work_orders {
         if other_wo.id == work_order.id {
             continue;
         }
         // Only conflict with non-completed work orders
-        if other_wo.work_order_status_id == done_status_id {
+        if other_wo.work_order_status_id == completed_status_id {
             continue;
         }
 
@@ -77,23 +100,23 @@ pub fn decide_assign_work_order(
         }
     }
 
-    let mut active_wo: work_orders::ActiveModel = work_order.clone().into();
-    active_wo.technician_id = Set(Some(req.technician_id));
-    active_wo.work_order_status_id = Set(assigned_status_id);
-    active_wo.updated_at = Set(Utc::now());
+    let mut work_order_active_model: work_orders::ActiveModel = work_order.clone().into();
+    work_order_active_model.technician_id = Set(Some(assignment_payload.technician_id));
+    work_order_active_model.work_order_status_id = Set(target_assigned_status_id);
+    work_order_active_model.updated_at = Set(Utc::now());
 
-    let state_history = work_order_state_history::ActiveModel {
+    let state_history_active_model = work_order_state_history::ActiveModel {
         id: Set(Uuid::new_v4()),
         work_order_id: Set(work_order.id),
         from_status_id: Set(Some(work_order.work_order_status_id)),
-        to_status_id: Set(assigned_status_id),
-        changed_by_id: Set(changed_by_id),
+        to_status_id: Set(target_assigned_status_id),
+        changed_by_id: Set(admin_user_id),
         changed_at: Set(Utc::now()),
     };
 
     Ok(AssignWorkOrderEffect {
-        work_order: active_wo,
-        state_history,
+        work_order_model: work_order_active_model,
+        state_history_model: state_history_active_model,
     })
 }
 
@@ -149,9 +172,9 @@ mod tests {
         assert!(result.is_ok());
         let effect = result.unwrap();
 
-        assert_eq!(effect.work_order.technician_id, Set(Some(tech_id)));
-        assert_eq!(effect.work_order.work_order_status_id, Set(2)); // Assigned
-        assert_eq!(effect.state_history.to_status_id, Set(2));
+        assert_eq!(effect.work_order_model.technician_id, Set(Some(tech_id)));
+        assert_eq!(effect.work_order_model.work_order_status_id, Set(2)); // Assigned
+        assert_eq!(effect.state_history_model.to_status_id, Set(2));
     }
 
     #[test]

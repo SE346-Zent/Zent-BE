@@ -103,8 +103,8 @@ pub async fn create(
     let effect = create_svc::decide_create_work_order(payload.clone(), auth.user.id, pending_status_id)?;
 
     let wo_model = db.transaction::<_, work_orders_ent::Model, AppError>(|txn| Box::pin(async move {
-        let wo = effect.work_order.insert(txn).await?;
-        effect.state_history.insert(txn).await?;
+        let wo = effect.work_order_model.insert(txn).await?;
+        effect.state_history_model.insert(txn).await?;
         Ok(wo)
     })).await.map_err(|e| match e {
         sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
