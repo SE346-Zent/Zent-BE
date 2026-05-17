@@ -65,7 +65,7 @@ pub async fn send_notification(
         title: Set(title.to_string()),
         body: Set(body.to_string()),
         data: Set(data_json),
-        created_at: Set(now.into()),
+        created_at: Set(now),
         delivered: Set(false),
     };
 
@@ -95,7 +95,7 @@ async fn save_notification_to_mongodb(
 
     let notif_item = doc! {
         "notification_id": notification_id.to_string(),
-        "category_id": category_id as i32,
+        "category_id": category_id,
         "title": title,
         "body": body,
         "data": bson_data,

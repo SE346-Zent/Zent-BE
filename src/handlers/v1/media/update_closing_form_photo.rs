@@ -79,7 +79,7 @@ pub async fn update_closing_form_photo(
         &work_order.address, &work_order.city, &work_order.province, &work_order.country,
     ).await?;
 
-    let extension = file_name.split('.').last().unwrap_or("jpg");
+    let extension = file_name.split('.').next_back().unwrap_or("jpg");
     let unique_file_name = format!(
         "{}/wo_closing_update/{}.{}", id, chrono::Utc::now().timestamp(), extension
     );

@@ -30,9 +30,8 @@ pub async fn deny_refusal(
     // Write-through: use the cache for individual work order instead of querying DB
     let wo = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
 
-    if auth.role.name == "Admin" {
-        if auth.user.province.as_ref() != Some(&wo.province) { return Err(AppError::Forbidden("You can only manage work orders in your area".into())); }
-    }
+    if auth.role.name == "Admin"
+        && auth.user.province.as_ref() != Some(&wo.province) { return Err(AppError::Forbidden("You can only manage work orders in your area".into())); }
     let rf_id = wo.reject_form_id.ok_or_else(|| AppError::BadRequest("No rejection form".to_string()))?;
     let rf = crate::entities::work_order_reject_forms::Entity::find_by_id(rf_id).one(db.as_ref()).await?.ok_or_else(|| AppError::NotFound("Rejection form not found".to_string()))?;
     let pending_id = *luts.work_order_statuses_by_name.get("Pending").ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status not found")))?;

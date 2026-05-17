@@ -51,7 +51,7 @@ pub async fn refuse(
 
     let mut urls = Vec::new();
     for (data, ct, file_name) in photos_data {
-        let ext = file_name.split('.').last().unwrap_or("jpg");
+        let ext = file_name.split('.').next_back().unwrap_or("jpg");
         let name = format!("{}/refusal/{}.{}", id, chrono::Utc::now().timestamp(), ext);
         crate::utils::oci::upload_object(&name, data.to_vec(), &ct).await?;
         urls.push(name);
