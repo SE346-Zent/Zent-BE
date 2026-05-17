@@ -1,10 +1,11 @@
 use axum::{
     extract::{Path, Query, State},
+    middleware,
     routing::{get, patch, post, put},
-    Json, Router, middleware,
+    Json, Router,
 };
-use std::sync::Arc;
 use sea_orm::DatabaseConnection;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
@@ -15,29 +16,28 @@ use crate::{
     extractor::role_check::require_role,
     model::requests::users::{ProfileUpdateRequest, UserCreateRequest, UserStatusUpdateRequest},
     model::responses::base::ApiResponse,
-    model::responses::users::{UserResponseData, UserListResponseData, MeResponseData},
+    model::responses::users::{MeResponseData, UserListResponseData, UserResponseData},
     services::v1::users::{self, UserListQuery},
 };
 
+/// Initialize and return the Axum router for user management.
 pub fn router(state: AppState) -> Router<AppState> {
     let generic_routes = Router::new()
         .route("/me", get(get_me_handler))
         .route("/me", put(update_me_handler))
         .route("/me/close", post(close_account_handler));
 
-    let admin_routes = Router::new()
+    let admin_only_routes = Router::new()
         .route("/", get(list_users_handler))
         .route("/", post(create_user_handler))
         .route("/{id}", get(get_user_handler))
         .route("/{id}/status", patch(update_user_status_handler))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_role::<AppState>(&[Role::Admin]),
+            require_role::<AppState>(&[Role::Admin, Role::SuperAdmin]),
         ));
 
-    Router::new()
-        .merge(generic_routes)
-        .merge(admin_routes)
+    Router::new().merge(generic_routes).merge(admin_only_routes)
 }
 
 #[utoipa::path(
@@ -53,8 +53,7 @@ pub fn router(state: AppState) -> Router<AppState> {
 pub async fn get_me_handler(
     AuthUser { user, .. }: AuthUser,
 ) -> Result<Json<ApiResponse<MeResponseData>>, AppError> {
-    let data = users::get_me(user).await?;
-    Ok(Json(ApiResponse::success(200, "Retrieve profile successful", data)))
+    unimplemented!()
 }
 
 #[utoipa::path(
@@ -69,50 +68,103 @@ pub async fn get_me_handler(
     security(("jwt" = []))
 )]
 pub async fn update_me_handler(
-    State(db): State<Arc<DatabaseConnection>>,
+    State(_db): State<Arc<DatabaseConnection>>,
     AuthUser { user, .. }: AuthUser,
-    Json(payload): Json<ProfileUpdateRequest>,
+    Json(_payload): Json<ProfileUpdateRequest>,
 ) -> Result<Json<ApiResponse<MeResponseData>>, AppError> {
-    let data = users::update_me(&db, user, payload).await?;
-    Ok(Json(ApiResponse::success(200, "Update profile successful", data)))
+    unimplemented!()
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/me/close",
+    responses(
+        (status = 200, description = "Account closed successful"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    security(("jwt" = []))
+)]
 pub async fn close_account_handler(
-    _db: State<Arc<DatabaseConnection>>,
-    _auth: AuthUser,
+    State(_db): State<Arc<DatabaseConnection>>,
+    AuthUser { user, .. }: AuthUser,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     unimplemented!()
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/users",
+    params(UserListQuery),
+    responses(
+        (status = 200, description = "List users successful", body = ApiResponse<UserListResponseData>),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    security(("jwt" = []))
+)]
 pub async fn list_users_handler(
-    _db: State<Arc<DatabaseConnection>>,
-    _auth: AuthUser,
-    _query: Query<UserListQuery>,
+    State(_db): State<Arc<DatabaseConnection>>,
+    AuthUser { user, .. }: AuthUser,
+    Query(_query): Query<UserListQuery>,
 ) -> Result<Json<ApiResponse<UserListResponseData>>, AppError> {
     unimplemented!()
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{id}",
+    responses(
+        (status = 200, description = "Retrieve user successful", body = ApiResponse<UserResponseData>),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not Found"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    security(("jwt" = []))
+)]
 pub async fn get_user_handler(
-    _db: State<Arc<DatabaseConnection>>,
-    _auth: AuthUser,
-    _id: Path<Uuid>,
+    State(_db): State<Arc<DatabaseConnection>>,
+    AuthUser { user, .. }: AuthUser,
+    Path(_id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<UserResponseData>>, AppError> {
     unimplemented!()
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/users",
+    request_body = UserCreateRequest,
+    responses(
+        (status = 201, description = "User created successful", body = ApiResponse<UserResponseData>),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    security(("jwt" = []))
+)]
 pub async fn create_user_handler(
-    _db: State<Arc<DatabaseConnection>>,
-    _auth: AuthUser,
-    _payload: Json<UserCreateRequest>,
+    State(_db): State<Arc<DatabaseConnection>>,
+    AuthUser { user, .. }: AuthUser,
+    Json(_payload): Json<UserCreateRequest>,
 ) -> Result<Json<ApiResponse<UserResponseData>>, AppError> {
     unimplemented!()
 }
 
+#[utoipa::path(
+    patch,
+    path = "/api/v1/users/{id}/status",
+    request_body = UserStatusUpdateRequest,
+    responses(
+        (status = 200, description = "Update status successful"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Internal Server Error")
+    ),
+    security(("jwt" = []))
+)]
 pub async fn update_user_status_handler(
-    _db: State<Arc<DatabaseConnection>>,
-    _auth: AuthUser,
-    _id: Path<Uuid>,
-    _payload: Json<UserStatusUpdateRequest>,
+    State(_db): State<Arc<DatabaseConnection>>,
+    AuthUser { user, .. }: AuthUser,
+    Path(_id): Path<Uuid>,
+    Json(_payload): Json<UserStatusUpdateRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     unimplemented!()
 }

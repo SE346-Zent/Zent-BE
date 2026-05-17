@@ -3,8 +3,15 @@ use crate::{
     model::responses::users::MeResponseData,
 };
 
+/// Represents the calculated results and side-effects for retrieving the current user's profile.
+#[derive(Debug)]
+pub struct GetMeEffect {
+    /// The profile data to be returned in the API response.
+    pub response_data: MeResponseData,
+}
+
 /// Retrieve the current user's profile information.
-pub fn decide_get_me(_user: users::Model) -> MeResponseData {
+pub fn decide_get_me(_user: users::Model) -> GetMeEffect {
     unimplemented!()
 }
 
@@ -36,7 +43,8 @@ mod tests {
 
     #[rstest]
     fn test_decide_get_me_mapping(mock_user: users::Model) {
-        let res = decide_get_me(mock_user.clone());
+        let effect = decide_get_me(mock_user.clone());
+        let res = effect.response_data;
         
         assert_eq!(res.full_name, mock_user.full_name);
         assert_eq!(res.email, mock_user.email);

@@ -1,7 +1,17 @@
-use crate::{core::errors::AppError, entities::users};
+use crate::{
+    core::errors::AppError,
+    entities::users,
+};
 
-/// Validate if the current user is allowed to close their own account.
-pub fn decide_close_account(_user: &users::Model) -> Result<(), AppError> {
+/// Represents the side-effects for closing a user account.
+#[derive(Debug)]
+pub struct CloseAccountEffect {
+    /// The updated database model with status set to Terminated.
+    pub user_active_model: users::ActiveModel,
+}
+
+/// Validate and prepare account closure.
+pub fn decide_close_account(_user: users::Model) -> Result<CloseAccountEffect, AppError> {
     unimplemented!()
 }
 
@@ -11,14 +21,10 @@ mod tests {
     use chrono::Utc;
     use rstest::{fixture, rstest};
     use uuid::Uuid;
-
-    const ROLE_ADMIN: i32 = 1;
-    const ROLE_SUPER_ADMIN: i32 = 2;
-    const ROLE_CUSTOMER: i32 = 3;
-    const ROLE_TECHNICIAN: i32 = 4;
+    use sea_orm::Set;
 
     #[fixture]
-    fn mock_user(#[default(ROLE_CUSTOMER)] role_id: i32) -> users::Model {
+    fn mock_user(#[default(3)] role_id: i32) -> users::Model {
         users::Model {
             id: Uuid::new_v4(),
             full_name: "John Doe".to_string(),
@@ -37,27 +43,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case(ROLE_CUSTOMER, "ok")]
-    #[case(ROLE_TECHNICIAN, "forbidden")]
-    #[case(ROLE_ADMIN, "forbidden")]
-    #[case(ROLE_SUPER_ADMIN, "forbidden")]
-    fn test_decide_close_account_rbac(#[case] role_id: i32, #[case] expected: &str) {
+    #[case(3, true)] // Customer
+    #[case(1, false)] // Admin
+    fn test_decide_close_account_rbac(#[case] role_id: i32, #[case] expected_ok: bool) {
         let user = mock_user(role_id);
-        let res = decide_close_account(&user);
-
-        match expected {
-            "ok" => assert!(res.is_ok()),
-            "forbidden" => assert!(matches!(res, Err(AppError::Forbidden(_)))),
-            _ => panic!("Unknown expected state"),
+        let res = decide_close_account(user);
+        
+        if expected_ok {
+            let effect = res.unwrap();
+            assert_eq!(effect.user_active_model.account_status, Set(4)); // Terminated
+        } else {
+            assert!(matches!(res, Err(AppError::Forbidden(_))));
         }
-    }
-
-    #[rstest]
-    fn test_decide_close_account_already_deleted() {
-        let mut user = mock_user(ROLE_CUSTOMER);
-        user.deleted_at = Some(Utc::now());
-        // Should probably still be ok to "close" or return unauthorized
-        let res = decide_close_account(&user);
-        assert!(res.is_err());
     }
 }

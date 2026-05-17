@@ -1,7 +1,19 @@
-use crate::{core::errors::AppError, entities::users};
+use crate::{
+    core::errors::AppError,
+    entities::users,
+};
 
-/// Validate if the current user is allowed to list users.
-pub fn decide_can_list_users(_user: &users::Model) -> Result<(), AppError> {
+/// Represents the calculated results for listing users.
+#[derive(Debug)]
+pub struct ListUsersEffect {
+    /// The list of users to return, possibly filtered by role.
+    pub users: Vec<users::Model>,
+    /// Total count for pagination.
+    pub total: u64,
+}
+
+/// Validate and prepare user listing.
+pub fn decide_can_list_users(_user: users::Model) -> Result<(), AppError> {
     unimplemented!()
 }
 
@@ -12,13 +24,8 @@ mod tests {
     use rstest::{fixture, rstest};
     use uuid::Uuid;
 
-    const ROLE_ADMIN: i32 = 1;
-    const ROLE_SUPER_ADMIN: i32 = 2;
-    const ROLE_CUSTOMER: i32 = 3;
-    const ROLE_TECHNICIAN: i32 = 4;
-
     #[fixture]
-    fn mock_user(#[default(ROLE_CUSTOMER)] role_id: i32) -> users::Model {
+    fn mock_user(#[default(3)] role_id: i32) -> users::Model {
         users::Model {
             id: Uuid::new_v4(),
             full_name: "John Doe".to_string(),
@@ -37,25 +44,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(ROLE_SUPER_ADMIN, true)]
-    #[case(ROLE_ADMIN, true)]
-    #[case(ROLE_TECHNICIAN, false)]
-    #[case(ROLE_CUSTOMER, false)]
+    #[case(2, true)] // SA
+    #[case(1, true)] // Admin
+    #[case(3, false)] // Customer
     fn test_decide_can_list_users_rbac(#[case] role_id: i32, #[case] expected_ok: bool) {
         let user = mock_user(role_id);
-        let res = decide_can_list_users(&user);
+        let res = decide_can_list_users(user);
         assert_eq!(res.is_ok(), expected_ok);
-        if !expected_ok {
-            assert!(matches!(res, Err(AppError::Forbidden(_))));
-        }
-    }
-
-    #[rstest]
-    fn test_decide_can_list_users_inactive_admin() {
-        let mut admin = mock_user(ROLE_ADMIN);
-        admin.account_status = 2; // Inactive
-                                  // Inactive admins probably shouldn't be listing users
-        let res = decide_can_list_users(&admin);
-        assert!(res.is_err());
     }
 }

@@ -69,7 +69,9 @@ pub async fn update_user_status(
     unimplemented!()
 }
 
-#[derive(Debug, serde::Deserialize)]
+use utoipa::IntoParams;
+
+#[derive(Debug, serde::Deserialize, IntoParams)]
 pub struct UserListQuery {
     pub page: Option<u64>,
     pub page_size: Option<u64>,

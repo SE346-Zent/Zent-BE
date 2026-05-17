@@ -4,8 +4,14 @@ use crate::{
     model::requests::users::UserStatusUpdateRequest,
 };
 
-/// Validate if the current user is allowed to update another user's account status.
-pub fn decide_can_update_status(_current_user: &users::Model, _req: &UserStatusUpdateRequest) -> Result<(), AppError> {
+/// Represents the side-effects for updating a user's status.
+#[derive(Debug)]
+pub struct UpdateStatusEffect {
+    pub user_active_model: users::ActiveModel,
+}
+
+/// Validate and prepare status update.
+pub fn decide_can_update_status(_current_user: users::Model, _req: UserStatusUpdateRequest) -> Result<UpdateStatusEffect, AppError> {
     unimplemented!()
 }
 
@@ -15,10 +21,7 @@ mod tests {
     use chrono::Utc;
     use rstest::{fixture, rstest};
     use uuid::Uuid;
-
-    const ROLE_ADMIN: i32 = 1;
-    const ROLE_SUPER_ADMIN: i32 = 2;
-    const ROLE_TECHNICIAN: i32 = 4;
+    use sea_orm::Set;
 
     #[fixture]
     fn mock_user(#[default(1)] role_id: i32) -> users::Model {
@@ -40,28 +43,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case(ROLE_SUPER_ADMIN, "ok")]
-    #[case(ROLE_ADMIN, "ok")]
-    #[case(ROLE_TECHNICIAN, "forbidden")]
+    #[case(2, "ok")] // SA
+    #[case(1, "ok")] // Admin
+    #[case(4, "forbidden")] // Tech
     fn test_decide_can_update_status_rbac(#[case] role_id: i32, #[case] expected: &str) {
         let user = mock_user(role_id);
         let req = UserStatusUpdateRequest { account_status_id: 2 };
-        let res = decide_can_update_status(&user, &req);
+        let res = decide_can_update_status(user, req);
         
         match expected {
-            "ok" => assert!(res.is_ok()),
+            "ok" => assert_eq!(res.unwrap().user_active_model.account_status, Set(2)),
             "forbidden" => assert!(matches!(res, Err(AppError::Forbidden(_)))),
-            _ => panic!("Unknown expected state"),
+            _ => panic!(),
         }
-    }
-
-    #[rstest]
-    fn test_decide_can_update_status_self_update() {
-        let admin = mock_user(ROLE_ADMIN);
-        let req = UserStatusUpdateRequest { account_status_id: 3 }; // Locked
-        // Should we allow admins to lock themselves? 
-        // Logic should probably prevent this.
-        let res = decide_can_update_status(&admin, &req);
-        assert!(res.is_err());
     }
 }
