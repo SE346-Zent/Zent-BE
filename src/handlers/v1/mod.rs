@@ -45,6 +45,8 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/refusal/deny", axum::routing::post(work_orders::deny_refusal))
         .route("/{id}/reassign", axum::routing::post(work_orders::reassign))
         .route("/{id}/change-appointment", axum::routing::post(work_orders::change_appointment))
+        .route("/reject_forms", axum::routing::get(work_orders::reject_form_list))
+        .route("/reject_forms/{id}", axum::routing::get(work_orders::reject_form_detail))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Admin, Role::SuperAdmin]),
