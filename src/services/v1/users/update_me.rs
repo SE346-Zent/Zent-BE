@@ -1,10 +1,7 @@
 use crate::{
     core::errors::AppError,
     entities::users,
-    model::{
-        requests::users::ProfileUpdateRequest,
-        responses::users::MeResponseData,
-    },
+    model::{requests::users::ProfileUpdateRequest, responses::users::MeResponseData},
 };
 
 /// Represents the calculated results and side-effects for updating the current user's profile.
@@ -17,17 +14,22 @@ pub struct UpdateMeEffect {
 }
 
 /// Validate and prepare the profile update.
-pub fn decide_update_me(_user: users::Model, _req: ProfileUpdateRequest) -> Result<UpdateMeEffect, AppError> {
+pub fn decide_update_me(
+    _user: users::Model,
+    _req: ProfileUpdateRequest,
+) -> Result<UpdateMeEffect, AppError> {
     unimplemented!()
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::model::responses::auth::login_response::AccountStatusEnum;
+
     use super::*;
     use chrono::Utc;
     use rstest::{fixture, rstest};
-    use uuid::Uuid;
     use sea_orm::Set;
+    use uuid::Uuid;
 
     #[fixture]
     fn mock_user() -> users::Model {
@@ -56,16 +58,24 @@ mod tests {
             phone: Some("+0987654321".to_string()),
         };
         let effect = decide_update_me(mock_user, req).unwrap();
-        
-        assert_eq!(effect.user_active_model.full_name, Set("Jane Doe".to_string()));
+
+        assert_eq!(
+            effect.user_active_model.full_name,
+            Set("Jane Doe".to_string())
+        );
         assert_eq!(effect.response_data.full_name, "Jane Doe");
     }
 
     #[rstest]
     fn test_decide_update_me_unauthorized_if_deleted() {
         let mut user = mock_user();
+        user.account_status = i32::from(AccountStatusEnum::Terminated);
         user.deleted_at = Some(Utc::now());
-        let req = ProfileUpdateRequest { full_name: None, email: None, phone: None };
+        let req = ProfileUpdateRequest {
+            full_name: None,
+            email: None,
+            phone: None,
+        };
         let res = decide_update_me(user, req);
         assert!(matches!(res, Err(AppError::Unauthorized(_))));
     }
