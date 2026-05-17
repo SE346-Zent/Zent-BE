@@ -1,9 +1,10 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct UserResponseData {
-    pub id: i32,
+    pub id: Uuid,
     pub role_id: i32,
     pub first_name: String,
     pub last_name: String,
