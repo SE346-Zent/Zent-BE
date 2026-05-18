@@ -7,14 +7,16 @@ pub struct Migration;
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         // Drop the old escalation column from work_orders (revert previous approach)
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(WorkOrders::Table)
-                    .drop_column(WorkOrders::EscalationLevelNotified)
-                    .to_owned(),
-            )
-            .await?;
+        if manager.has_column("work_orders", "escalation_level_notified").await? {
+            manager
+                .alter_table(
+                    Table::alter()
+                        .table(WorkOrders::Table)
+                        .drop_column(WorkOrders::EscalationLevelNotified)
+                        .to_owned(),
+                )
+                .await?;
+        }
 
         // Create the new work_order_escalations audit table
         manager
@@ -85,20 +87,22 @@ impl MigrationTrait for Migration {
             .drop_table(Table::drop().table(WorkOrderEscalations::Table).to_owned())
             .await?;
 
-        // Re-add the old column
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(WorkOrders::Table)
-                    .add_column(
-                        ColumnDef::new(WorkOrders::EscalationLevelNotified)
-                            .integer()
-                            .null()
-                            .default(0),
-                    )
-                    .to_owned(),
-            )
-            .await?;
+        // Re-add the old column if it doesn't exist
+        if !manager.has_column("work_orders", "escalation_level_notified").await? {
+            manager
+                .alter_table(
+                    Table::alter()
+                        .table(WorkOrders::Table)
+                        .add_column(
+                            ColumnDef::new(WorkOrders::EscalationLevelNotified)
+                                .integer()
+                                .null()
+                                .default(0),
+                        )
+                        .to_owned(),
+                )
+                .await?;
+        }
 
         Ok(())
     }
