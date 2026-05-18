@@ -23,13 +23,14 @@ pub struct GetMessagesQuery {
 fn default_limit() -> i64 { 50 }
 
 #[utoipa::path(
-    get, path = "/api/chat/rooms/{id}/messages", params(GetMessagesQuery),
+    get, path = "/api/v1/chat/rooms/{id}/messages", params(GetMessagesQuery),
     responses(
         (status = 200, description = "Paginated message history", body = ApiResponse<Vec<MessageResponse>>),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Room not found", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
+    tag = "chat",
     security(("bearer_auth" = []))
 )]
 pub async fn get_messages(

@@ -18,13 +18,14 @@ pub struct AttachmentUploadResponse {
 
 #[utoipa::path(
     post,
-    path = "/api/chat/attachments",
+    path = "/api/v1/chat/attachments",
     request_body(content_type = "multipart/form-data", description = "File and room_id to attach to"),
     responses(
         (status = 200, description = "File uploaded successfully", body = ApiResponse<AttachmentUploadResponse>),
         (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
+    tag = "chat",
     security(("bearer_auth" = []))
 )]
 pub async fn upload_attachment(

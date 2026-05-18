@@ -133,6 +133,17 @@ pub(super) async fn ensure_chat_room(
             .one(db)
             .await?;
         if let Some(m) = shared {
+            // Refresh the room: link to the new work order, clear soft-delete
+            // so the cleanup cron doesn't remove it (old WO may be closed).
+            let mut room_active: chat_rooms::ActiveModel = chat_rooms::Entity::find_by_id(m.room_id)
+                .one(db)
+                .await?
+                .ok_or_else(|| AppError::NotFound("Chat room not found".to_string()))?
+                .into();
+            room_active.work_order_id = Set(Some(work_order_id));
+            room_active.deleted_at = Set(None);
+            room_active.updated_at = Set(Some(chrono::Utc::now()));
+            room_active.update(db).await?;
             return Ok(m.room_id);
         }
     }

@@ -9,13 +9,14 @@ use crate::model::responses::chat::room_response::ChatRoomResponse;
 use crate::entities::{chat_rooms, chat_room_members};
 
 #[utoipa::path(
-    post, path = "/api/chat/rooms",
+    post, path = "/api/v1/chat/rooms",
     responses(
         (status = 201, description = "Chat room created", body = ApiResponse<ChatRoomResponse>),
         (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
+    tag = "chat",
     security(("bearer_auth" = []))
 )]
 pub async fn create_room(

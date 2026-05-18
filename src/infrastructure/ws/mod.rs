@@ -8,8 +8,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum WsOutgoing {
-    /// Heartbeat ping — client must reply with PONG
-    Ping,
     /// A new chat message delivered in real-time
     Message {
         id: String,
@@ -44,8 +42,6 @@ pub enum WsIncoming {
     Auth { token: String },
     /// Refresh token in-band
     RefreshToken { token: String },
-    /// Heartbeat response
-    Pong,
     /// Send a chat message (lightweight — just room_id + content, no binary)
     Message {
         room_id: String,
@@ -68,8 +64,10 @@ pub enum WsIncoming {
 /// Commands sent internally to each connection's actor loop.
 #[derive(Debug, Clone)]
 pub enum ConnectionCommand {
-    /// Send a message to this specific client
+    /// Send a text message to this specific client
     Send(String),
+    /// Send a WebSocket protocol-level Ping frame
+    Ping(Vec<u8>),
     /// Force-close the connection with a status code
     Close { code: u16, reason: String },
 }

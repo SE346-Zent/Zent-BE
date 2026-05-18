@@ -9,7 +9,7 @@ use crate::model::responses::base::ApiResponse;
 use crate::model::responses::chat::message_response::MessageResponse;
 
 #[utoipa::path(
-    post, path = "/api/chat/rooms/{id}/messages",
+    post, path = "/api/v1/chat/rooms/{id}/messages",
     request_body = SendMessageRequest,
     responses(
         (status = 201, description = "Message sent", body = ApiResponse<MessageResponse>),

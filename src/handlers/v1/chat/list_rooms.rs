@@ -15,12 +15,13 @@ use crate::model::responses::chat::room_response::ChatRoomResponse;
 use crate::entities::{chat_rooms, chat_room_members, users};
 
 #[utoipa::path(
-    get, path = "/api/chat/rooms", params(ListRoomsQuery),
+    get, path = "/api/v1/chat/rooms", params(ListRoomsQuery),
     responses(
         (status = 200, description = "List of 1-on-1 chat rooms", body = ApiResponse<Vec<ChatRoomResponse>>),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
+    tag = "chat",
     security(("bearer_auth" = []))
 )]
 pub async fn list_rooms(

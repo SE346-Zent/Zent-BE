@@ -64,7 +64,7 @@ use crate::model::{
 
 use crate::core::errors::ErrorResponse;
 
-use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
+use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, chat};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -102,6 +102,10 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
         media::upload_closing_form_photo,
         media::update_closing_form_photo,
         media::upload_closing_form_signature,
+        chat::list_rooms::list_rooms,
+        chat::create_room::create_room,
+        chat::get_messages::get_messages,
+        chat::upload_attachment::upload_attachment,
     ),
     components(
         schemas(
@@ -148,6 +152,10 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
             UpdateNotificationPreferenceRequest,
             NotificationListItem,
             NotificationPreferenceResponse,
+            crate::model::responses::chat::room_response::ChatRoomResponse,
+            crate::model::responses::chat::message_response::MessageResponse,
+            crate::model::requests::chat::list_rooms_query::ListRoomsQuery,
+            crate::handlers::v1::chat::upload_attachment::AttachmentUploadResponse,
         )
     ),
     modifiers(&SecurityAddon),
@@ -157,6 +165,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
         (name = "inventory", description = "Inventory management"),
         (name = "notifications", description = "Notification management"),
         (name = "media", description = "Media/OCI endpoints"),
+        (name = "chat", description = "Chat & messaging endpoints"),
     )
 )]
 pub struct ApiDoc;

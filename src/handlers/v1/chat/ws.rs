@@ -6,6 +6,8 @@ use axum::{
     response::IntoResponse,
 };
 use std::net::SocketAddr;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use futures::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -68,11 +70,15 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     ws_manager.register(user_id, cmd_tx.clone()).await;
     tracing::info!("WebSocket authenticated for user {} from {}", user_id, addr);
 
+    // Heartbeat pong counter — incremented by reader on each protocol-level Pong
+    let pong_counter = Arc::new(AtomicU32::new(0));
+
     // Spawn heartbeat + expiry from cron_tasks
     let hb_user = user_id;
     let hb_mgr = ws_manager.clone();
     let hb_tx = cmd_tx.clone();
-    tokio::spawn(async move { ws_heartbeat::run_heartbeat(hb_user, hb_mgr, hb_tx).await });
+    let hb_pong = pong_counter.clone();
+    tokio::spawn(async move { ws_heartbeat::run_heartbeat(hb_user, hb_mgr, hb_tx, hb_pong).await });
 
     let ex_user = user_id;
     let ex_mgr = ws_manager.clone();
@@ -87,6 +93,11 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
             match cmd {
                 ConnectionCommand::Send(text) => {
                     if writer_sender.send(Message::Text(text.into())).await.is_err() {
+                        break;
+                    }
+                }
+                ConnectionCommand::Ping(data) => {
+                    if writer_sender.send(Message::Ping(data.into())).await.is_err() {
                         break;
                     }
                 }
@@ -107,7 +118,6 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
             Ok(Message::Text(text)) => {
                 if let Ok(incoming) = serde_json::from_str::<WsIncoming>(&text) {
                     match incoming {
-                        WsIncoming::Pong => {}
                         WsIncoming::Viewing { room_id } => {
                             handle_viewing(&state, user_id, &room_id).await;
                         }
@@ -128,6 +138,14 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                         _ => {}
                     }
                 }
+            }
+            Ok(Message::Ping(_data)) => {
+                // Tungstenite auto-responds to protocol-level Pings with Pongs.
+                // No application-level handling needed.
+            }
+            Ok(Message::Pong(_)) => {
+                // Protocol-level Pong from client — increment heartbeat counter
+                pong_counter.fetch_add(1, Ordering::Release);
             }
             Ok(Message::Close(_)) => break,
             Err(e) => {
