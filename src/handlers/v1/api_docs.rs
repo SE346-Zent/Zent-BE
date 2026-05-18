@@ -103,7 +103,6 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
         media::update_closing_form_photo,
         media::upload_closing_form_signature,
         chat::list_rooms::list_rooms,
-        chat::create_room::create_room,
         chat::get_messages::get_messages,
         chat::upload_attachment::upload_attachment,
     ),
