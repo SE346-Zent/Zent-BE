@@ -1,6 +1,7 @@
 use lapin::{
     Connection, ConnectionProperties,
 };
+use tokio_executor_trait::Tokio as TokioExecutor;
 
 pub mod email;
 pub mod work_order;
@@ -24,5 +25,5 @@ pub(crate) fn ensure_heartbeat(url: &str) -> String {
 /// Heartbeat (60s) is injected into the URL to detect silent TCP drops
 /// (NAT, firewall, etc.) even when no application traffic is flowing.
 pub async fn init_rabbitmq(url: &str) -> Result<Connection, lapin::Error> {
-    Connection::connect(&ensure_heartbeat(url), ConnectionProperties::default()).await
+    Connection::connect(&ensure_heartbeat(url), ConnectionProperties::default().with_executor(TokioExecutor::current())).await
 }

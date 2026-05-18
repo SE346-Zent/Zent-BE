@@ -1,13 +1,15 @@
 use axum::{extract::{State, Path}, Json, Extension};
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, ActiveModelTrait, TransactionTrait};
+use sea_orm::{DatabaseConnection, ActiveModelTrait, TransactionTrait, EntityTrait, QueryFilter, ColumnTrait};
 use uuid::Uuid;
+use crate::core::config::AppConfig;
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
 use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::work_orders::refuse_request::{RefuseWorkOrderRequest, RefuseWorkOrderMultipart};
 use crate::model::responses::base::ApiResponse;
+use crate::entities::users;
 
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/refuse",
@@ -22,6 +24,7 @@ use crate::model::responses::base::ApiResponse;
 pub async fn refuse(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
+    State(mongodb): State<Arc<mongodb::Database>>,
     State(luts): State<Arc<LookupTables>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     Path(id): Path<Uuid>,
@@ -57,7 +60,12 @@ pub async fn refuse(
         urls.push(name);
     }
 
-    let payload = RefuseWorkOrderRequest { reason, explanation, evidence_image_urls: urls };
+    // Capture fields before they are moved into the service effect
+    let wo_id = wo.id;
+    let wo_number = wo.work_order_number.clone();
+    let wo_province = wo.province.clone();
+
+    let payload = RefuseWorkOrderRequest { reason: reason.clone(), explanation, evidence_image_urls: urls };
     let status_id = *luts.work_order_statuses_by_name.get("Reject_InReview").ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Reject_InReview' status missing")))?;
     let effect = crate::services::v1::work_orders::refuse::decide_refuse_work_order(payload, wo, status_id, auth.user.id)?;
 
@@ -71,7 +79,76 @@ pub async fn refuse(
     })).await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation
-    super::write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), id).await;
+    super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), id).await;
+
+    // ── Notify SuperAdmins and province Admins about the rejection form ──
+    let cfg = AppConfig::get();
+    let system_user_id = cfg.system_user_id;
+    let super_admin_role_id = luts.roles_by_name.get("SuperAdmin").copied();
+    let admin_role_id = luts.roles_by_name.get("Admin").copied();
+
+    let notification_data = serde_json::json!({
+        "workOrderId": wo_id,
+        "workOrderNumber": wo_number,
+        "technicianName": auth.user.full_name,
+        "reason": reason,
+        "province": wo_province,
+    });
+
+    let title = format!("Rejection Form: Work Order {}", wo_number);
+    let body = format!(
+        "Technician {} submitted a refusal for WO {} in {}: {}",
+        auth.user.full_name, wo_number, wo_province, reason
+    );
+
+    // Notify SuperAdmins
+    if let Some(sa_role_id) = super_admin_role_id {
+        if let Ok(super_admins) = users::Entity::find()
+            .filter(users::Column::RoleId.eq(sa_role_id))
+            .filter(users::Column::DeletedAt.is_null())
+            .all(db.as_ref())
+            .await
+        {
+            for sa in super_admins {
+                if sa.id == system_user_id { continue; }
+                let _ = crate::handlers::v1::notifications::send_notification::send_notification(
+                    mongodb.as_ref(),
+                    valkey_client.clone(),
+                    db.as_ref(),
+                    sa.id,
+                    "work_order_rejection_form",
+                    &title,
+                    &body,
+                    notification_data.clone(),
+                ).await;
+            }
+        }
+    }
+
+    // Notify province Admins
+    if let Some(a_role_id) = admin_role_id {
+        if let Ok(province_admins) = users::Entity::find()
+            .filter(users::Column::RoleId.eq(a_role_id))
+            .filter(users::Column::Province.eq(&wo_province))
+            .filter(users::Column::DeletedAt.is_null())
+            .all(db.as_ref())
+            .await
+        {
+            for admin in province_admins {
+                if admin.id == system_user_id { continue; }
+                let _ = crate::handlers::v1::notifications::send_notification::send_notification(
+                    mongodb.as_ref(),
+                    valkey_client.clone(),
+                    db.as_ref(),
+                    admin.id,
+                    "work_order_rejection_form",
+                    &title,
+                    &body,
+                    notification_data.clone(),
+                ).await;
+            }
+        }
+    }
 
     Ok(Json(ApiResponse::success(200, "Work order refusal submitted successfully", ())))
 }

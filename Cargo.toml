@@ -21,6 +21,7 @@ geo = { version = "0.32.0", features = ["serde"] }
 http = "1.4.0"
 image = { version = "0.25.9", features = ["serde"] }
 lapin = "2.3.4"
+tokio-executor-trait = "2.1"
 jsonwebtoken = { version = "10.3.0", features = ["hmac", "rust_crypto"] }
 lettre = { version = "0.11.19", features = [
     "serde",

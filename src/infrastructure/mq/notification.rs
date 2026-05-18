@@ -83,6 +83,10 @@ impl NotificationProducer {
         let channel = conn.create_channel().await?;
         setup_notification_topology(&channel).await?;
 
+        // Enable publisher confirms so we know the broker received the message
+        use lapin::options::ConfirmSelectOptions;
+        channel.confirm_select(ConfirmSelectOptions::default()).await?;
+
         let confirm = channel.basic_publish(
             NOTIFICATION_EXCHANGE,
             NOTIFICATION_ROUTING_KEY,

@@ -110,7 +110,7 @@ pub async fn assign(
 }
 
 /// Ensure a 1-on-1 chat room exists between two users. Creates one if not found.
-async fn ensure_chat_room(
+pub(super) async fn ensure_chat_room(
     db: &DatabaseConnection,
     user_a: Uuid,
     user_b: Uuid,

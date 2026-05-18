@@ -16,6 +16,7 @@ pub const NOTIFICATION_CATEGORIES: &[(&str, &str)] = &[
     ("work_order_rejection_form", "Work Order Rejection Form"),
     ("add_new_part", "Add New Part"),
     ("work_order_escalation", "Work Order Escalation"),
+    ("chat_message", "Chat Message"),
 ];
 
 // ── Shared Data Types ──────────────────────────────────────────────────

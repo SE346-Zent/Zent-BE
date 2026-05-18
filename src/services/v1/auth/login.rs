@@ -13,7 +13,6 @@ use crate::entities::sessions;
 use uuid::Uuid;
 use chrono::Utc;
 use jsonwebtoken::EncodingKey;
-use uuid::Uuid;
 
 /// Effect containing the session ActiveModel ready for `.insert()`,
 /// plus response data and convenience fields for downstream use.

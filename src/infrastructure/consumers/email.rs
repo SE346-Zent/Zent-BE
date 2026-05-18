@@ -5,6 +5,7 @@ use lapin::{
     types::FieldTable,
     Connection, ConnectionProperties,
 };
+use tokio_executor_trait::Tokio as TokioExecutor;
 use futures::stream::StreamExt;
 use tracing::{info, error, warn};
 use lettre::{Message, AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
@@ -28,7 +29,7 @@ fn ensure_heartbeat(url: &str) -> String {
 
 /// Try to create a new RabbitMQ connection using the URL from AppConfig.
 async fn create_fresh_connection(url: &str) -> Result<Connection, lapin::Error> {
-    Connection::connect(&ensure_heartbeat(url), ConnectionProperties::default()).await
+    Connection::connect(&ensure_heartbeat(url), ConnectionProperties::default().with_executor(TokioExecutor::current())).await
 }
 
 pub async fn start_email_consumer(connection: Option<Arc<lapin::Connection>>) {

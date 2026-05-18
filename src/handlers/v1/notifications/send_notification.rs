@@ -12,12 +12,19 @@ use crate::infrastructure::cache::ValkeyClient;
 
 /// Send a notification to a user.
 ///
-/// Always saves to MongoDB (in-app notification list). Then checks the user's
-/// notification preferences. If the user has enabled push for this category
-/// (or has no preferences set — default enabled), creates an outbox record
+/// **chat_message category (FCM-only, no bell icon):**
+/// Chat messages are never saved to MongoDB (they don't appear in the
+/// bell-icon notification list). An FCM push is sent only when the user
+/// is offline (not connected via WebSocket). When online, the message
+/// is delivered in real-time via WebSocket — no push needed.
+///
+/// **All other categories (bell icon + optional FCM):**
+/// Always saved to MongoDB (in-app bell-icon notification list) and
+/// the Valkey unread counter is incremented. Then checks the user's
+/// notification preferences: if push is enabled for this category
+/// (or no preferences set — default enabled), creates an outbox record
 /// which triggers FCM push delivery via the relay → consumer pipeline.
-/// If push is disabled for this category, no outbox is created and no FCM
-/// is sent.
+/// No online/offline gating — FCM is always sent when push is enabled.
 ///
 /// `category_slug` must be one of the slugs in `NOTIFICATION_CATEGORIES`.
 pub async fn send_notification(
@@ -37,23 +44,41 @@ pub async fn send_notification(
     let notification_id = Uuid::new_v4();
     let now = Utc::now();
 
-    // ── 1. Save to MongoDB (in-app notification list — always) ────
-    save_notification_to_mongodb(mongodb, notification_id, user_id, category_id, title, body, &data, now)
-        .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to save notification to MongoDB: {}", e)))?;
+    // ── chat_message: FCM-only, no bell icon ───────────────────────
+    if category_slug == "chat_message" {
+        // Never save chat messages to MongoDB (no bell icon listing)
+        // Only send FCM push when the user is offline
+        let ws_manager = crate::infrastructure::ws::get_ws_manager();
+        if ws_manager.is_connected(&user_id).await {
+            info!("User {} is online — chat message delivered via WS, skipping FCM", user_id);
+            return Ok(());
+        }
+        // User is offline: check preferences, then send FCM
+        if !is_push_enabled_for_user(mongodb, user_id, category_id).await {
+            info!("Push disabled for user {} — skipping chat FCM", user_id);
+            return Ok(());
+        }
+        // Fall through to outbox creation below (no MongoDB save, no Valkey increment)
+    } else {
+        // ── All other categories: bell icon + optional FCM ─────────
+        // 1. Save to MongoDB (in-app bell-icon notification list)
+        save_notification_to_mongodb(mongodb, notification_id, user_id, category_id, title, body, &data, now)
+            .await
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to save notification to MongoDB: {}", e)))?;
 
-    // ── 2. Increment Valkey unread counter ─────────────────────────
-    if let Some(vk) = valkey.as_ref() {
-        increment_unread_count(vk, user_id).await;
+        // 2. Increment Valkey unread counter
+        if let Some(vk) = valkey.as_ref() {
+            increment_unread_count(vk, user_id).await;
+        }
+
+        // 3. Check user preferences — skip outbox if push disabled
+        if !is_push_enabled_for_user(mongodb, user_id, category_id).await {
+            info!("Push disabled for user {} category {} — notification saved to MongoDB only", user_id, category_id);
+            return Ok(());
+        }
     }
 
-    // ── 3. Check user preferences — skip outbox if push disabled ──
-    if !is_push_enabled_for_user(mongodb, user_id, category_id).await {
-        info!("Push disabled for user {} category {} — notification saved to MongoDB only", user_id, category_id);
-        return Ok(());
-    }
-
-    // ── 4. Create outbox entry (triggers FCM push) ─────────────────
+    // ── Create outbox entry (triggers FCM push) ────────────────────
     let data_json = serde_json::to_string(&data)
         .unwrap_or_else(|_| "{}".to_string());
 

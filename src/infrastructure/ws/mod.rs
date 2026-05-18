@@ -121,3 +121,15 @@ impl ConnectionManager {
         self.connections.read().await.contains_key(user_id)
     }
 }
+
+/// Return a reference to the global WebSocket ConnectionManager singleton.
+///
+/// The manager is lazily initialized on first access and lives for the
+/// lifetime of the process. It is shared across all WebSocket connections
+/// and is also used by the notification system to check whether a user
+/// is currently online before deciding to send an FCM push.
+pub fn get_ws_manager() -> Arc<ConnectionManager> {
+    use std::sync::OnceLock;
+    static WS_MANAGER: OnceLock<Arc<ConnectionManager>> = OnceLock::new();
+    WS_MANAGER.get_or_init(|| Arc::new(ConnectionManager::new())).clone()
+}

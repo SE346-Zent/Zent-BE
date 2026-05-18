@@ -5,7 +5,6 @@ use axum::{
     },
     response::IntoResponse,
 };
-use std::sync::Arc;
 use std::net::SocketAddr;
 use futures::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
@@ -13,8 +12,7 @@ use uuid::Uuid;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use redis::AsyncCommands;
 use crate::core::state::AppState;
-use crate::infrastructure::cache::ValkeyClient;
-use crate::infrastructure::ws::{WsIncoming, WsOutgoing, ConnectionManager, ConnectionCommand};
+use crate::infrastructure::ws::{WsIncoming, WsOutgoing, ConnectionCommand};
 use crate::infrastructure::cron_tasks::{ws_heartbeat, ws_expiry};
 use crate::model::jwt_claims::Claims;
 
@@ -66,7 +64,7 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
         }
     };
 
-    let ws_manager = get_ws_manager(&state);
+    let ws_manager = crate::infrastructure::ws::get_ws_manager();
     ws_manager.register(user_id, cmd_tx.clone()).await;
     tracing::info!("WebSocket authenticated for user {} from {}", user_id, addr);
 
@@ -232,7 +230,7 @@ async fn handle_ws_message(
             .all(state.db.as_ref())
             .await
         {
-            let ws_manager = get_ws_manager(state);
+            let ws_manager = crate::infrastructure::ws::get_ws_manager();
 
             for member in members {
                 if member.user_id == sender_id {
@@ -311,8 +309,3 @@ async fn handle_mark_read(state: &AppState, user_id: Uuid, message_ids: &[String
     }
 }
 
-fn get_ws_manager(_state: &AppState) -> Arc<ConnectionManager> {
-    use std::sync::OnceLock;
-    static WS_MANAGER: OnceLock<Arc<ConnectionManager>> = OnceLock::new();
-    WS_MANAGER.get_or_init(|| Arc::new(ConnectionManager::new())).clone()
-}

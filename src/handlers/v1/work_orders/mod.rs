@@ -358,6 +358,12 @@ pub(crate) async fn try_auto_assign_single(
     db: Arc<DatabaseConnection>,
     wo: work_orders_ent::Model,
 ) -> bool {
+    // Deduplication guard: if already assigned (by the other path), skip.
+    if wo.technician_id.is_some() {
+        tracing::info!("WO {} already has a technician — skipping auto-assign (already assigned)", wo.work_order_number);
+        return true;
+    }
+
     let luts = &state.lookup_tables;
     let tech_role_id = match luts.roles_by_name.get("Technician") {
         Some(id) => *id,
@@ -437,9 +443,13 @@ pub(crate) async fn try_auto_assign_single(
     }
 
     if let Some(rmq) = state.rabbitmq.as_ref() {
-        if let (Some(c), Some(t)) = (cust, tech) {
+        if let (Some(c), Some(t)) = (cust.as_ref(), tech.as_ref()) {
             let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(rmq, &state.templates, &c.email, &c.full_name, &wo.work_order_number, &t.full_name, &wo.appointment.to_string()).await;
         }
+    }
+    // Auto-create 1-on-1 chat room between technician and customer
+    if let (Some(ref t), Some(ref c)) = (&tech, &cust) {
+        let _ = assign::ensure_chat_room(db.as_ref(), t.id, c.id, wo.id).await;
     }
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation
     write_through_work_order_cache(db.as_ref(), state.valkey.clone(), &state.lookup_tables, wo.id).await;
