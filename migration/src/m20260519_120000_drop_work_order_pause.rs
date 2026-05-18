@@ -17,17 +17,17 @@ impl MigrationTrait for Migration {
         let sql_fix_history = match backend {
             sea_orm::DatabaseBackend::MySql => {
                 "UPDATE work_order_state_history \
-                 SET to_status_id = (SELECT id FROM work_order_statuses WHERE name = 'InProg') \
-                 WHERE to_status_id = (SELECT id FROM work_order_statuses WHERE name = 'Paused')"
+                 SET to_status_id = (SELECT id FROM work_order_statuses WHERE name = 'InProg' LIMIT 1) \
+                 WHERE to_status_id IN (SELECT id FROM work_order_statuses WHERE name = 'Paused')"
             }
             sea_orm::DatabaseBackend::Postgres => {
                 "UPDATE work_order_state_history \
-                 SET to_status_id = (SELECT id FROM work_order_statuses WHERE name = 'InProg') \
-                 WHERE to_status_id = (SELECT id FROM work_order_statuses WHERE name = 'Paused')"
+                 SET to_status_id = (SELECT id FROM work_order_statuses WHERE name = 'InProg' LIMIT 1) \
+                 WHERE to_status_id IN (SELECT id FROM work_order_statuses WHERE name = 'Paused')"
             }
             sea_orm::DatabaseBackend::Sqlite => {
                 "UPDATE work_order_state_history \
-                 SET to_status_id = (SELECT id FROM work_order_statuses WHERE name = 'InProg') \
+                 SET to_status_id = (SELECT id FROM work_order_statuses WHERE name = 'InProg' LIMIT 1) \
                  WHERE to_status_id IN (SELECT id FROM work_order_statuses WHERE name = 'Paused')"
             }
         };
@@ -37,17 +37,17 @@ impl MigrationTrait for Migration {
         let sql_reset_work_orders = match backend {
             sea_orm::DatabaseBackend::MySql => {
                 "UPDATE work_orders \
-                 SET work_order_status_id = (SELECT id FROM work_order_statuses WHERE name = 'Assigned') \
-                 WHERE work_order_status_id = (SELECT id FROM work_order_statuses WHERE name = 'Paused')"
+                 SET work_order_status_id = (SELECT id FROM work_order_statuses WHERE name = 'Assigned' LIMIT 1) \
+                 WHERE work_order_status_id IN (SELECT id FROM work_order_statuses WHERE name = 'Paused')"
             }
             sea_orm::DatabaseBackend::Postgres => {
                 "UPDATE work_orders \
-                 SET work_order_status_id = (SELECT id FROM work_order_statuses WHERE name = 'Assigned') \
-                 WHERE work_order_status_id = (SELECT id FROM work_order_statuses WHERE name = 'Paused')"
+                 SET work_order_status_id = (SELECT id FROM work_order_statuses WHERE name = 'Assigned' LIMIT 1) \
+                 WHERE work_order_status_id IN (SELECT id FROM work_order_statuses WHERE name = 'Paused')"
             }
             sea_orm::DatabaseBackend::Sqlite => {
                 "UPDATE work_orders \
-                 SET work_order_status_id = (SELECT id FROM work_order_statuses WHERE name = 'Assigned') \
+                 SET work_order_status_id = (SELECT id FROM work_order_statuses WHERE name = 'Assigned' LIMIT 1) \
                  WHERE work_order_status_id IN (SELECT id FROM work_order_statuses WHERE name = 'Paused')"
             }
         };
