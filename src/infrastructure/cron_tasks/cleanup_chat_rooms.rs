@@ -1,10 +1,39 @@
-use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait, Set};
+use tokio_cron_scheduler::Job;
+use sea_orm::*;
+use std::sync::Arc;
 use chrono::{Utc, Duration};
-use crate::entities::{chat_rooms, work_orders};
+use tracing::{info, error};
+
 use crate::core::lookup_tables::LookupTables;
+use crate::entities::{chat_rooms, work_orders};
+
+pub fn build_cleanup_chat_rooms_job(
+    db: DatabaseConnection,
+    luts: Arc<LookupTables>,
+) -> Result<Job, anyhow::Error> {
+    // Run once per day at midnight: "0 0 0 * * *"
+    let job = Job::new_async("0 0 0 * * *", move |_uuid, _l| {
+        let db_clone = db.clone();
+        let luts_clone = luts.clone();
+        Box::pin(async move {
+            info!("Running chat room cleanup job (15-day post-WO-close soft delete)...");
+            match cleanup_closed_work_order_rooms(&db_clone, &luts_clone).await {
+                Ok(count) => {
+                    if count > 0 {
+                        info!("Soft-deleted {} chat rooms linked to closed work orders", count);
+                    }
+                }
+                Err(e) => {
+                    error!("Error in chat room cleanup job: {:?}", e);
+                }
+            }
+        })
+    })?;
+    Ok(job)
+}
 
 /// Soft-deletes chat rooms whose linked work order was closed more than 15 days ago.
-pub async fn cleanup_closed_work_order_rooms(
+async fn cleanup_closed_work_order_rooms(
     db: &DatabaseConnection,
     luts: &LookupTables,
 ) -> Result<u64, anyhow::Error> {
@@ -15,7 +44,6 @@ pub async fn cleanup_closed_work_order_rooms(
 
     let cutoff = Utc::now() - Duration::days(15);
 
-    // Find rooms linked to closed work orders older than cutoff
     let rooms: Vec<chat_rooms::Model> = chat_rooms::Entity::find()
         .filter(chat_rooms::Column::WorkOrderId.is_not_null())
         .filter(chat_rooms::Column::DeletedAt.is_null())
@@ -41,10 +69,6 @@ pub async fn cleanup_closed_work_order_rooms(
         active.deleted_at = Set(Some(now));
         active.updated_at = Set(Some(now));
         active.update(db).await?;
-    }
-
-    if count > 0 {
-        tracing::info!("Soft-deleted {} chat rooms linked to closed work orders older than 15 days", count);
     }
 
     Ok(count)

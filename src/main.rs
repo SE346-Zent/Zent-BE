@@ -139,6 +139,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .expect("Failed to register escalation job");
 
+    let chat_room_cleanup_job = infrastructure::cron_tasks::cleanup_chat_rooms::build_cleanup_chat_rooms_job(
+        db.clone(),
+        state.lookup_tables.clone(),
+    ).expect("Failed to build chat room cleanup job");
+
+    app_scheduler.register_job(chat_room_cleanup_job)
+        .await
+        .expect("Failed to register chat room cleanup job");
+
     let outbox_cleanup_job = infrastructure::cron_tasks::cleanup_outbox::clean_up_outbox_job(
         db.clone(),
     ).expect("Failed to build outbox cleanup job");

@@ -209,6 +209,10 @@ async fn handle_ws_message(
         .map(|o| o.to_hex())
         .unwrap_or_default();
 
+    // Clone values that will also be needed for push notifications
+    let content_preview = content.clone();
+    let msg_id_for_notif = message_id.clone();
+
     let outgoing = WsOutgoing::Message {
         id: message_id,
         room_id: room_id.to_string(),
@@ -249,8 +253,10 @@ async fn handle_ws_message(
                 };
 
                 // Try WebSocket delivery
-                if ws_manager.send_to_user(&member.user_id, &payload).await.is_err() {
-                    // User not connected — increment unread in Valkey
+                let _ = ws_manager.send_to_user(&member.user_id, &payload).await;
+
+                if !is_viewing {
+                    // Recipient is not viewing — increment unread + send push notification
                     if let Some(ref vc) = state.valkey {
                         if let Ok(mut conn) = vc.get_connection().await {
                             let unread_key = format!("chat:unread:{}:{}", room_id, member.user_id);
@@ -258,17 +264,25 @@ async fn handle_ws_message(
                             let _: () = conn.expire(&unread_key, 86400).await.unwrap_or_default();
                         }
                     }
-                } else if !is_viewing {
-                    // Delivered via WS but user isn't viewing — still count as unread
-                    if let Some(ref vc) = state.valkey {
-                        if let Ok(mut conn) = vc.get_connection().await {
-                            let unread_key = format!("chat:unread:{}:{}", room_id, member.user_id);
-                            let _: () = conn.incr(&unread_key, 1).await.unwrap_or_default();
-                            let _: () = conn.expire(&unread_key, 86400).await.unwrap_or_default();
-                        }
-                    }
+
+                    // Send push notification via FCM
+                    let notification_data = serde_json::json!({
+                        "room_id": room_id,
+                        "message_id": msg_id_for_notif,
+                        "sender_id": sender_id.to_string(),
+                    });
+                    let _ = crate::handlers::v1::notifications::send_notification::send_notification(
+                        state.mongodb.as_ref(),
+                        state.valkey.clone(),
+                        state.db.as_ref(),
+                        member.user_id,
+                        "chat_message",
+                        "New Message",
+                        content_preview.as_deref().unwrap_or("Sent an attachment"),
+                        notification_data,
+                    ).await;
                 }
-                // else: delivered via WS and user IS viewing → don't increment
+                // else: is_viewing → don't increment unread, don't send push notification
             }
         }
     }
