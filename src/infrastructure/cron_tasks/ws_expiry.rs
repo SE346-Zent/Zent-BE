@@ -23,19 +23,22 @@ pub async fn run_expiry_enforcer(
     loop {
         let deadline = *reset_rx.borrow();
 
-        // Warn at 5 minutes before expiry (only when TTL exceeds 5 min)
+        // Warn at 5 minutes before expiry (only when TTL exceeds 5 min).
+        // Use checked_sub to avoid underflow when less than 300s remain.
         if ttl > Duration::from_secs(300) {
-            let warn_at = deadline - Duration::from_secs(300);
-            tokio::select! {
-                _ = tokio::time::sleep_until(warn_at) => {
-                    if manager.is_connected(&user_id).await {
-                        let warning = serde_json::to_string(&WsOutgoing::TokenExpiring)
-                            .unwrap_or_default();
-                        let _ = tx.send(ConnectionCommand::Send(warning));
+            if let Some(warn_at) = deadline.checked_sub(Duration::from_secs(300)) {
+                tokio::select! {
+                    _ = tokio::time::sleep_until(warn_at) => {
+                        if manager.is_connected(&user_id).await {
+                            let warning = serde_json::to_string(&WsOutgoing::TokenExpiring)
+                                .unwrap_or_default();
+                            let _ = tx.send(ConnectionCommand::Send(warning));
+                        }
                     }
+                    _ = reset_rx.changed() => { continue; }
                 }
-                _ = reset_rx.changed() => { continue; }
             }
+            // else: less than 300s remain — skip warning, go straight to expiry
         }
 
         // Wait for expiry (or a reset)

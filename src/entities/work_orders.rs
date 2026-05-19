@@ -35,6 +35,7 @@ pub struct Model {
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
+    pub chat_room_id: Option<Uuid>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -111,6 +112,14 @@ pub enum Relation {
     SelfRef,
     #[sea_orm(has_many = "super::new_part_forms::Entity")]
     NewPartForms,
+    #[sea_orm(
+        belongs_to = "super::chat_rooms::Entity",
+        from = "Column::ChatRoomId",
+        to = "super::chat_rooms::Column::Id",
+        on_update = "Cascade",
+        on_delete = "SetNull"
+    )]
+    ChatRooms,
 }
 
 impl Related<super::products::Entity> for Entity {
@@ -158,6 +167,12 @@ impl Related<super::work_order_statuses::Entity> for Entity {
 impl Related<super::work_order_symptoms::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::WorkOrderSymptoms.def()
+    }
+}
+
+impl Related<super::chat_rooms::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ChatRooms.def()
     }
 }
 

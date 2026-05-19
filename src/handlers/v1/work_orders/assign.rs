@@ -40,8 +40,9 @@ pub async fn assign(
     let work_order = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
 
     // Province check: only regular Admins are province-scoped; SuperAdmin can assign anywhere
-    let admin_role_id = luts.roles_by_name.get("Admin").copied();
-    if Some(auth.user.role_id) == admin_role_id {
+    let admin_role_id = *luts.roles_by_name.get("Admin")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Admin role missing from lookup tables")))?;
+    if auth.user.role_id == admin_role_id {
         let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Admin has no province assigned".to_string()))?;
         if p != &work_order.province { return Err(AppError::Forbidden("Admin province does not match work order province".to_string())); }
     }
@@ -103,43 +104,59 @@ pub async fn assign(
     }
     // Auto-create 1-on-1 chat room between technician and customer
     if let (Some(ref t), Some(ref c)) = (&tech, &cust) {
-        let _ = ensure_chat_room(db.as_ref(), t.id, c.id, work_order.id).await;
+        let room_id = ensure_chat_room(db.as_ref(), t.id, c.id, work_order.id).await?;
+        // Wire the FK on the work order so we can find the room from the WO later
+        work_orders_ent::Entity::update_many()
+            .filter(work_orders_ent::Column::Id.eq(work_order.id))
+            .set(work_orders_ent::ActiveModel {
+                chat_room_id: Set(Some(room_id)),
+                ..Default::default()
+            })
+            .exec(db.as_ref())
+            .await?;
     }
 
     Ok(Json(ApiResponse::success(200, "Work order assigned successfully", ())))
 }
 
 /// Ensure a 1-on-1 chat room exists between two users. Creates one if not found.
+///
+/// Invariant: exactly one room per user pair. If a room was soft-deleted, it is
+/// reactivated. Only active (non-deleted) memberships are considered when
+/// searching for an existing room — this prevents the inconsistent-state bug
+/// where a room is reactivated but its memberships remain soft-deleted.
 pub(super) async fn ensure_chat_room(
     db: &DatabaseConnection,
     user_a: Uuid,
     user_b: Uuid,
     work_order_id: Uuid,
 ) -> Result<Uuid, AppError> {
-    // Find rooms where user_a is a member
+    // Find rooms where user_a is an active member
     let a_rooms: Vec<Uuid> = chat_room_members::Entity::find()
         .filter(chat_room_members::Column::UserId.eq(user_a))
+        .filter(chat_room_members::Column::DeletedAt.is_null())
         .all(db)
         .await?
         .into_iter()
         .map(|m| m.room_id)
         .collect();
 
-    // Check if any of those rooms also have user_b
+    // Check if any of those rooms also have user_b as an active member
     if !a_rooms.is_empty() {
         let shared = chat_room_members::Entity::find()
-            .filter(chat_room_members::Column::RoomId.is_in(a_rooms))
+            .filter(chat_room_members::Column::RoomId.is_in(a_rooms.clone()))
             .filter(chat_room_members::Column::UserId.eq(user_b))
+            .filter(chat_room_members::Column::DeletedAt.is_null())
             .one(db)
             .await?;
         if let Some(m) = shared {
-            // Refresh the room: link to the new work order, clear soft-delete
-            // so the cleanup cron doesn't remove it (old WO may be closed).
-            let mut room_active: chat_rooms::ActiveModel = chat_rooms::Entity::find_by_id(m.room_id)
+            // Reactivate the room if it was soft-deleted, update work_order link.
+            // Memberships are already active (we filtered by DeletedAt.is_null()).
+            let room = chat_rooms::Entity::find_by_id(m.room_id)
                 .one(db)
                 .await?
-                .ok_or_else(|| AppError::NotFound("Chat room not found".to_string()))?
-                .into();
+                .ok_or_else(|| AppError::NotFound("Chat room not found".to_string()))?;
+            let mut room_active: chat_rooms::ActiveModel = room.into();
             room_active.work_order_id = Set(Some(work_order_id));
             room_active.deleted_at = Set(None);
             room_active.updated_at = Set(Some(chrono::Utc::now()));
@@ -148,7 +165,7 @@ pub(super) async fn ensure_chat_room(
         }
     }
 
-    // Create new room
+    // No active shared room exists — create one
     let now = chrono::Utc::now();
     let room_id = Uuid::new_v4();
 

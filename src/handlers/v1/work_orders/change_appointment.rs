@@ -34,8 +34,9 @@ pub async fn change_appointment(
     let work_order = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
 
     // Province check for regular Admins (SuperAdmin bypasses)
-    let admin_role_id = luts.roles_by_name.get("Admin").copied();
-    if Some(auth.user.role_id) == admin_role_id {
+    let admin_role_id = *luts.roles_by_name.get("Admin")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Admin role missing from lookup tables")))?;
+    if auth.user.role_id == admin_role_id {
         let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Admin has no province assigned".to_string()))?;
         if p != &work_order.province {
             return Err(AppError::Forbidden("Admin province does not match work order province".to_string()));

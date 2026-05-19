@@ -96,6 +96,7 @@ pub async fn seed_random_work_orders(
                 about_to_start_notified: Set(false),
                 customer_complaint: Set(None),
                 customer_complaint_at: Set(None),
+                chat_room_id: Set(None),
             }
         })
         .collect();

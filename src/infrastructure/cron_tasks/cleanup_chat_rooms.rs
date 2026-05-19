@@ -2,6 +2,7 @@ use tokio_cron_scheduler::Job;
 use sea_orm::*;
 use std::sync::Arc;
 use chrono::{Utc, Duration};
+use uuid::Uuid;
 use tracing::{info, error};
 
 use crate::core::lookup_tables::LookupTables;
@@ -33,6 +34,10 @@ pub fn build_cleanup_chat_rooms_job(
 }
 
 /// Soft-deletes chat rooms whose linked work order was closed more than 15 days ago.
+///
+/// Uses a two-phase approach to push filtering into the DB and avoid N+1 updates:
+/// 1. SELECT eligible room IDs via a join with work_orders (predicates evaluated DB-side).
+/// 2. Single `update_many` to soft-delete all matched rooms in one statement.
 async fn cleanup_closed_work_order_rooms(
     db: &DatabaseConnection,
     luts: &LookupTables,
@@ -44,32 +49,36 @@ async fn cleanup_closed_work_order_rooms(
 
     let cutoff = Utc::now() - Duration::days(15);
 
-    let rooms: Vec<chat_rooms::Model> = chat_rooms::Entity::find()
+    // Phase 1: find room IDs whose linked work order is Closed and stale
+    let room_ids: Vec<Uuid> = chat_rooms::Entity::find()
         .filter(chat_rooms::Column::WorkOrderId.is_not_null())
         .filter(chat_rooms::Column::DeletedAt.is_null())
         .find_also_related(work_orders::Entity)
+        .filter(work_orders::Column::WorkOrderStatusId.eq(closed_id))
+        .filter(work_orders::Column::UpdatedAt.lt(cutoff))
         .all(db)
         .await?
         .into_iter()
-        .filter_map(|(room, wo)| {
-            if let Some(wo) = wo {
-                if wo.work_order_status_id == closed_id && wo.updated_at < cutoff {
-                    return Some(room);
-                }
-            }
-            None
-        })
+        .map(|(room, _)| room.id)
         .collect();
 
-    let count = rooms.len() as u64;
+    if room_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let count = room_ids.len() as u64;
     let now = Utc::now();
 
-    for room in rooms {
-        let mut active: chat_rooms::ActiveModel = room.into();
-        active.deleted_at = Set(Some(now));
-        active.updated_at = Set(Some(now));
-        active.update(db).await?;
-    }
+    // Phase 2: single bulk soft-delete
+    chat_rooms::Entity::update_many()
+        .filter(chat_rooms::Column::Id.is_in(room_ids))
+        .set(chat_rooms::ActiveModel {
+            deleted_at: Set(Some(now)),
+            updated_at: Set(Some(now)),
+            ..Default::default()
+        })
+        .exec(db)
+        .await?;
 
     Ok(count)
 }
