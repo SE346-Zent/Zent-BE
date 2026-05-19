@@ -43,6 +43,24 @@ pub async fn change_appointment(
         }
     }
 
+    // Prevent scheduling conflicts: the technician cannot have two appointments
+    // at the exact same time. Only enforced when a technician is assigned.
+    if let Some(tech_id) = work_order.technician_id {
+        use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+        use crate::entities::work_orders as work_orders_ent;
+        let conflict = work_orders_ent::Entity::find()
+            .filter(work_orders_ent::Column::TechnicianId.eq(tech_id))
+            .filter(work_orders_ent::Column::Id.ne(work_order.id))
+            .filter(work_orders_ent::Column::Appointment.eq(payload.new_appointment))
+            .one(db.as_ref())
+            .await?;
+        if conflict.is_some() {
+            return Err(AppError::Conflict(
+                "Technician already has an appointment at this time".into(),
+            ));
+        }
+    }
+
     let pending_status_id = *luts.work_order_statuses_by_name.get("Pending")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Pending' status missing")))?;
     let assigned_status_id = *luts.work_order_statuses_by_name.get("Assigned")

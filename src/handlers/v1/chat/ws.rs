@@ -209,8 +209,17 @@ async fn handle_ws_message(
 ) {
     use mongodb::bson::doc;
     use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
-    use crate::entities::chat_room_members;
+    use crate::entities::{chat_room_members, users};
     use uuid::Uuid as UuidParsed;
+
+    // Look up the sender's display name for the notification and WS payload
+    let sender_name = users::Entity::find_by_id(sender_id)
+        .one(state.db.as_ref())
+        .await
+        .ok()
+        .flatten()
+        .map(|u| u.full_name)
+        .unwrap_or_else(|| "Unknown".to_string());
 
     let now = mongodb::bson::DateTime::now();
     let doc = doc! {
@@ -236,12 +245,13 @@ async fn handle_ws_message(
     // Clone values that will also be needed for push notifications
     let content_preview = content.clone();
     let msg_id_for_notif = message_id.clone();
+    let sender_name_for_notif = sender_name.clone();
 
     let outgoing = WsOutgoing::Message {
         id: message_id,
         room_id: room_id.to_string(),
         sender_id: sender_id.to_string(),
-        sender_name: String::new(),
+        sender_name,
         content,
         image_url,
         reply_to,
@@ -294,6 +304,7 @@ async fn handle_ws_message(
                         "room_id": room_id,
                         "message_id": msg_id_for_notif,
                         "sender_id": sender_id.to_string(),
+                        "sender_name": &sender_name_for_notif,
                     });
                     let _ = crate::handlers::v1::notifications::send_notification::send_notification(
                         state.mongodb.as_ref(),
@@ -301,7 +312,7 @@ async fn handle_ws_message(
                         state.db.as_ref(),
                         member.user_id,
                         "chat_message",
-                        "New Message",
+                        &format!("New message from {}", sender_name_for_notif),
                         content_preview.as_deref().unwrap_or("Sent an attachment"),
                         notification_data,
                     ).await;

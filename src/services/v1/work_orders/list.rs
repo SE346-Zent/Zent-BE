@@ -82,6 +82,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
+            chat_room_id: None,
         }
     }
 
