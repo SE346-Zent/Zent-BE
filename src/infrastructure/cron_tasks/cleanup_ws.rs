@@ -15,7 +15,18 @@ pub async fn cleanup_stale_viewing_keys(
     };
 
     let mut conn = vc.get_connection().await?;
-    let keys: Vec<String> = conn.keys("chat:viewing:*").await?;
+
+    // Use SCAN instead of KEYS to avoid blocking Valkey on large keyspaces.
+    // The scan iterator borrows `conn` mutably, so scope it to release the borrow
+    // before the deletion loop below.
+    let keys: Vec<String> = {
+        let mut keys = Vec::new();
+        let mut iter = conn.scan_match("chat:viewing:*").await?;
+        while let Some(key) = iter.next_item().await {
+            keys.push(key?);
+        }
+        keys
+    }; // iter dropped here — conn borrow released
 
     let mut cleaned = 0u64;
     for key in &keys {

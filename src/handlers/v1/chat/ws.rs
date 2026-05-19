@@ -8,8 +8,10 @@ use axum::{
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 use futures::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
+use tokio::time::Instant;
 use uuid::Uuid;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use redis::AsyncCommands;
@@ -73,6 +75,10 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     // Heartbeat pong counter — incremented by reader on each protocol-level Pong
     let pong_counter = Arc::new(AtomicU32::new(0));
 
+    // Deadline channel so RefreshToken can extend the connection lifetime
+    let initial_deadline = Instant::now() + Duration::from_secs(state.access_token_ttl.0 as u64);
+    let (deadline_tx, deadline_rx) = tokio::sync::watch::channel(initial_deadline);
+
     // Spawn heartbeat + expiry from cron_tasks
     let hb_user = user_id;
     let hb_mgr = ws_manager.clone();
@@ -84,7 +90,7 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     let ex_mgr = ws_manager.clone();
     let ex_tx = cmd_tx.clone();
     let ttl = state.access_token_ttl.0;
-    tokio::spawn(async move { ws_expiry::run_expiry_enforcer(ex_user, ex_mgr, ex_tx, ttl).await });
+    tokio::spawn(async move { ws_expiry::run_expiry_enforcer(ex_user, ex_mgr, ex_tx, ttl, deadline_rx).await });
 
     // Writer task
     let mut writer_sender = ws_sender;
@@ -133,6 +139,8 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                         WsIncoming::RefreshToken { token } => {
                             if validate_ws_token(&token, &state.decoding_key).is_ok() {
                                 tracing::info!("Token refreshed for user {}", user_id);
+                                let new_deadline = Instant::now() + Duration::from_secs(state.access_token_ttl.0 as u64);
+                                let _ = deadline_tx.send(new_deadline);
                             }
                         }
                         _ => {}
@@ -307,23 +315,38 @@ async fn handle_ws_message(
 async fn handle_mark_read(state: &AppState, user_id: Uuid, message_ids: &[String]) {
     use mongodb::bson::doc;
 
+    if message_ids.is_empty() {
+        return;
+    }
+
     let col = state.mongodb.collection::<mongodb::bson::Document>("read_receipts");
     let now = mongodb::bson::DateTime::now();
+    let user_id_str = user_id.to_string();
 
+    // Execute upserts concurrently (up to 10 at a time) instead of sequentially
+    let mut tasks = tokio::task::JoinSet::new();
     for msg_id in message_ids {
+        let col = col.clone();
+        let msg_id = msg_id.clone();
+        let user_id_str = user_id_str.clone();
         let filter = doc! {
-            "message_id": msg_id,
-            "user_id": user_id.to_string(),
+            "message_id": &msg_id,
+            "user_id": &user_id_str,
         };
         let update = doc! {
             "$setOnInsert": {
-                "message_id": msg_id,
-                "user_id": user_id.to_string(),
+                "message_id": &msg_id,
+                "user_id": &user_id_str,
                 "read_at": now,
             }
         };
-        let opts = mongodb::options::UpdateOptions::builder().upsert(true).build();
-        let _ = col.update_one(filter.clone(), update).with_options(opts).await;
+        tasks.spawn(async move {
+            let _ = col.update_one(filter, update)
+                .upsert(true)
+                .await;
+        });
     }
+
+    while let Some(_result) = tasks.join_next().await {}
 }
 

@@ -35,6 +35,7 @@ mod m20260519_120000_drop_work_order_pause;
 mod m20260520_100000_add_chat_tables;
 mod m20260520_110000_add_avatar_and_chat_image_links;
 mod m20260521_100000_add_wo_id_to_chat_rooms;
+mod m20260522_100000_add_performance_indexes;
 
 
 pub struct Migrator;
@@ -78,6 +79,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260520_100000_add_chat_tables::Migration),
             Box::new(m20260520_110000_add_avatar_and_chat_image_links::Migration),
             Box::new(m20260521_100000_add_wo_id_to_chat_rooms::Migration),
+            Box::new(m20260522_100000_add_performance_indexes::Migration),
         ]
     }
 }

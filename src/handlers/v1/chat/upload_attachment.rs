@@ -59,10 +59,13 @@ pub async fn upload_attachment(
     let file_data = file_data
         .ok_or_else(|| AppError::BadRequest("File is missing".to_string()))?;
 
+    let room_id = room_id
+        .ok_or_else(|| AppError::BadRequest("room_id is required".to_string()))?;
+
     let extension = file_name.split('.').last().unwrap_or("jpg");
     let object_name = format!(
         "chat_attachments/{}/{}.{}",
-        room_id.unwrap(),
+        room_id,
         chrono::Utc::now().timestamp_millis(),
         extension
     );
@@ -85,16 +88,14 @@ pub async fn upload_attachment(
     image.insert(db.as_ref()).await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to save image record: {}", e)))?;
 
-    // Insert link between chat room and image (if room_id provided)
-    if let Some(rid) = room_id {
-        let link = chat_room_image_links::ActiveModel {
-            image_id: Set(image_id),
-            room_id: Set(rid),
-            created_at: Set(now),
-        };
-        link.insert(db.as_ref()).await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to save image link: {}", e)))?;
-    }
+    // Insert link between chat room and image
+    let link = chat_room_image_links::ActiveModel {
+        image_id: Set(image_id),
+        room_id: Set(room_id),
+        created_at: Set(now),
+    };
+    link.insert(db.as_ref()).await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to save image link: {}", e)))?;
 
     let response = AttachmentUploadResponse { object_name };
 

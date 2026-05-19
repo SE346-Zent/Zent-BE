@@ -49,8 +49,14 @@ pub async fn register_handler(
     let hashed_password = hasher::hash_password(payload.password.clone()).await?;
     let effect = register::decide_register(payload, existing.as_ref(), pending_status_id, customer_role_id, hashed_password)?;
 
-    let email = effect.user.email.clone().unwrap();
-    let full_name = effect.user.full_name.clone().unwrap();
+    let email = match &effect.user.email {
+        Set(v) => v.clone(),
+        _ => return Err(AppError::Internal(anyhow::anyhow!("email missing from registration effect"))),
+    };
+    let full_name = match &effect.user.full_name {
+        Set(v) => v.clone(),
+        _ => return Err(AppError::Internal(anyhow::anyhow!("full_name missing from registration effect"))),
+    };
 
     let now = Utc::now();
     let mut user_active = effect.user;

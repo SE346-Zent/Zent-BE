@@ -11,7 +11,7 @@ use crate::extractor::auth_user::AuthUser;
 use crate::infrastructure::cache::ValkeyClient;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::chat::message_response::MessageResponse;
-use crate::entities::users;
+use crate::entities::{users, chat_room_members};
 
 #[derive(Deserialize, Debug, utoipa::IntoParams)]
 pub struct GetMessagesQuery {
@@ -42,6 +42,19 @@ pub async fn get_messages(
     Query(query): Query<GetMessagesQuery>,
 ) -> Result<Json<ApiResponse<Vec<MessageResponse>>>, AppError> {
     let user_id = _auth.user.id;
+
+    // Verify the authenticated user is a member of this room
+    let room_uuid = Uuid::parse_str(&room_id)
+        .map_err(|_| AppError::BadRequest("Invalid room_id format".to_string()))?;
+    let is_member = chat_room_members::Entity::find()
+        .filter(chat_room_members::Column::RoomId.eq(room_uuid))
+        .filter(chat_room_members::Column::UserId.eq(user_id))
+        .one(_db.as_ref())
+        .await?
+        .is_some();
+    if !is_member {
+        return Err(AppError::Forbidden("You are not a member of this room".to_string()));
+    }
 
     // Reset unread count to 0 in Valkey when user opens this chat
     if let Some(ref vc) = valkey {
