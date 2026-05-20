@@ -29,7 +29,7 @@ use crate::{
 pub async fn create_user_handler(
     State(db): State<Arc<DatabaseConnection>>,
     State(rabbitmq): State<Option<Arc<lapin::Connection>>>,
-    State(_templates): State<Arc<HashMap<String, String>>>,
+    State(templates): State<Arc<HashMap<String, String>>>,
     AuthUser { user: current_user, .. }: AuthUser,
     Json(payload): Json<UserCreateRequest>,
 ) -> Result<Json<ApiResponse<UserResponseData>>, AppError> {
@@ -56,15 +56,12 @@ pub async fn create_user_handler(
 
     // Send welcome email with credentials
     if let Some(ref rabbitmq_conn) = rabbitmq {
-        let body = format!(
-            "Your account has been created.\n\nUsername: {}\nPassword: {}\n\nPlease log in and change your password.",
-            user_model.email, plain_password
-        );
-        let _ = email_service::send_email(
+        let _ = email_service::send_create_user_email(
             rabbitmq_conn,
+            &templates,
             &user_model.email,
-            "Your Zent Account",
-            &body,
+            &user_model.full_name,
+            &plain_password,
         ).await;
     }
 

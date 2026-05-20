@@ -91,6 +91,40 @@ pub async fn send_welcome_email(
     publish_email_task(rabbitmq_connection, email_payload, "welcome email").await
 }
 
+/// Dispatch a welcome email containing credentials for newly created user.
+pub async fn send_create_user_email(
+    rabbitmq_connection: &Arc<Connection>,
+    templates: &HashMap<String, String>,
+    recipient_email: &str,
+    recipient_name: &str,
+    plain_password: &str,
+) -> Result<(), AppError> {
+    let escaped_name = v_htmlescape::escape(recipient_name).to_string();
+    let escaped_email = v_htmlescape::escape(recipient_email).to_string();
+    let escaped_password = v_htmlescape::escape(plain_password).to_string();
+
+    let email_body = if let Some(template_content) = templates.get("create_user_email.html") {
+        template_content
+            .replace("{{name}}", &escaped_name)
+            .replace("{{email}}", &escaped_email)
+            .replace("{{password}}", &escaped_password)
+    } else {
+        tracing::warn!("Template 'create_user_email.html' not found in cache! Using minimal HTML fallback.");
+        format!(
+            "<html><body><h2>Welcome to Zent, {}!</h2><p>Your account has been created.</p><p>Username: {}</p><p>Password: {}</p><p>Please log in and change your password.</p></body></html>", 
+            escaped_name, escaped_email, escaped_password
+        )
+    };
+
+    let email_payload = serde_json::json!({
+        "to": recipient_email,
+        "subject": "Your Zent Account",
+        "body": email_body
+    });
+    
+    publish_email_task(rabbitmq_connection, email_payload, "create user email").await
+}
+
 /// Notify a customer via email that their work order request has been successfully received.
 
 pub async fn send_work_order_created_email(
