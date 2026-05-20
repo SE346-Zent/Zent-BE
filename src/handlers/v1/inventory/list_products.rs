@@ -4,7 +4,9 @@ use crate::core::errors::AppError;
 use crate::model::requests::inventory::list_products_query::ListProductsQuery;
 use crate::model::responses::inventory::product_list_item::ProductListItem;
 
-/// GET /api/v1/inventory/products
+/// Handle requests to retrieve a paginated list of products.
+///
+/// **Note: This endpoint is currently unimplemented.**
 pub async fn list_products(
     State(_state): State<AppState>,
     Query(_query): Query<ListProductsQuery>,

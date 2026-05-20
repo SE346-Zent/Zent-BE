@@ -17,65 +17,78 @@ use crate::extractor::auth_user::AuthUser;
     tag = "notifications",
     security(("bearer_auth" = []))
 )]
+/// Handle requests to update a user's notification delivery preferences.
+///
+/// This handler retrieves the user's existing preferences from MongoDB,
+/// validates the requested change against role-based category permissions,
+/// and performs an upsert to save the updated preference set.
+///
+/// # Arguments
+/// * `authenticated_user` - The currently authenticated user.
+/// * `app_state` - Shared application state containing the MongoDB database and lookup tables.
+/// * `update_payload` - The request containing the category ID and the new OS-delivery status.
+///
+/// # Returns
+/// A result containing a successful message-only `ApiResponse`, or an `AppError`.
 pub async fn update_preferences(
-    auth: AuthUser,
-    State(state): State<AppState>,
-    Json(payload): Json<UpdateNotificationPreferenceRequest>,
+    authenticated_user: AuthUser,
+    State(app_state): State<AppState>,
+    Json(update_payload): Json<UpdateNotificationPreferenceRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    let collection = state.mongodb.collection::<mongodb::bson::Document>("user_preferences");
-    let user_id_str = auth.user.id.to_string();
+    let preferences_collection = app_state.mongodb.collection::<mongodb::bson::Document>("user_preferences");
+    let target_user_id_string = authenticated_user.user.id.to_string();
 
-    let doc = collection
-        .find_one(mongodb::bson::doc! { "_id": &user_id_str })
+    let existing_preferences_document = preferences_collection
+        .find_one(mongodb::bson::doc! { "_id": &target_user_id_string })
         .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Database error: {}", e)))?;
+        .map_err(|err| AppError::Internal(anyhow::anyhow!("Database error: {}", err)))?;
 
-    let mut user_prefs = std::collections::HashMap::new();
-    if let Some(d) = doc {
-        if let Ok(prefs_array) = d.get_array("preferences") {
-            for item in prefs_array {
-                if let Some(obj) = item.as_document() {
-                    if let (Ok(cat_id), Ok(os_enabled)) = (obj.get_i32("category_id"), obj.get_bool("os_enabled")) {
-                        user_prefs.insert(cat_id, os_enabled);
+    let mut user_preference_map = std::collections::HashMap::new();
+    if let Some(preference_doc) = existing_preferences_document {
+        if let Ok(preferences_array) = preference_doc.get_array("preferences") {
+            for item in preferences_array {
+                if let Some(preference_obj) = item.as_document() {
+                    if let (Ok(category_id), Ok(is_os_enabled)) = (preference_obj.get_i32("category_id"), preference_obj.get_bool("os_enabled")) {
+                        user_preference_map.insert(category_id, is_os_enabled);
                     }
                 }
             }
         }
     }
 
-    let role_name_lc = auth.role.name.to_lowercase();
-    let allowed_ids = state.lookup_tables.notification_categories_by_role.get(&role_name_lc)
-        .map(|v| v.as_slice())
+    let user_role_name = authenticated_user.role.name.to_lowercase();
+    let permitted_category_ids = app_state.lookup_tables.notification_categories_by_role.get(&user_role_name)
+        .map(|category_ids| category_ids.as_slice())
         .unwrap_or(&[]);
 
     crate::services::v1::notifications::update_preference::update_preference(
-        payload.category_id,
-        payload.os_enabled,
-        &mut user_prefs,
-        allowed_ids,
+        update_payload.category_id,
+        update_payload.os_enabled,
+        &mut user_preference_map,
+        permitted_category_ids,
     )?;
 
-    let updated_array: Vec<mongodb::bson::Bson> = user_prefs
+    let serialized_preferences: Vec<mongodb::bson::Bson> = user_preference_map
         .into_iter()
-        .map(|(cat_id, os_enabled)| {
+        .map(|(category_id, is_os_enabled)| {
             mongodb::bson::Bson::Document(mongodb::bson::doc! {
-                "category_id": cat_id,
-                "os_enabled": os_enabled
+                "category_id": category_id,
+                "os_enabled": is_os_enabled
             })
         })
         .collect();
 
-    let new_doc = mongodb::bson::doc! {
-        "_id": &user_id_str,
-        "preferences": updated_array
+    let updated_document = mongodb::bson::doc! {
+        "_id": &target_user_id_string,
+        "preferences": serialized_preferences
     };
 
-    let options = mongodb::options::ReplaceOptions::builder().upsert(true).build();
-    collection
-        .replace_one(mongodb::bson::doc! { "_id": &user_id_str }, new_doc)
-        .with_options(options)
+    let upsert_options = mongodb::options::ReplaceOptions::builder().upsert(true).build();
+    preferences_collection
+        .replace_one(mongodb::bson::doc! { "_id": &target_user_id_string }, updated_document)
+        .with_options(upsert_options)
         .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to save preferences: {}", e)))?;
+        .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to save preferences: {}", err)))?;
 
     Ok(Json(ApiResponse::message_only(200, "Preferences updated")))
 }

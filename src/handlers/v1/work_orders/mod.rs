@@ -1,3 +1,7 @@
+//! Work Order API Handlers (v1)
+//!
+//! This module provides the entry points for work order related API requests,
+//! including routing, caching strategies, and integration with domain services.
 pub mod create;
 pub mod list;
 pub mod get_details;
@@ -75,6 +79,8 @@ use crate::infrastructure::cache::ValkeyClient;
 /// Sentinel value stored during the idempotency claim window.
 pub(crate) const IDEMPOTENCY_PENDING: &str = "__PENDING__";
 
+/// Initialize and configure the work order sub-router with role-based access control.
+
 pub fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(create))
@@ -118,6 +124,8 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
 }
 
 //pub async fn cancel() -> axum::http::StatusCode { axum::http::StatusCode::NOT_IMPLEMENTED }
+
+/// Retrieve a work order model using a cache-first strategy with database fallback.
 
 /// Load a work order model — cache-first, DB-fallback.
 /// Checks `cache:work_order_model:{id}`, returns the raw `work_orders::Model` if found.
@@ -163,6 +171,8 @@ pub(crate) async fn get_cached_work_order_model(
 
     Ok(model)
 }
+
+/// Update the write-through cache for a work order and invalidate related listing caches.
 
 /// Write-through cache: after a successful mutation, re-fetch the work order with
 /// its related entities, build the full WorkOrderDetails and cache the raw model,
@@ -223,6 +233,8 @@ pub(crate) async fn write_through_work_order_cache(
     }
 }
 
+/// Perform a paginated search for work orders with support for various filters and caching.
+
 pub(crate) async fn fetch_paginated_work_orders(
     db: Arc<DatabaseConnection>,
     valkey_client: Option<Arc<ValkeyClient>>,
@@ -282,6 +294,8 @@ pub(crate) async fn fetch_paginated_work_orders(
 
     Ok(axum::Json(ApiResponse::success_with_meta(200, "Work orders retrieved successfully", data, meta)))
 }
+
+/// Periodically clean up unassigned work orders that have exceeded the allowed wait window.
 
 /// Cron-triggered cleanup: cancels all pending unassigned work orders that have exceeded
 /// the threshold defined in the policy and notifies the customer.
@@ -353,6 +367,8 @@ pub async fn run_cleanup(
     Ok(())
 }
 
+/// Attempt to automatically assign a single work order to a suitable technician.
+
 pub(crate) async fn try_auto_assign_single(
     state: &AppState,
     db: Arc<DatabaseConnection>,
@@ -395,11 +411,11 @@ pub(crate) async fn try_auto_assign_single(
         Ok(None) => { tracing::info!("Auto-assign: no suitable tech for WO {} — admin needed", wo.work_order_number); return false; }
         Err(e) => { tracing::error!("Auto-assign failed for WO {}: {}", wo.work_order_number, e); return false; }
     };
-    let assigned_tech_id = effect.work_order.technician_id.clone().unwrap().unwrap();
+    let assigned_tech_id = effect.work_order_model.technician_id.clone().unwrap().unwrap();
 
     if let Err(e) = db.transaction::<_, (), anyhow::Error>(|txn| Box::pin(async move {
-        effect.work_order.update(txn).await.map_err(|e| anyhow::anyhow!(e))?;
-        effect.state_history.insert(txn).await.map_err(|e| anyhow::anyhow!(e))?;
+        effect.work_order_model.update(txn).await.map_err(|e| anyhow::anyhow!(e))?;
+        effect.state_history_model.insert(txn).await.map_err(|e| anyhow::anyhow!(e))?;
         Ok(())
     })).await { tracing::error!("Auto-assign tx failed for WO {}: {}", wo.work_order_number, e); return false; }
 

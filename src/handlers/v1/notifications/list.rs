@@ -20,31 +20,45 @@ use crate::services::v1::notifications::NotificationRecord;
     tag = "notifications",
     security(("bearer_auth" = []))
 )]
+/// Handle requests to retrieve a paginated list of notifications for the authenticated user.
+///
+/// This handler retrieves notification buckets from MongoDB, flattens them,
+/// applies pagination and filtering via the service layer, and as a side-effect,
+/// marks all returned notifications as 'read' while decrementing the unread
+/// cache in Valkey.
+///
+/// # Arguments
+/// * `authenticated_user` - The currently authenticated user.
+/// * `app_state` - Shared application state containing MongoDB and Valkey.
+/// * `list_query` - Query parameters for filtering by category and pagination.
+///
+/// # Returns
+/// A result containing the successful `ApiResponse` with notification items and metadata, or an `AppError`.
 pub async fn list(
-    auth: AuthUser,
-    State(state): State<AppState>,
-    Query(query): Query<NotificationListQuery>,
+    authenticated_user: AuthUser,
+    State(app_state): State<AppState>,
+    Query(list_query): Query<NotificationListQuery>,
 ) -> Result<Json<ApiResponse<Vec<NotificationListItem>>>, AppError> {
 
     // page and limit are Option<u32> — reject explicit zero, allow None (defaults apply)
-    if query.page == Some(0) {
+    if list_query.page == Some(0) {
         return Err(AppError::BadRequest("Page must be greater than 0".to_string()));
     }
 
-    if query.limit == Some(0) {
+    if list_query.limit == Some(0) {
         return Err(AppError::BadRequest("Limit must be greater than 0".to_string()));
     }
 
     // 1. Fetch all notifications for this user from MongoDB
-    let collection = state.mongodb
+    let notification_collection = app_state.mongodb
         .collection::<mongodb::bson::Document>("notifications");
 
     // Bucket-pattern: each document holds a `notifications` array.
     // Flatten all buckets for this user into a single list.
-    let filter = doc! { "user_id": auth.user.id.to_string() };
+    let search_filter = doc! { "user_id": authenticated_user.user.id.to_string() };
 
-    let cursor = collection
-        .find(filter)
+    let cursor = notification_collection
+        .find(search_filter)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
@@ -54,7 +68,7 @@ pub async fn list(
         .map_err(|e| AppError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
     // Flatten bucket documents to NotificationRecords
-    let records: Vec<NotificationRecord> = bucket_docs
+    let notification_records: Vec<NotificationRecord> = bucket_docs
         .iter()
         .flat_map(|bucket_doc| {
             let bucket_user_id = bucket_doc
@@ -62,10 +76,10 @@ pub async fn list(
                 .ok()
                 .and_then(|s| s.parse::<uuid::Uuid>().ok());
 
-            let notifs_array = bucket_doc.get_array("notifications").ok();
+            let notifications_array = bucket_doc.get_array("notifications").ok();
 
-            match (bucket_user_id, notifs_array) {
-                (Some(uid), Some(arr)) => {
+            match (bucket_user_id, notifications_array) {
+                (Some(user_id), Some(arr)) => {
                     // Collect into Vec to satisfy the iterator bound
                     arr.iter()
                         .filter_map(|item| {
@@ -98,7 +112,7 @@ pub async fn list(
 
                             Some(NotificationRecord {
                                 notification_id,
-                                user_id: uid,
+                                user_id,
                                 category_id,
                                 title,
                                 body,
@@ -117,48 +131,48 @@ pub async fn list(
         .collect();
 
     // 2. Pass to pure service logic (no preference filtering — all notifications shown)
-    let (data, meta) = crate::services::v1::notifications::list::list_notifications(
-        &records,
-        &query,
+    let (notification_items, pagination_meta) = crate::services::v1::notifications::list::list_notifications(
+        &notification_records,
+        &list_query,
     );
 
     // 3. Mark returned notifications as read in MongoDB and decrement Valkey cache
-    let unread_ids: Vec<String> = data
+    let unread_notification_ids: Vec<String> = notification_items
         .iter()
         .filter(|item| !item.is_read)
         .map(|item| item.notification_id.clone())
         .collect();
 
-    let unread_count = unread_ids.len();
+    let unread_count = unread_notification_ids.len();
 
-    if !unread_ids.is_empty() {
+    if !unread_notification_ids.is_empty() {
         // Mark as read in MongoDB using arrayFilters
-        let _ = collection
+        let _ = notification_collection
             .update_many(
                 doc! {
-                    "user_id": auth.user.id.to_string(),
-                    "notifications.notification_id": { "$in": &unread_ids },
+                    "user_id": authenticated_user.user.id.to_string(),
+                    "notifications.notification_id": { "$in": &unread_notification_ids },
                 },
                 doc! {
                     "$set": { "notifications.$[elem].is_read": true },
                 },
             )
             .array_filters(vec![
-                doc! { "elem.notification_id": { "$in": &unread_ids } },
+                doc! { "elem.notification_id": { "$in": &unread_notification_ids } },
             ])
             .await;
 
         // Decrement Valkey unread counter
-        if let Some(valkey) = &state.valkey {
-            if let Ok(mut conn) = valkey.get_connection().await {
+        if let Some(valkey_instance) = &app_state.valkey {
+            if let Ok(mut valkey_conn) = valkey_instance.get_connection().await {
                 let _ = redis::cmd("DECRBY")
-                    .arg(format!("unread:{}", auth.user.id))
+                    .arg(format!("unread:{}", authenticated_user.user.id))
                     .arg(unread_count as i64)
-                    .query_async::<()>(&mut conn)
+                    .query_async::<()>(&mut valkey_conn)
                     .await;
             }
         }
     }
 
-    Ok(Json(ApiResponse::success_with_meta(200, "Notifications retrieved", data, meta)))
+    Ok(Json(ApiResponse::success_with_meta(200, "Notifications retrieved", notification_items, pagination_meta)))
 }

@@ -13,6 +13,8 @@ use redis::AsyncCommands;
 
 use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms};
 
+/// Retrieve full details for a specific work order, including product and symptom info, with permission checks.
+
 #[utoipa::path(
     get, path = "/api/v1/work_orders/{id}",
     responses(
@@ -57,6 +59,8 @@ pub async fn get_details(
     }
     Ok(Json(ApiResponse::success(200, "Work order details retrieved successfully", details)))
 }
+
+/// Internal helper to enforce role-based and ownership-based access control for work order data.
 
 fn check_wo_permissions(
     auth: &AuthUser,

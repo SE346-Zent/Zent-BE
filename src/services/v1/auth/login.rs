@@ -14,26 +14,46 @@ use uuid::Uuid;
 use chrono::Utc;
 use jsonwebtoken::EncodingKey;
 
-/// Effect containing the session ActiveModel ready for `.insert()`,
-/// plus response data and convenience fields for downstream use.
+/// Represents the calculated results and side-effects of a successful login attempt.
+///
+/// This structure decouples the pure business logic of deciding a login outcome from the
+/// infrastructure-heavy tasks of persisting sessions and responding to the HTTP request.
 pub struct LoginEffect {
-    pub session: sessions::ActiveModel,
+    /// Unique identifier for the newly created session.
     pub session_id: Uuid,
+    /// The unique identifier of the user who logged in.
+    pub user_id: Uuid,
+    /// A cryptographic hash of the refresh token for secure server-side storage.
     pub refresh_token_hash: String,
+    /// The timestamp when this session and its refresh token will expire.
+    pub session_expires_at: chrono::DateTime<Utc>,
+    /// The final data structure to be returned to the client in the API response.
     pub response_data: LoginResponseData,
 }
 
-/// Pure logic to decide the outcome of a login attempt.
-/// Returns a `sessions::ActiveModel` ready for `.insert()`.
+/// Determine the outcome of a login attempt based on user state and credentials.
+///
+/// This is a pure function that validates the user's account status and generates
+/// authentication tokens, returning a `LoginEffect` describing the necessary side-effects.
+///
+/// # Arguments
+/// * `user_record` - The database model representing the user attempting to log in.
+/// * `is_password_valid` - Boolean indicating if the provided password matches the stored hash.
+/// * `access_token_ttl` - The duration for which the access token should remain valid.
+/// * `session_ttl` - The duration for which the user session and refresh token should remain valid.
+/// * `encoding_key` - The cryptographic key used to sign the generated JWTs.
+///
+/// # Returns
+/// A result containing the `LoginEffect` on success, or an `AppError` (e.g., `Unauthorized`, `Forbidden`).
 pub fn decide_login(
-    user_model: &users::Model,
+    user_record: &users::Model,
     is_password_valid: bool,
     access_token_ttl: AccessTokenDefaultTTLSeconds,
     session_ttl: SessionDefaultTTLSeconds,
     encoding_key: &EncodingKey,
 ) -> Result<LoginEffect, AppError> {
     // 1. Check if user is deleted
-    if user_model.deleted_at.is_some() {
+    if user_record.deleted_at.is_some() {
         return Err(AppError::Unauthorized("Invalid credentials".to_string()));
     }
 
@@ -43,8 +63,8 @@ pub fn decide_login(
     }
 
     // 3. Verify account status
-    let status = AccountStatusEnum::from(user_model.account_status);
-    match status {
+    let account_status = AccountStatusEnum::from(user_record.account_status);
+    match account_status {
         AccountStatusEnum::Active => {}
         AccountStatusEnum::Pending => {
             return Err(AppError::Forbidden(
@@ -52,44 +72,35 @@ pub fn decide_login(
             ));
         }
         _ => {
-            return Err(AppError::Forbidden(format!("Account is {:?}", status)));
+            return Err(AppError::Forbidden(format!("Account is {:?}", account_status)));
         }
     }
 
     // 4. Generate tokens
     let token_bundle = token_service::generate_token_bundle(
-        &user_model.id.to_string(),
+        &user_record.id.to_string(),
         access_token_ttl.0,
         encoding_key,
     )?;
 
     // 5. Prepare session ActiveModel
     let session_id = Uuid::new_v4();
-    let session_ttl_seconds = session_ttl.0;
-    let expires_at = Utc::now() + chrono::Duration::seconds(session_ttl_seconds as i64);
-
-    let session = sessions::ActiveModel {
-        id: Set(session_id),
-        user_id: Set(user_model.id),
-        refresh_token_hash: Set(token_bundle.refresh_token_hash.clone()),
-        ip_address: Set(String::new()), // filled by handler with real IP
-        device_fingerprint: Set(user_model.id.to_string()),
-        created_at: Set(Utc::now()),
-        expires_at: Set(expires_at),
-        ..Default::default()
-    };
+    let session_duration_seconds = session_ttl.0;
+    let session_expires_at = Utc::now() + chrono::Duration::seconds(session_duration_seconds);
 
     Ok(LoginEffect {
         session,
         session_id,
+        user_id: user_record.id,
         refresh_token_hash: token_bundle.refresh_token_hash,
+        session_expires_at,
         response_data: LoginResponseData {
             user: UserInfo {
-                full_name: user_model.full_name.clone(),
-                account_status: status,
-                email: user_model.email.clone(),
-                phone_number: user_model.phone_number.clone(),
-                role_id: user_model.role_id,
+                full_name: user_record.full_name.clone(),
+                account_status,
+                email: user_record.email.clone(),
+                phone_number: user_record.phone_number.clone(),
+                role_id: user_record.role_id,
             },
             access_token: token_bundle.access_token,
             refresh_token: token_bundle.refresh_token,
@@ -224,7 +235,7 @@ mod tests {
         assert!(result.is_ok());
         let effect = result.unwrap();
 
-        let duration = (effect.expires_at - before_call).num_seconds();
+        let duration = (effect.session_expires_at - before_call).num_seconds();
 
         // Allow a 1-2 second buffer for execution time depending on system speed
         assert!(duration >= expected_duration && duration <= expected_duration + 2);

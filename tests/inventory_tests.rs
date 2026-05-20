@@ -36,7 +36,7 @@ fn make_part_entry(
 ) -> PartEntry {
     let now = t();
     PartEntry {
-        part: parts::Model {
+        part_record: parts::Model {
             id: u(part_id),
             part_catalog_id: Uuid::new_v4(),
             product_id: product_id.map(|s| u(s)),
@@ -50,7 +50,7 @@ fn make_part_entry(
             updated_at: now,
             deleted_at: None,
         },
-        catalog: part_catalog::Model {
+        catalog_definition: part_catalog::Model {
             id: Uuid::new_v4(),
             part_number: part_number.to_string(),
             part_types_id: 1,
@@ -61,11 +61,11 @@ fn make_part_entry(
             updated_at: now,
             deleted_at: None,
         },
-        condition: part_conditions::Model {
+        physical_condition: part_conditions::Model {
             id: 1,
             name: condition_name.to_string(),
         },
-        product: product_id.map(|pid| products::Model {
+        installed_product: product_id.map(|pid| products::Model {
             id: u(pid),
             product_model_code: "MODEL-A".to_string(),
             customer_id: cust_id.map_or(Uuid::nil(), |s| u(s)),
@@ -75,7 +75,7 @@ fn make_part_entry(
             updated_at: now,
             deleted_at: None,
         }),
-        status: approval.to_string(),
+        approval_status: approval.to_string(),
         denial_reason: None,
         customer_id: cust_id.map(|s| u(s)),
         technician_id: tech_id.map(|s| u(s)),
@@ -88,7 +88,7 @@ fn make_product_entry(
 ) -> ProductEntry {
     let now = t();
     ProductEntry {
-        product: products::Model {
+        product_record: products::Model {
             id: u(id),
             product_model_code: model.to_string(),
             customer_id: u(cust_id),
@@ -98,7 +98,7 @@ fn make_product_entry(
             updated_at: now,
             deleted_at: None,
         },
-        model: product_models::Model {
+        model_definition: product_models::Model {
             model_code: model.to_string(),
             model_name: format!("Model {}", model),
             description: None,
@@ -106,8 +106,8 @@ fn make_product_entry(
             updated_at: now,
             deleted_at: None,
         },
-        parts: part_ids.iter().enumerate().map(|(i, tid)| ListPartInProduct {
-            part: parts::Model {
+        installed_parts: part_ids.iter().enumerate().map(|(i, tid)| ListPartInProduct {
+            part_record: parts::Model {
                 id: Uuid::new_v4(),
                 part_catalog_id: Uuid::new_v4(),
                 product_id: Some(u(id)),
@@ -121,7 +121,7 @@ fn make_product_entry(
                 updated_at: now,
                 deleted_at: None,
             },
-            catalog: part_catalog::Model {
+            catalog_definition: part_catalog::Model {
                 id: Uuid::new_v4(),
                 part_number: format!("PN-{}-P{}", id, i),
                 part_types_id: 1,
@@ -132,11 +132,11 @@ fn make_product_entry(
                 updated_at: now,
                 deleted_at: None,
             },
-            condition: part_conditions::Model {
+            physical_condition: part_conditions::Model {
                 id: 1,
                 name: "New".to_string(),
             },
-            technician_id: if !tid.is_empty() { Some(u(tid)) } else { None },
+            registering_technician_id: if !tid.is_empty() { Some(u(tid)) } else { None },
         }).collect(),
     }
 }
@@ -233,7 +233,7 @@ fn integration_approval_state_machine_with_audit() {
         admin_id, "pending", now,
     );
     assert!(r.is_ok());
-    assert_eq!(r.unwrap().audit.action.unwrap(), "approved");
+    assert_eq!(r.unwrap().approval_audit_model.action.unwrap(), "approved");
 
     // Accept non-pending → fails
     let r = accept_part::decide_accept_part(
@@ -250,7 +250,7 @@ fn integration_approval_state_machine_with_audit() {
         now,
     );
     assert!(r.is_ok());
-    assert_eq!(r.unwrap().audit.action.unwrap(), "denied");
+    assert_eq!(r.unwrap().denial_audit_model.action.unwrap(), "denied");
 
     // Deny with short reason → fails
     let r = deny_part::decide_deny_part(
@@ -297,8 +297,8 @@ fn integration_product_registration_complex() {
     );
     assert!(result.is_ok());
     let effect = result.unwrap();
-    assert!(effect.should_send_email);
-    assert_eq!(effect.model_code, "MODEL-A");
+    assert!(effect.should_send_confirmation_email);
+    assert_eq!(effect.product_model_code, "MODEL-A");
 
     // Serial not in catalog → fails
     let result = register_product::decide_register_product(
@@ -308,7 +308,7 @@ fn integration_product_registration_complex() {
     );
     assert!(result.is_err());
 
-    // Re-registration of existing product (existing_product_id is Some)
+    // Re-registration of existing product (existing_product_record_id is Some)
     let result = register_product::decide_register_product(
         &req, user_id, "John Doe",
         Some("MODEL-A".to_string()), Some("Model A".to_string()),
@@ -316,8 +316,8 @@ fn integration_product_registration_complex() {
     );
     assert!(result.is_ok());
     let effect = result.unwrap();
-    assert!(!effect.should_send_email); // No email on re-registration
-    assert_eq!(effect.product_id, u("p1000000-0000-0000-0000-000000000001"));
+    assert!(!effect.should_send_confirmation_email); // No email on re-registration
+    assert_eq!(effect.registered_product_id, u("p1000000-0000-0000-0000-000000000001"));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -356,14 +356,14 @@ fn integration_product_isolation_across_roles() {
 
     // Detail access
     let prod_a = ProductWithRelations {
-        product: products[0].product.clone(),
-        model: products[0].model.clone(),
-        parts: products[0].parts.iter().map(|p| DetailPartInProduct {
-            part: p.part.clone(),
-            catalog: p.catalog.clone(),
-            condition: p.condition.clone(),
-            status: "approved".to_string(),
-            technician_id: p.technician_id,
+        product_record: products[0].product_record.clone(),
+        model_definition: products[0].model_definition.clone(),
+        installed_parts: products[0].installed_parts.iter().map(|p| DetailPartInProduct {
+            part_record: p.part_record.clone(),
+            catalog_definition: p.catalog_definition.clone(),
+            physical_condition: p.physical_condition.clone(),
+            approval_status: "approved".to_string(),
+            registering_technician_id: p.registering_technician_id,
         }).collect(),
     };
     assert!(get_product::get_product_detail(&prod_a, "Admin", admin).is_ok());
@@ -458,7 +458,7 @@ fn integration_product_detail_with_parts_rollup() {
     let now = t();
 
     let product_with_relations = ProductWithRelations {
-        product: products::Model {
+        product_record: products::Model {
             id: u("p0000000-0000-0000-0000-000000000001"),
             product_model_code: "MOD-Z".to_string(),
             customer_id: cust,
@@ -468,7 +468,7 @@ fn integration_product_detail_with_parts_rollup() {
             updated_at: now,
             deleted_at: None,
         },
-        model: product_models::Model {
+        model_definition: product_models::Model {
             model_code: "MOD-Z".to_string(),
             model_name: "Model MOD-Z".to_string(),
             description: None,
@@ -476,9 +476,9 @@ fn integration_product_detail_with_parts_rollup() {
             updated_at: now,
             deleted_at: None,
         },
-        parts: vec![
+        installed_parts: vec![
             DetailPartInProduct { // part 0
-                part: parts::Model {
+                part_record: parts::Model {
                     id: u("b0000000-0000-0000-0000-000000000001"),
                     part_catalog_id: Uuid::new_v4(),
                     product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
@@ -488,18 +488,18 @@ fn integration_product_detail_with_parts_rollup() {
                     installation_date: None, removal_date: None, scrapped_date: None,
                     created_at: now, updated_at: now, deleted_at: None,
                 },
-                catalog: part_catalog::Model {
+                catalog_definition: part_catalog::Model {
                     id: Uuid::new_v4(),
                     part_number: "PN-Z-P0".to_string(),
                     part_types_id: 1, mfg_number: "MFG".to_string(), description: None,
                     part_mfg_status: 1, created_at: now, updated_at: now, deleted_at: None,
                 },
-                condition: part_conditions::Model { id: 1, name: "New".to_string() },
-                status: "approved".to_string(),
-                technician_id: Some(u("b0000000-0000-0000-0000-000000000001")),
+                physical_condition: part_conditions::Model { id: 1, name: "New".to_string() },
+                approval_status: "approved".to_string(),
+                registering_technician_id: Some(u("b0000000-0000-0000-0000-000000000001")),
             },
             DetailPartInProduct { // part 1 (same tech)
-                part: parts::Model {
+                part_record: parts::Model {
                     id: u("b0000000-0000-0000-0000-000000000002"),
                     part_catalog_id: Uuid::new_v4(),
                     product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
@@ -509,18 +509,18 @@ fn integration_product_detail_with_parts_rollup() {
                     installation_date: None, removal_date: None, scrapped_date: None,
                     created_at: now, updated_at: now, deleted_at: None,
                 },
-                catalog: part_catalog::Model {
+                catalog_definition: part_catalog::Model {
                     id: Uuid::new_v4(),
                     part_number: "PN-Z-P1".to_string(),
                     part_types_id: 1, mfg_number: "MFG".to_string(), description: None,
                     part_mfg_status: 1, created_at: now, updated_at: now, deleted_at: None,
                 },
-                condition: part_conditions::Model { id: 1, name: "Used".to_string() },
-                status: "approved".to_string(),
-                technician_id: Some(u("b0000000-0000-0000-0000-000000000001")),
+                physical_condition: part_conditions::Model { id: 1, name: "Used".to_string() },
+                approval_status: "approved".to_string(),
+                registering_technician_id: Some(u("b0000000-0000-0000-0000-000000000001")),
             },
             DetailPartInProduct { // part 2 (different tech)
-                part: parts::Model {
+                part_record: parts::Model {
                     id: u("b0000000-0000-0000-0000-000000000003"),
                     part_catalog_id: Uuid::new_v4(),
                     product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
@@ -530,15 +530,15 @@ fn integration_product_detail_with_parts_rollup() {
                     installation_date: None, removal_date: None, scrapped_date: None,
                     created_at: now, updated_at: now, deleted_at: None,
                 },
-                catalog: part_catalog::Model {
+                catalog_definition: part_catalog::Model {
                     id: Uuid::new_v4(),
                     part_number: "PN-Z-P2".to_string(),
                     part_types_id: 1, mfg_number: "MFG".to_string(), description: None,
                     part_mfg_status: 1, created_at: now, updated_at: now, deleted_at: None,
                 },
-                condition: part_conditions::Model { id: 1, name: "New".to_string() },
-                status: "approved".to_string(),
-                technician_id: Some(u("b0000000-0000-0000-0000-000000000002")),
+                physical_condition: part_conditions::Model { id: 1, name: "New".to_string() },
+                approval_status: "approved".to_string(),
+                registering_technician_id: Some(u("b0000000-0000-0000-0000-000000000002")),
             },
         ],
     };

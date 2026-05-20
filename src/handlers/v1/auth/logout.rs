@@ -25,27 +25,41 @@ use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
     ),
     security(("bearer_auth" = []))
 )]
+/// Handle user logout requests by invalidating the specified session.
+///
+/// This handler verifies session ownership, marks the session as revoked in
+/// the relational database (MySQL), and removes the session from the whitelist
+/// cache (Valkey).
+///
+/// # Arguments
+/// * `authenticated_user` - The currently authenticated user extracted from the request.
+/// * `db_connection` - Shared database connection pool.
+/// * `valkey_client` - Optional shared Valkey client for session management.
+/// * `logout_payload` - The logout request containing the refresh token.
+///
+/// # Returns
+/// A result containing a successful message-only `ApiResponse`, or an `AppError`.
 pub async fn logout_handler(
-    auth: AuthUser,
-    State(db): State<Arc<DatabaseConnection>>,
+    authenticated_user: AuthUser,
+    State(db_connection): State<Arc<DatabaseConnection>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
-    Json(payload): Json<LogoutRequest>,
+    Json(logout_payload): Json<LogoutRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    let refresh_token_hash = token_service::hash_refresh_token(&payload.refresh_token);
-    let session = sessions::Entity::find()
+    let refresh_token_hash = token_service::hash_refresh_token(&logout_payload.refresh_token);
+    let session_record = sessions::Entity::find()
         .filter(sessions::Column::RefreshTokenHash.eq(&refresh_token_hash))
-        .one(db.as_ref()).await?
+        .one(db_connection.as_ref()).await?
         .ok_or_else(|| AppError::Unauthorized("Invalid token".to_string()))?;
 
-    let effect = logout::decide_logout(&session, auth.user.id)?;
+    let logout_effect = logout::decide_logout(&session_record, authenticated_user.user.id)?;
 
-    let mut session_active: sessions::ActiveModel = session.into();
-    session_active.revoked_at = Set(Some(Utc::now()));
-    session_active.update(db.as_ref()).await?;
+    let mut session_active_model: sessions::ActiveModel = session_record.into();
+    session_active_model.revoked_at = Set(Some(Utc::now()));
+    session_active_model.update(db_connection.as_ref()).await?;
 
     if let Some(client) = valkey_client {
         if let Ok(mut conn) = client.get_connection().await {
-            let whitelist_key = format!("whitelist:session:{}", effect.session_id);
+            let whitelist_key = format!("whitelist:session:{}", logout_effect.revoked_session_id);
             let _: () = conn.del(&whitelist_key).await.unwrap_or_default();
         } else {
             tracing::warn!("Valkey unavailable — session whitelist not cleared");

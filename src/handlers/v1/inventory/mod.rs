@@ -1,3 +1,8 @@
+//! HTTP handlers for inventory and product management.
+//!
+//! This module provides the REST API endpoints for managing the product catalog,
+//! registering new parts, and overseeing the part approval workflow.
+
 pub mod add_parts;
 pub mod list_parts;
 pub mod get_part;
@@ -13,19 +18,20 @@ use crate::core::state::AppState;
 use crate::entities::roles::Role;
 use crate::extractor::role_check::require_role;
 
-pub fn router(state: AppState) -> Router<AppState> {
-    let tech_routes = Router::new()
+/// Initialize and return the Axum router for the inventory domain.
+pub fn router(app_state: AppState) -> Router<AppState> {
+    let technician_only_routes = Router::new()
         .route("/work_orders/{id}/parts", axum::routing::post(add_parts::add_parts))
         .route_layer(middleware::from_fn_with_state(
-            state.clone(),
+            app_state.clone(),
             require_role::<AppState>(&[Role::Technician]),
         ));
 
-    let admin_routes = Router::new()
+    let administrator_only_routes = Router::new()
         .route("/parts/{id}/accept", axum::routing::post(accept_part::accept_part))
         .route("/parts/{id}/deny", axum::routing::post(deny_part::deny_part))
         .route_layer(middleware::from_fn_with_state(
-            state.clone(),
+            app_state.clone(),
             require_role::<AppState>(&[Role::Admin]),
         ));
 
@@ -36,6 +42,6 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/products/{id}", axum::routing::get(get_product::get_product))
         .route("/products/check-serial", axum::routing::post(check_serial::check_serial))
         .route("/products/register", axum::routing::post(register_product::register_product))
-        .merge(tech_routes)
-        .merge(admin_routes)
+        .merge(technician_only_routes)
+        .merge(administrator_only_routes)
 }

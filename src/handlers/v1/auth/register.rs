@@ -26,59 +26,77 @@ use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     )
 )]
+/// Handle new user registration requests by validating data, hashing passwords, and initiating verification.
+///
+/// This handler coordinates the registration flow: checking for existing users,
+/// persisting the (potentially new) user record in MySQL, caching the verification
+/// OTP in Valkey, and queuing a verification email via RabbitMQ.
+///
+/// # Arguments
+/// * `db_connection` - Shared database connection pool.
+/// * `lookup_tables` - Shared in-memory reference tables.
+/// * `valkey_client` - Optional shared Valkey client for OTP caching.
+/// * `rabbitmq_connection` - Optional shared RabbitMQ connection for email delivery.
+/// * `email_templates` - Shared pre-loaded HTML email templates.
+/// * `registration_payload` - The user's registration details (name, email, password, phone).
+///
+/// # Returns
+/// A result containing a successful message-only `ApiResponse`, or an `AppError`.
 pub async fn register_handler(
-    State(db): State<Arc<DatabaseConnection>>,
-    State(luts): State<Arc<LookupTables>>,
+    State(db_connection): State<Arc<DatabaseConnection>>,
+    State(lookup_tables): State<Arc<LookupTables>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
-    State(rabbitmq): State<Option<Arc<lapin::Connection>>>,
-    State(templates): State<Arc<std::collections::HashMap<String, String>>>,
-    Json(payload): Json<UserRegistrationRequest>,
+    State(rabbitmq_connection): State<Option<Arc<lapin::Connection>>>,
+    State(email_templates): State<Arc<std::collections::HashMap<String, String>>>,
+    Json(registration_payload): Json<UserRegistrationRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    registration_payload.validate().map_err(|err| AppError::BadRequest(err.to_string()))?;
 
-    let pending_status_id = *luts.account_statuses_by_name.get("Pending")
+    let pending_status_id = *lookup_tables.account_statuses_by_name.get("Pending")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing in cache")))?;
 
-    let customer_role_id = *luts.roles_by_name.get("Customer")
+    let customer_role_id = *lookup_tables.roles_by_name.get("Customer")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Customer role missing in cache")))?;
 
-    let existing = users::Entity::find()
-        .filter(users::Column::Email.eq(&payload.email))
-        .one(db.as_ref()).await?;
+    let existing_user = users::Entity::find()
+        .filter(users::Column::Email.eq(&registration_payload.email))
+        .one(db_connection.as_ref()).await?;
 
-    let hashed_password = hasher::hash_password(payload.password.clone()).await?;
-    let effect = register::decide_register(payload, existing.as_ref(), pending_status_id, customer_role_id, hashed_password)?;
+    let hashed_password = hasher::hash_password(registration_payload.password.clone()).await?;
+    let registration_effect = register::decide_register(registration_payload, existing_user.as_ref(), pending_status_id, customer_role_id, hashed_password)?;
 
-    let email = match &effect.user.email {
-        Set(v) => v.clone(),
-        _ => return Err(AppError::Internal(anyhow::anyhow!("email missing from registration effect"))),
+    let current_time = Utc::now();
+    let mut user_active_model = users::ActiveModel {
+        id: Set(registration_effect.user_id),
+        full_name: Set(registration_effect.full_name.clone()),
+        email: Set(registration_effect.email_address.clone()),
+        password_hash: Set(registration_effect.hashed_password),
+        phone_number: Set(registration_effect.phone_number),
+        role_id: Set(registration_effect.role_id),
+        account_status: Set(registration_effect.account_status),
+        updated_at: Set(current_time),
+        ..Default::default()
     };
-    let full_name = match &effect.user.full_name {
-        Set(v) => v.clone(),
-        _ => return Err(AppError::Internal(anyhow::anyhow!("full_name missing from registration effect"))),
-    };
 
-    let now = Utc::now();
-    let mut user_active = effect.user;
-    if effect.is_new {
-        user_active.created_at = Set(now);
-        user_active.insert(db.as_ref()).await?;
+    if registration_effect.is_new_record {
+        user_active_model.created_at = Set(current_time);
+        user_active_model.insert(db_connection.as_ref()).await?;
     } else {
-        user_active.update(db.as_ref()).await?;
+        user_active_model.update(db_connection.as_ref()).await?;
     }
 
     if let Some(client) = valkey_client {
         if let Ok(mut conn) = client.get_connection().await {
-            let valkey_key = format!("register_verification:{}", email);
-            let valkey_data = serde_json::json!({ "code": effect.otp_code, "attempts": 5 }).to_string();
+            let valkey_key = format!("register_verification:{}", registration_effect.email_address);
+            let valkey_data = serde_json::json!({ "code": registration_effect.verification_otp, "attempts": 5 }).to_string();
             let _ = conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await;
         } else {
             tracing::warn!("Valkey unavailable — OTP not cached, user can retry");
         }
     }
 
-    if let Some(rmq) = rabbitmq {
-        email_service::send_verification_email(&rmq, &templates, &email, &full_name, &effect.otp_code).await?;
+    if let Some(rabbitmq) = rabbitmq_connection {
+        email_service::send_verification_email(&rabbitmq, &email_templates, &registration_effect.email_address, &registration_effect.full_name, &registration_effect.verification_otp).await?;
     }
 
     Ok(Json(ApiResponse::message_only(201, "Registration successful")))

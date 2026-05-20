@@ -7,59 +7,81 @@ use crate::{
 use chrono::Utc;
 use jsonwebtoken::EncodingKey;
 
-/// Describes the outcome of a refresh token attempt.
+/// Describes the possible outcomes of a refresh token attempt.
 pub enum RefreshTokenEffect {
+    /// The token was successfully refreshed, returning new credentials and session info.
     Success {
+        /// Basic user information for the response.
         user_info: UserInfo,
+        /// The new access and refresh token pair.
         token_bundle: token_service::TokenBundle,
+        /// The unique ID of the current session.
         session_id: uuid::Uuid,
-        remaining_ttl: u64,
+        /// Remaining time-to-live for the session in seconds.
+        remaining_session_ttl: u64,
     },
-    ReuseAttack {
+    /// A refresh token reuse attack was detected (the provided token is not the active one).
+    ReuseAttackDetected {
+        /// The unique ID of the compromised session to be revoked.
         session_id: uuid::Uuid,
     },
 }
 
-/// Pure logic to decide the outcome of a refresh token attempt.
+/// Determine the outcome of a token refresh attempt based on session validity and token active state.
+///
+/// This pure function validates that the session is still active and, crucially,
+/// performs a detection for token reuse attacks by comparing the provided token's
+/// hash with the currently active hash from the whitelist cache.
+///
+/// # Arguments
+/// * `session_record` - The database model representing the user's current session.
+/// * `user_record` - The database model of the user owning the session.
+/// * `active_refresh_token_hash` - The currently whitelisted token hash for this session (from Valkey).
+/// * `provided_refresh_token_hash` - The hash of the token provided in the refresh request.
+/// * `access_token_ttl` - Duration for which the new access token will be valid.
+/// * `encoding_key` - Key used to sign the new tokens.
+///
+/// # Returns
+/// A result containing the `RefreshTokenEffect` (Success or ReuseAttackDetected), or an `AppError`.
 pub fn decide_refresh_token(
-    session: &sessions::Model,
-    user: &users::Model,
+    session_record: &sessions::Model,
+    user_record: &users::Model,
     active_refresh_token_hash: Option<String>,
-    refresh_token_hash: &str,
+    provided_refresh_token_hash: &str,
     access_token_ttl: AccessTokenDefaultTTLSeconds,
     encoding_key: &EncodingKey,
 ) -> Result<RefreshTokenEffect, AppError> {
-    if session.revoked_at.is_some() || session.expires_at < Utc::now() {
+    if session_record.revoked_at.is_some() || session_record.expires_at < Utc::now() {
         return Err(AppError::Unauthorized(
             "Session invalid or expired".to_string(),
         ));
     }
 
-    if active_refresh_token_hash.as_deref() != Some(refresh_token_hash) {
-        return Ok(RefreshTokenEffect::ReuseAttack {
-            session_id: session.id,
+    if active_refresh_token_hash.as_deref() != Some(provided_refresh_token_hash) {
+        return Ok(RefreshTokenEffect::ReuseAttackDetected {
+            session_id: session_record.id,
         });
     }
 
     let token_bundle = token_service::generate_token_bundle(
-        &user.id.to_string(),
+        &user_record.id.to_string(),
         access_token_ttl.0,
         encoding_key,
     )?;
 
-    let remaining = (session.expires_at.timestamp() - Utc::now().timestamp()).max(0) as u64;
+    let remaining_duration_seconds = (session_record.expires_at.timestamp() - Utc::now().timestamp()).max(0) as u64;
 
     Ok(RefreshTokenEffect::Success {
         user_info: UserInfo {
-            full_name: user.full_name.clone(),
-            account_status: AccountStatusEnum::from(user.account_status),
-            email: user.email.clone(),
-            phone_number: user.phone_number.clone(),
-            role_id: user.role_id,
+            full_name: user_record.full_name.clone(),
+            account_status: AccountStatusEnum::from(user_record.account_status),
+            email: user_record.email.clone(),
+            phone_number: user_record.phone_number.clone(),
+            role_id: user_record.role_id,
         },
         token_bundle,
-        session_id: session.id,
-        remaining_ttl: remaining,
+        session_id: session_record.id,
+        remaining_session_ttl: remaining_duration_seconds,
     })
 }
 
@@ -164,10 +186,10 @@ mod tests {
             }
             "ReuseAttack" => {
                 assert!(result.is_ok());
-                if let RefreshTokenEffect::ReuseAttack { session_id } = result.unwrap() {
+                if let RefreshTokenEffect::ReuseAttackDetected { session_id } = result.unwrap() {
                     assert_eq!(session_id, session.id);
                 } else {
-                    panic!("Expected ReuseAttack effect");
+                    panic!("Expected ReuseAttackDetected effect");
                 }
             }
             "Unauthorized" => {

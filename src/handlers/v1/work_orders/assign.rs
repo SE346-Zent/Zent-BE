@@ -12,6 +12,8 @@ use crate::model::requests::work_orders::assign_request::AssignWorkOrderRequest;
 use crate::model::responses::base::ApiResponse;
 use crate::entities::{work_orders as work_orders_ent, users, chat_rooms, chat_room_members};
 
+/// Assign a work order to a specific technician, performing location and schedule validation.
+
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/assign", request_body = AssignWorkOrderRequest,
     responses(
@@ -53,7 +55,7 @@ pub async fn assign(
 
     let effect = crate::services::v1::work_orders::assign::decide_assign_work_order(payload.clone(), work_order.clone(), technician_work_orders, &luts.policies, assigned_status_id, done_status_id, auth.user.id)?;
 
-    db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order.update(txn).await?; effect.state_history.insert(txn).await?; Ok(()) }))
+    db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order_model.update(txn).await?; effect.state_history_model.insert(txn).await?; Ok(()) }))
         .await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation

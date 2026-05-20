@@ -23,37 +23,53 @@ use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     )
 )]
+/// Handle requests to resend a verification OTP for a pending account.
+///
+/// This handler verifies that the user exists and is still in a pending state,
+/// generates a new OTP, caches it in Valkey (overwriting any previous one),
+/// and queues a new verification email via RabbitMQ.
+///
+/// # Arguments
+/// * `db_connection` - Shared database connection pool.
+/// * `lookup_tables` - Shared in-memory reference tables.
+/// * `valkey_client` - Optional shared Valkey client for OTP caching.
+/// * `rabbitmq_connection` - Optional shared RabbitMQ connection for email delivery.
+/// * `email_templates` - Shared pre-loaded HTML email templates.
+/// * `resend_payload` - The request containing the user's email address.
+///
+/// # Returns
+/// A result containing a successful message-only `ApiResponse`, or an `AppError`.
 pub async fn resend_otp_handler(
-    State(db): State<Arc<DatabaseConnection>>,
-    State(luts): State<Arc<LookupTables>>,
+    State(db_connection): State<Arc<DatabaseConnection>>,
+    State(lookup_tables): State<Arc<LookupTables>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
-    State(rabbitmq): State<Option<Arc<lapin::Connection>>>,
-    State(templates): State<Arc<std::collections::HashMap<String, String>>>,
-    Json(payload): Json<ResendOtpRequest>,
+    State(rabbitmq_connection): State<Option<Arc<lapin::Connection>>>,
+    State(email_templates): State<Arc<std::collections::HashMap<String, String>>>,
+    Json(resend_payload): Json<ResendOtpRequest>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
+    resend_payload.validate().map_err(|err| AppError::BadRequest(err.to_string()))?;
 
-    let user = users::Entity::find()
-        .filter(users::Column::Email.eq(&payload.email))
-        .one(db.as_ref()).await?;
+    let user_record = users::Entity::find()
+        .filter(users::Column::Email.eq(&resend_payload.email))
+        .one(db_connection.as_ref()).await?;
 
-    let pending_status_id = *luts.account_statuses_by_name.get("Pending")
+    let pending_status_id = *lookup_tables.account_statuses_by_name.get("Pending")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Pending status missing in cache")))?;
 
-    let effect = resend_otp::decide_resend_otp(user.as_ref(), pending_status_id, payload)?;
+    let resend_effect = resend_otp::decide_resend_otp(user_record.as_ref(), pending_status_id, resend_payload)?;
 
     if let Some(client) = valkey_client {
         if let Ok(mut conn) = client.get_connection().await {
-            let valkey_key = format!("register_verification:{}", effect.email);
-            let valkey_data = serde_json::json!({ "code": effect.otp_code, "attempts": 5 }).to_string();
+            let valkey_key = format!("register_verification:{}", resend_effect.email_address);
+            let valkey_data = serde_json::json!({ "code": resend_effect.new_otp_code, "attempts": 5 }).to_string();
             let _ = conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await;
         } else {
             tracing::warn!("Valkey unavailable — resend OTP not cached");
         }
     }
 
-    if let Some(rmq) = rabbitmq {
-        email_service::send_verification_email(&rmq, &templates, &effect.email, &effect.full_name, &effect.otp_code).await?;
+    if let Some(rabbitmq) = rabbitmq_connection {
+        email_service::send_verification_email(&rabbitmq, &email_templates, &resend_effect.email_address, &resend_effect.full_name, &resend_effect.new_otp_code).await?;
     }
 
     Ok(Json(ApiResponse::message_only(200, "OTP resent")))

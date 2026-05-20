@@ -2,51 +2,65 @@ use crate::model::responses::work_orders::details_response::WorkOrderDetails;
 use crate::entities::{work_orders, products, work_order_symptoms, work_order_statuses};
 use crate::core::lookup_tables::LookupTables;
 
+/// Transform a database work order model and its related entities into a comprehensive details view.
+///
+/// This function provides a flattened view of the work order, product, symptom, 
+/// and status information, handling name concatenation and providing fallback 
+/// values for missing relations.
+
 pub fn map_to_details(
-    wo: work_orders::Model,
+    work_order: work_orders::Model,
     product: Option<products::Model>,
     symptom: Option<work_order_symptoms::Model>,
     status: Option<work_order_statuses::Model>,
 ) -> WorkOrderDetails {
     WorkOrderDetails {
-        id: wo.id,
-        work_order_number: wo.work_order_number,
-        technician_id: wo.technician_id,
+        id: work_order.id,
+        work_order_number: work_order.work_order_number,
+        technician_id: work_order.technician_id,
         status: status.map(|s| s.name).unwrap_or_else(|| "Unknown".to_string()),
-        customer_id: wo.customer_id,
-        customer_name: format!("{} {}", wo.first_name, wo.last_name),
-        product_id: wo.product_id,
+        customer_id: work_order.customer_id,
+        customer_name: format!("{} {}", work_order.first_name, work_order.last_name),
+        product_id: work_order.product_id,
         product_name: product.map(|p| p.product_name).unwrap_or_else(|| "Unknown Product".to_string()),
-        reference_ticket_id: wo.reference_ticket_id,
+        reference_ticket_id: work_order.reference_ticket_id,
         symptom_name: symptom.map(|s| s.name).unwrap_or_else(|| "General Service".to_string()),
-        description: wo.description,
-        first_name: wo.first_name,
-        last_name: wo.last_name,
-        email: wo.email,
-        phone_number: wo.phone_number,
-        country: wo.country,
-        province: wo.province,
-        city: wo.city,
-        address: wo.address,
-        building: wo.building,
-        appointment: wo.appointment,
-        created_at: wo.created_at,
-        updated_at: wo.updated_at,
+        description: work_order.description,
+        first_name: work_order.first_name,
+        last_name: work_order.last_name,
+        email: work_order.email,
+        phone_number: work_order.phone_number,
+        country: work_order.country,
+        province: work_order.province,
+        city: work_order.city,
+        address: work_order.address,
+        building: work_order.building,
+        appointment: work_order.appointment,
+        created_at: work_order.created_at,
+        updated_at: work_order.updated_at,
     }
 }
 
+/// Prepare the detailed view of a single work order by resolving status data from lookup tables.
+///
+/// # Arguments
+/// * `work_order` - The database model for the work order.
+/// * `product` - Optional database model for the associated product.
+/// * `symptom` - Optional database model for the reported symptom.
+/// * `lookup_tables` - Shared reference data for resolving status names.
+
 pub fn decide_get_details(
-    wo: work_orders::Model,
+    work_order: work_orders::Model,
     product: Option<products::Model>,
     symptom: Option<work_order_symptoms::Model>,
     lookup_tables: &LookupTables,
 ) -> WorkOrderDetails {
-    let status_name = lookup_tables.work_order_statuses.get(&wo.work_order_status_id).cloned();
+    let status_name = lookup_tables.work_order_statuses.get(&work_order.work_order_status_id).cloned();
     let status = status_name.map(|name| work_order_statuses::Model {
-        id: wo.work_order_status_id,
+        id: work_order.work_order_status_id,
         name,
     });
-    map_to_details(wo, product, symptom, status)
+    map_to_details(work_order, product, symptom, status)
 }
 
 #[cfg(test)]
@@ -114,12 +128,12 @@ mod tests {
 
     #[test]
     fn test_map_to_details_full() {
-        let wo = dummy_work_order();
-        let prod = dummy_product();
-        let symp = dummy_symptom();
+        let work_order = dummy_work_order();
+        let product = dummy_product();
+        let symptom = dummy_symptom();
         let status = work_order_statuses::Model { id: 1, name: "Pending".to_string() };
 
-        let details = map_to_details(wo, Some(prod), Some(symp), Some(status));
+        let details = map_to_details(work_order, Some(product), Some(symptom), Some(status));
         assert_eq!(details.work_order_number, "WO-999");
         assert_eq!(details.customer_name, "Jane Smith");
         assert_eq!(details.product_name, "Super Widget");
@@ -130,8 +144,8 @@ mod tests {
 
     #[test]
     fn test_map_to_details_missing_relations() {
-        let wo = dummy_work_order();
-        let details = map_to_details(wo, None, None, None);
+        let work_order = dummy_work_order();
+        let details = map_to_details(work_order, None, None, None);
         assert_eq!(details.product_name, "Unknown Product");
         assert_eq!(details.symptom_name, "General Service");
         assert_eq!(details.status, "Unknown");
@@ -142,8 +156,8 @@ mod tests {
         let mut luts = LookupTables::empty();
         luts.work_order_statuses.insert(1, "Pending".to_string());
 
-        let wo = dummy_work_order();
-        let details = decide_get_details(wo, None, None, &luts);
+        let work_order = dummy_work_order();
+        let details = decide_get_details(work_order, None, None, &luts);
 
         assert_eq!(details.status, "Pending");
         assert_eq!(details.product_name, "Unknown Product");

@@ -24,54 +24,69 @@ use crate::model::requests::media::confirm_upload_request::ConfirmUploadRequest;
     ),
     security(("bearer_auth" = []))
 )]
+/// Handle multipart/form-data requests to upload a closing form photo and record its location.
+///
+/// This handler extracts the image data and metadata (geolocation, phase, device time),
+/// geocodes the work site address, uploads the image to OCI Object Storage,
+/// validates geofencing and time drift rules, and persists the metadata in MySQL.
+///
+/// # Arguments
+/// * `authenticated_user` - The currently authenticated user (must be the assigned technician).
+/// * `db_connection` - Shared database connection pool.
+/// * `lookup_tables` - Shared in-memory reference tables (for policies).
+/// * `work_order_id` - The unique ID of the work order from the URL path.
+/// * `multipart_payload` - The raw multipart request body.
+///
+/// # Returns
+/// A result containing a successful message-only `ApiResponse`, or an `AppError`.
 pub async fn upload_closing_form_photo(
-    Extension(auth): Extension<AuthUser>,
-    State(db): State<Arc<DatabaseConnection>>,
-    State(luts): State<Arc<LookupTables>>,
-    Path(id): Path<Uuid>,
-    mut multipart: Multipart,
+    Extension(authenticated_user): Extension<AuthUser>,
+    State(db_connection): State<Arc<DatabaseConnection>>,
+    State(lookup_tables): State<Arc<LookupTables>>,
+    Path(work_order_id): Path<Uuid>,
+    mut multipart_payload: Multipart,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    let mut file_data = None;
-    let mut content_type = String::new();
-    let mut file_name = String::new();
-    let mut latitude = None;
-    let mut longitude = None;
-    let mut phase = String::new();
-    let mut internet_time = None;
+    let mut uploaded_file_data = None;
+    let mut file_content_type = String::new();
+    let mut original_file_name = String::new();
+    let mut device_latitude = None;
+    let mut device_longitude = None;
+    let mut service_phase = String::new();
+    let mut device_internet_time = None;
 
-    while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
-        let name = field.name().unwrap_or_default().to_string();
-        match name.as_str() {
+    while let Some(field) = multipart_payload.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
+        let field_name = field.name().unwrap_or_default().to_string();
+        match field_name.as_str() {
             "file" => {
-                content_type = field.content_type().unwrap_or("image/jpeg").to_string();
-                file_name = field.file_name().unwrap_or("upload.jpg").to_string();
-                file_data = Some(field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?);
+                file_content_type = field.content_type().unwrap_or("image/jpeg").to_string();
+                original_file_name = field.file_name().unwrap_or("upload.jpg").to_string();
+                uploaded_file_data = Some(field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?);
             }
             "latitude" => {
                 let val = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
-                latitude = Some(val.parse::<f64>().map_err(|e| AppError::BadRequest(e.to_string()))?);
+                device_latitude = Some(val.parse::<f64>().map_err(|e| AppError::BadRequest(e.to_string()))?);
             }
             "longitude" => {
                 let val = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
-                longitude = Some(val.parse::<f64>().map_err(|e| AppError::BadRequest(e.to_string()))?);
+                device_longitude = Some(val.parse::<f64>().map_err(|e| AppError::BadRequest(e.to_string()))?);
             }
             "phase" => {
-                phase = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+                service_phase = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
             }
             "internet_time" => {
                 let val = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
-                internet_time = Some(val.parse::<i64>().map_err(|e| AppError::BadRequest(e.to_string()))?);
+                device_internet_time = Some(val.parse::<i64>().map_err(|e| AppError::BadRequest(e.to_string()))?);
             }
             _ => {}
         }
     }
 
-    let file_data = file_data.ok_or_else(|| AppError::BadRequest("File is missing".to_string()))?;
-    let latitude = latitude.ok_or_else(|| AppError::BadRequest("Latitude is missing".to_string()))?;
-    let longitude = longitude.ok_or_else(|| AppError::BadRequest("Longitude is missing".to_string()))?;
-    let internet_time = internet_time.ok_or_else(|| AppError::BadRequest("Internet time is missing".to_string()))?;
+    let file_bytes = uploaded_file_data.ok_or_else(|| AppError::BadRequest("File is missing".to_string()))?;
+    let latitude = device_latitude.ok_or_else(|| AppError::BadRequest("Latitude is missing".to_string()))?;
+    let longitude = device_longitude.ok_or_else(|| AppError::BadRequest("Longitude is missing".to_string()))?;
+    let internet_time = device_internet_time.ok_or_else(|| AppError::BadRequest("Internet time is missing".to_string()))?;
 
-    if phase.is_empty() {
+    if service_phase.is_empty() {
         return Err(AppError::BadRequest("Phase is missing".to_string()));
     }
 
@@ -79,35 +94,35 @@ pub async fn upload_closing_form_photo(
         return Err(AppError::BadRequest("Internet time must be a positive integer".to_string()));
     }
 
-    let work_order = work_orders::Entity::find_by_id(id)
-        .one(db.as_ref()).await?
+    let work_order_record = work_orders::Entity::find_by_id(work_order_id)
+        .one(db_connection.as_ref()).await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
 
-    let target_location = geocoding::geocode_address(
-        &work_order.address, &work_order.city, &work_order.province, &work_order.country,
+    let site_location = geocoding::geocode_address(
+        &work_order_record.address, &work_order_record.city, &work_order_record.province, &work_order_record.country,
     ).await?;
 
-    let extension = file_name.split('.').next_back().unwrap_or("jpg");
-    let unique_file_name = format!(
-        "{}/wo_closing/{}.{}", id, chrono::Utc::now().timestamp(), extension
+    let file_extension = original_file_name.split('.').next_back().unwrap_or("jpg");
+    let generated_unique_name = format!(
+        "{}/wo_closing/{}.{}", work_order_id, chrono::Utc::now().timestamp(), file_extension
     );
 
-    let object_name = oci::upload_object(&unique_file_name, file_data.to_vec(), &content_type).await?;
+    let oci_object_name = oci::upload_object(&generated_unique_name, file_bytes.to_vec(), &file_content_type).await?;
 
-    let payload = ConfirmUploadRequest { unique_file_name, latitude, longitude, phase, internet_time };
+    let confirmation_payload = ConfirmUploadRequest { unique_file_name: generated_unique_name, latitude, longitude, phase: service_phase, internet_time };
 
-    let effect = confirm_upload::decide_confirm_upload(
-        payload, &work_order, auth.user.id,
-        target_location.lat, target_location.lng, object_name, &luts.policies,
+    let confirmation_effect = confirm_upload::decide_confirm_upload(
+        confirmation_payload, &work_order_record, authenticated_user.user.id,
+        site_location.lat, site_location.lng, oci_object_name, &lookup_tables.policies,
     )?;
 
-    db.transaction::<_, (), AppError>(|txn| {
+    db_connection.transaction::<_, (), AppError>(|txn| {
         Box::pin(async move {
-            effect.image.insert(txn).await?;
-            effect.image_link.insert(txn).await?;
+            confirmation_effect.image_model.insert(txn).await?;
+            confirmation_effect.image_link_model.insert(txn).await?;
             Ok(())
         })
-    }).await.map_err(|e| match e {
+    }).await.map_err(|err| match err {
         sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
         sea_orm::TransactionError::Transaction(e) => e,
     })?;

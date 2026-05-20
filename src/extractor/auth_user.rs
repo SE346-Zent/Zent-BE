@@ -19,9 +19,12 @@ use crate::{
     infrastructure::cache::ValkeyClient,
 };
 
+/// Represents an authenticated user with their associated role data, used as an Axum extractor.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AuthUser {
+    /// The user model containing profile information.
     pub user: users::Model,
+    /// The role model containing user permissions and category assignments.
     pub role: roles::Model,
 }
 

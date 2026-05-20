@@ -10,7 +10,7 @@ use crate::core::errors::AppError;
 use crate::entities::outbox_records;
 use crate::infrastructure::cache::ValkeyClient;
 
-/// Send a notification to a user.
+/// Dispatch a notification to a specific user.
 ///
 /// **chat_message category (FCM-only, no bell icon):**
 /// Chat messages are never saved to MongoDB (they don't appear in the
@@ -28,21 +28,21 @@ use crate::infrastructure::cache::ValkeyClient;
 ///
 /// `category_slug` must be one of the slugs in `NOTIFICATION_CATEGORIES`.
 pub async fn send_notification(
-    mongodb: &mongodb::Database,
-    valkey: Option<Arc<ValkeyClient>>,
-    db: &DatabaseConnection,
-    user_id: Uuid,
+    mongodb_db: &mongodb::Database,
+    valkey_client: Option<Arc<ValkeyClient>>,
+    db_connection: &DatabaseConnection,
+    recipient_user_id: Uuid,
     category_slug: &str,
-    title: &str,
-    body: &str,
-    data: serde_json::Value,
+    notification_title: &str,
+    notification_body: &str,
+    notification_data: serde_json::Value,
 ) -> Result<(), AppError> {
     // ── Resolve category id ────────────────────────────────────────
     let category_id = crate::services::v1::notifications::find_category_id_by_slug(category_slug)
         .ok_or_else(|| AppError::BadRequest(format!("Invalid category slug: {}", category_slug)))?;
 
     let notification_id = Uuid::new_v4();
-    let now = Utc::now();
+    let current_timestamp = Utc::now();
 
     // ── chat_message: FCM-only, no bell icon ───────────────────────
     if category_slug == "chat_message" {
@@ -66,67 +66,66 @@ pub async fn send_notification(
             .await
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to save notification to MongoDB: {}", e)))?;
 
-        // 2. Increment Valkey unread counter
-        if let Some(vk) = valkey.as_ref() {
-            increment_unread_count(vk, user_id).await;
-        }
-
-        // 3. Check user preferences — skip outbox if push disabled
-        if !is_push_enabled_for_user(mongodb, user_id, category_id).await {
-            info!("Push disabled for user {} category {} — notification saved to MongoDB only", user_id, category_id);
-            return Ok(());
-        }
+    // ── 2. Increment Valkey unread counter ─────────────────────────
+    if let Some(vk) = valkey_client.as_ref() {
+        increment_unread_count(vk, recipient_user_id).await;
     }
 
-    // ── Create outbox entry (triggers FCM push) ────────────────────
-    let data_json = serde_json::to_string(&data)
+    // ── 3. Check user preferences — skip outbox if push disabled ──
+    if !is_push_enabled_for_user(mongodb_db, recipient_user_id, category_id).await {
+        info!("Push disabled for user {} category {} — notification saved to MongoDB only", recipient_user_id, category_id);
+        return Ok(());
+    }
+
+    // ── 4. Create outbox entry (triggers FCM push) ─────────────────
+    let serialized_data = serde_json::to_string(&notification_data)
         .unwrap_or_else(|_| "{}".to_string());
 
     let outbox_entry = outbox_records::ActiveModel {
         outbox_id: Set(Uuid::new_v4()),
-        user_id: Set(user_id),
+        user_id: Set(recipient_user_id),
         notification_id: Set(notification_id),
         category_id: Set(category_id),
-        title: Set(title.to_string()),
-        body: Set(body.to_string()),
-        data: Set(data_json),
-        created_at: Set(now),
+        title: Set(notification_title.to_string()),
+        body: Set(notification_body.to_string()),
+        data: Set(serialized_data),
+        created_at: Set(current_timestamp),
         delivered: Set(false),
     };
 
     outbox_entry
-        .insert(db)
+        .insert(db_connection)
         .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to insert outbox record: {}", e)))?;
+        .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to insert outbox record: {}", err)))?;
 
     Ok(())
 }
 
 /// Save a notification document into MongoDB using the bucket pattern.
 async fn save_notification_to_mongodb(
-    mongodb: &mongodb::Database,
+    mongodb_db: &mongodb::Database,
     notification_id: Uuid,
-    user_id: Uuid,
+    recipient_user_id: Uuid,
     category_id: i32,
-    title: &str,
-    body: &str,
-    data: &serde_json::Value,
-    created_at: chrono::DateTime<chrono::Utc>,
+    notification_title: &str,
+    notification_body: &str,
+    notification_data: &serde_json::Value,
+    created_at_timestamp: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), anyhow::Error> {
-    let notif_collection = mongodb.collection::<mongodb::bson::Document>("notifications");
-    let user_id_str = user_id.to_string();
+    let notification_collection = mongodb_db.collection::<mongodb::bson::Document>("notifications");
+    let target_user_id_string = recipient_user_id.to_string();
 
-    let bson_data = to_bson(data).unwrap_or_default();
+    let bson_metadata = to_bson(notification_data).unwrap_or_default();
 
-    let notif_item = doc! {
+    let notification_item_doc = doc! {
         "notification_id": notification_id.to_string(),
         "category_id": category_id,
-        "title": title,
-        "body": body,
-        "data": bson_data,
+        "title": notification_title,
+        "body": notification_body,
+        "data": bson_metadata,
         "is_read": false,
         "os_notification_id": mongodb::bson::Bson::Null,
-        "created_at": BsonDateTime::from_millis(created_at.timestamp_millis()),
+        "created_at": BsonDateTime::from_millis(created_at_timestamp.timestamp_millis()),
     };
 
     // Find the latest bucket for this user
@@ -135,8 +134,8 @@ async fn save_notification_to_mongodb(
         .limit(1)
         .build();
 
-    let mut cursor = notif_collection
-        .find(doc! { "user_id": &user_id_str })
+    let mut cursor = notification_collection
+        .find(doc! { "user_id": &target_user_id_string })
         .with_options(find_opts)
         .await?;
 
@@ -148,11 +147,11 @@ async fn save_notification_to_mongodb(
 
         if current_count < 30 {
             // Push into existing bucket
-            notif_collection
+            notification_collection
                 .update_one(
-                    doc! { "user_id": &user_id_str, "page": current_page },
+                    doc! { "user_id": &target_user_id_string, "page": current_page },
                     doc! {
-                        "$push": { "notifications": &notif_item },
+                        "$push": { "notifications": &notification_item_doc },
                         "$inc": { "count": 1 },
                     },
                 )
@@ -161,22 +160,22 @@ async fn save_notification_to_mongodb(
             // Bucket full — spill to a new page
             let new_page = current_page + 1;
             let bucket_doc = doc! {
-                "user_id": &user_id_str,
+                "user_id": &target_user_id_string,
                 "page": new_page,
                 "count": 1_i32,
-                "notifications": [&notif_item],
+                "notifications": [&notification_item_doc],
             };
-            notif_collection.insert_one(bucket_doc).await?;
+            notification_collection.insert_one(bucket_doc).await?;
         }
     } else {
         // No buckets exist yet — create page 1
         let bucket_doc = doc! {
-            "user_id": &user_id_str,
+            "user_id": &target_user_id_string,
             "page": 1_i32,
             "count": 1_i32,
-            "notifications": [&notif_item],
+            "notifications": [&notification_item_doc],
         };
-        notif_collection.insert_one(bucket_doc).await?;
+        notification_collection.insert_one(bucket_doc).await?;
     }
 
     Ok(())

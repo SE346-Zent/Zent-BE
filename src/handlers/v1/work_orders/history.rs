@@ -9,6 +9,8 @@ use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::history_response::WorkOrderHistoryDetail;
 use crate::entities::{work_orders as work_orders_ent, work_order_state_history, users, work_order_closing_forms};
 
+/// Retrieve the full state transition history for a specific work order.
+
 #[utoipa::path(
     get, path = "/api/v1/work_orders/{id}/history",
     responses(

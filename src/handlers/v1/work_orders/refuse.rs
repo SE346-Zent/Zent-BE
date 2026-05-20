@@ -11,6 +11,8 @@ use crate::model::requests::work_orders::refuse_request::{RefuseWorkOrderRequest
 use crate::model::responses::base::ApiResponse;
 use crate::entities::users;
 
+/// Submit a work order refusal request with reason, explanation, and evidence images.
+
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/refuse",
     request_body(content = RefuseWorkOrderMultipart, content_type = "multipart/form-data"),
@@ -70,11 +72,11 @@ pub async fn refuse(
     let effect = crate::services::v1::work_orders::refuse::decide_refuse_work_order(payload, wo, status_id, auth.user.id)?;
 
     db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
-        effect.reject_form.insert(txn).await?;
-        for img in effect.images { img.insert(txn).await?; }
-        for link in effect.image_links { link.insert(txn).await?; }
-        effect.work_order.update(txn).await?;
-        effect.state_history.insert(txn).await?;
+        effect.reject_form_model.insert(txn).await?;
+        for img in effect.image_models { img.insert(txn).await?; }
+        for link in effect.image_link_models { link.insert(txn).await?; }
+        effect.work_order_model.update(txn).await?;
+        effect.state_history_model.insert(txn).await?;
         Ok(())
     })).await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 

@@ -9,6 +9,8 @@ use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::work_orders::approve_refusal_request::ApproveRefusalRequest;
 use crate::model::responses::base::ApiResponse;
 
+/// Approve a technician's refusal, permanently transitioning the work order to 'Rejected' status.
+
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/refusal/approve", request_body = ApproveRefusalRequest,
     responses(
@@ -41,7 +43,7 @@ pub async fn approve_refusal(
     let rejected_id = *luts.work_order_statuses_by_name.get("Rejected").ok_or_else(|| AppError::Internal(anyhow::anyhow!("Rejected status not found")))?;
 
     let effect = crate::services::v1::work_orders::approve_refusal::decide_approve_refusal(wo, rf, auth.user.id, rejected_id)?;
-    db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order.update(txn).await?; effect.reject_form.update(txn).await?; effect.state_history.insert(txn).await?; Ok(()) }))
+    db.transaction::<_, (), AppError>(|txn| Box::pin(async move { effect.work_order_model.update(txn).await?; effect.reject_form_model.update(txn).await?; effect.state_history_model.insert(txn).await?; Ok(()) }))
         .await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation

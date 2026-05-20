@@ -1,26 +1,41 @@
 use crate::{core::errors::AppError, entities::sessions};
 use uuid::Uuid;
 
+/// Represents the calculated results and side-effects of a successful logout request.
 pub struct LogoutEffect {
-    pub session_id: Uuid,
+    /// The unique identifier of the session to be invalidated.
+    pub revoked_session_id: Uuid,
 }
 
-/// Pure logic to decide the outcome of a logout attempt.
-pub fn decide_logout(session: &sessions::Model, user_id: Uuid) -> Result<LogoutEffect, AppError> {
+/// Determine the outcome of a logout attempt by validating session ownership and state.
+///
+/// This pure function verifies that the session belongs to the requesting user
+/// and has not already been revoked.
+///
+/// # Arguments
+/// * `session_record` - The database model representing the session to be revoked.
+/// * `requesting_user_id` - The unique identifier of the authenticated user requesting logout.
+///
+/// # Returns
+/// A result containing the `LogoutEffect` on success, or an `AppError` (e.g., `Unauthorized`, `BadRequest`).
+pub fn decide_logout(
+    session_record: &sessions::Model,
+    requesting_user_id: Uuid,
+) -> Result<LogoutEffect, AppError> {
     // 1. Verify session belongs to user
-    if session.user_id != user_id {
+    if session_record.user_id != requesting_user_id {
         return Err(AppError::Unauthorized(
             "Session does not belong to user".to_string(),
         ));
     }
 
     // 2. Check if already revoked
-    if session.revoked_at.is_some() {
+    if session_record.revoked_at.is_some() {
         return Err(AppError::BadRequest("Session already revoked".to_string()));
     }
 
     Ok(LogoutEffect {
-        session_id: session.id,
+        revoked_session_id: session_record.id,
     })
 }
 
@@ -68,14 +83,14 @@ mod tests {
         user_id: Uuid,
     ) {
         let session_user_id = if same_user { user_id } else { Uuid::new_v4() };
-        let session = mock_session(session_user_id, already_revoked);
+        let session_record = mock_session(session_user_id, already_revoked);
 
-        let result = decide_logout(&session, user_id);
+        let result = decide_logout(&session_record, user_id);
 
         match expected_result {
             "Ok" => {
                 assert!(result.is_ok());
-                assert_eq!(result.unwrap().session_id, session.id);
+                assert_eq!(result.unwrap().revoked_session_id, session_record.id);
             }
             "Unauthorized" => {
                 assert!(matches!(result, Err(AppError::Unauthorized(_))));

@@ -11,6 +11,8 @@ use crate::core::state::AppState;
 use crate::entities::roles::Role;
 use crate::extractor::role_check::require_role;
 
+/// Initialize and configure the main API router for v1, nesting sub-routers for each domain.
+
 pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .nest("/auth", auth::router())
@@ -21,6 +23,8 @@ pub fn router(state: AppState) -> Router<AppState> {
         .nest("/media", media::media_router(state.clone()))
         .nest("/chat", chat::router(state))
 }
+
+/// Configure the work order sub-router with role-based access control and detailed endpoints.
 
 fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()

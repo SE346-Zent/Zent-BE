@@ -1,3 +1,8 @@
+//! HTTP handlers for authentication and account management.
+//!
+//! This module provides the REST API endpoints for user authentication,
+//! registration, and security-related operations.
+
 pub mod forgot_password;
 pub mod verify_forgot_password_otp;
 pub mod reset_password;
@@ -32,6 +37,7 @@ pub use logout::__path_logout_handler;
 use axum::{Router, routing::post};
 use crate::core::state::AppState;
 
+/// Initialize and return the Axum router for the authentication domain.
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login_handler))

@@ -10,6 +10,8 @@ use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::work_orders::complete_request::CompleteWorkOrderRequest;
 use crate::model::responses::base::ApiResponse;
 
+/// Complete a work order by submitting a closing form, including part changes and customer signature.
+
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/complete",
     request_body(content = CompleteWorkOrderRequest, content_type = "application/json"),
@@ -45,13 +47,13 @@ pub async fn complete(
     let effect = crate::services::v1::work_orders::complete::decide_complete_work_order(payload, wo, completed_id, auth.user.id)?;
 
     db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
-        effect.closing_form.insert(txn).await?;
-        for img in effect.images { img.insert(txn).await?; }
-        for link in effect.image_links { link.insert(txn).await?; }
-        for pc in effect.part_changes { pc.insert(txn).await?; }
-        for pu in effect.part_updates { pu.update(txn).await?; }
-        effect.work_order.update(txn).await?;
-        effect.state_history.insert(txn).await?;
+        effect.closing_form_model.insert(txn).await?;
+        for img in effect.image_models { img.insert(txn).await?; }
+        for link in effect.image_link_models { link.insert(txn).await?; }
+        for pc in effect.part_change_models { pc.insert(txn).await?; }
+        for pu in effect.part_record_updates { pu.update(txn).await?; }
+        effect.work_order_model.update(txn).await?;
+        effect.state_history_model.insert(txn).await?;
         Ok(())
     })).await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 

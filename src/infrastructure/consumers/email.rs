@@ -16,24 +16,44 @@ use crate::core::config::AppConfig;
 use crate::infrastructure::mq::email::{EMAIL_QUEUE, setup_email_topology};
 
 /// Append `heartbeat=60` to the AMQP URL if not already present.
-fn ensure_heartbeat(url: &str) -> String {
+///
+/// # Arguments
+/// * `amqp_url` - The original RabbitMQ connection URL.
+///
+/// # Returns
+/// A string containing the URL with the heartbeat parameter ensured.
+fn ensure_heartbeat(amqp_url: &str) -> String {
     let heartbeat_param = "heartbeat=60";
-    if url.contains("heartbeat=") {
-        url.to_string()
-    } else if url.contains('?') {
-        format!("{}&{}", url, heartbeat_param)
+    if amqp_url.contains("heartbeat=") {
+        amqp_url.to_string()
+    } else if amqp_url.contains('?') {
+        format!("{}&{}", amqp_url, heartbeat_param)
     } else {
-        format!("{}?{}", url, heartbeat_param)
+        format!("{}?{}", amqp_url, heartbeat_param)
     }
 }
 
-/// Try to create a new RabbitMQ connection using the URL from AppConfig.
-async fn create_fresh_connection(url: &str) -> Result<Connection, lapin::Error> {
-    Connection::connect(&ensure_heartbeat(url), ConnectionProperties::default().with_executor(TokioExecutor::current())).await
+/// Attempt to establish a new asynchronous RabbitMQ connection.
+///
+/// # Arguments
+/// * `amqp_url` - The RabbitMQ connection URL (e.g., amqp://user:pass@host).
+///
+/// # Returns
+/// A result containing the `lapin::Connection` or a `lapin::Error`.
+async fn create_fresh_connection(amqp_url: &str) -> Result<Connection, lapin::Error> {
+    Connection::connect(&ensure_heartbeat(amqp_url), ConnectionProperties::default()).await
 }
 
-pub async fn start_email_consumer(connection: Option<Arc<lapin::Connection>>) {
-    let mut conn_opt = match connection {
+/// Initialize and start the background email consumer task.
+///
+/// This function spawns a long-running Tokio task that listens for email jobs
+/// on RabbitMQ and processes them using `lettre`. It handles automatic
+/// reconnection if the connection is lost.
+///
+/// # Arguments
+/// * `amqp_connection` - An optional shared RabbitMQ connection. If `None`, the consumer remains idle (stub mode).
+pub async fn start_email_consumer(amqp_connection: Option<Arc<lapin::Connection>>) {
+    let mut conn_opt = match amqp_connection {
         Some(c) => c,
         None => return, // Stub mode
     };
@@ -122,9 +142,15 @@ pub async fn start_email_consumer(connection: Option<Arc<lapin::Connection>>) {
     });
 }
 
-// Lettre execution resolving logic
-async fn send_email_with_lettre(payload: &str) -> bool {
-    let parsed: serde_json::Value = match serde_json::from_str(payload) {
+/// Parse an email job payload and send the email using the Lettre SMTP transport.
+///
+/// # Arguments
+/// * `json_payload` - A JSON string containing 'to', 'subject', and 'body' fields.
+///
+/// # Returns
+/// `true` if the email was sent successfully, `false` otherwise.
+async fn send_email_with_lettre(json_payload: &str) -> bool {
+    let parsed: serde_json::Value = match serde_json::from_str(json_payload) {
         Ok(v) => v,
         Err(e) => {
             tracing::error!("Failed to parse email payload JSON: {:?}", e);
@@ -132,28 +158,28 @@ async fn send_email_with_lettre(payload: &str) -> bool {
         }
     };
 
-    let to = match parsed["to"].as_str() {
+    let to_address = match parsed["to"].as_str() {
         Some(v) => v,
         None => {
             tracing::error!("Missing 'to' field in email payload");
             return false;
         }
     };
-    let subject = parsed["subject"].as_str().unwrap_or("System Notification");
-    let body = parsed["body"].as_str().unwrap_or("");
+    let email_subject = parsed["subject"].as_str().unwrap_or("System Notification");
+    let html_body = parsed["body"].as_str().unwrap_or("");
 
     let cfg = AppConfig::get();
-    let email = match Message::builder()
+    let email_msg = match Message::builder()
         .from(format!("Zent System <{}>", cfg.smtp_username).parse().unwrap())
-        .to(match to.parse() {
+        .to(match to_address.parse() {
             Ok(addr) => addr,
             Err(e) => {
-                tracing::error!("Invalid recipient email '{}': {:?}", to, e);
+                tracing::error!("Invalid recipient email '{}': {:?}", to_address, e);
                 return false;
             }
         })
-        .subject(subject)
-        .singlepart(lettre::message::SinglePart::html(String::from(body)))
+        .subject(email_subject)
+        .singlepart(lettre::message::SinglePart::html(String::from(html_body)))
     {
         Ok(msg) => msg,
         Err(e) => {
@@ -162,20 +188,20 @@ async fn send_email_with_lettre(payload: &str) -> bool {
         }
     };
 
-    let creds = Credentials::new(cfg.smtp_username.clone(), cfg.smtp_password.clone());
+    let smtp_credentials = Credentials::new(cfg.smtp_username.clone(), cfg.smtp_password.clone());
 
     let mailer: AsyncSmtpTransport<Tokio1Executor> = AsyncSmtpTransport::<Tokio1Executor>::relay("smtp.gmail.com")
         .unwrap()
-        .credentials(creds)
+        .credentials(smtp_credentials)
         .build();
 
-    match mailer.send(email).await {
+    match mailer.send(email_msg).await {
         Ok(_) => {
-            tracing::info!("Email sent successfully to {}", to);
+            tracing::info!("Email sent successfully to {}", to_address);
             true
         }
         Err(e) => {
-            tracing::error!("SMTP delivery failed to {}: {:?}", to, e);
+            tracing::error!("SMTP delivery failed to {}: {:?}", to_address, e);
             false 
         }
     }

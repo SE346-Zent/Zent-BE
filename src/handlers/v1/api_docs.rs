@@ -66,6 +66,11 @@ use crate::core::errors::ErrorResponse;
 
 use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, chat};
 
+// API Documentation Service (v1)
+//
+// This module provides the OpenAPI/utoipa configuration and the Scalar UI
+// for interactive API documentation, protected by basic authentication.
+
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -186,12 +191,14 @@ impl Modify for SecurityAddon {
     }
 }
 
+/// Middleware to enforce basic authentication for the interactive API documentation UI.
+
 async fn check_docs_auth(
-    req: Request<axum::body::Body>,
-    next: Next,
+    request: Request<axum::body::Body>,
+    next_middleware_service: Next,
 ) -> Result<Response, impl IntoResponse> {
     let config = AppConfig::get();
-    let auth_header = req
+    let auth_header = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok());
@@ -202,10 +209,10 @@ async fn check_docs_auth(
                 if let Ok(credentials) = String::from_utf8(decoded) {
                     let parts: Vec<&str> = credentials.splitn(2, ':').collect();
                     if parts.len() == 2 {
-                        let user_ok = parts[0].as_bytes().ct_eq(config.docs_username.as_bytes());
-                        let pass_ok = parts[1].as_bytes().ct_eq(config.docs_password.as_bytes());
-                        if user_ok.unwrap_u8() == 1 && pass_ok.unwrap_u8() == 1 {
-                            return Ok(next.run(req).await);
+                        let is_username_valid = parts[0].as_bytes().ct_eq(config.docs_username.as_bytes());
+                        let is_password_valid = parts[1].as_bytes().ct_eq(config.docs_password.as_bytes());
+                        if is_username_valid.unwrap_u8() == 1 && is_password_valid.unwrap_u8() == 1 {
+                            return Ok(next_middleware_service.run(request).await);
                         }
                     }
                 }
@@ -221,6 +228,8 @@ async fn check_docs_auth(
 
     Err(response)
 }
+
+/// Initialize the documentation router, mounting the Scalar UI with auth protection.
 
 pub fn router() -> axum::Router<crate::core::state::AppState> {
     axum::Router::new()

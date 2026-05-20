@@ -2,27 +2,34 @@ use std::collections::HashMap;
 use crate::model::responses::notifications::preference_response::NotificationPreferenceResponse;
 use super::{NOTIFICATION_CATEGORIES, find_category_slug_by_id};
 
-/// Build a list of preference entries for the specified categories.
+/// Build a structured list of notification preferences for the specified categories.
 ///
-/// `user_prefs` is a map of `category_id → os_enabled`. Missing entries
-/// default to `true`. `allowed_ids` restricts the list to categories
-/// relevant to the user's role.
+/// This pure function maps a user's raw preference overrides (category ID to
+/// OS-enabled status) against a list of permitted categories. Any category missing
+/// from the user's mapping defaults to `enabled` (true).
+///
+/// # Arguments
+/// * `current_user_preferences` - A map of category IDs to their current OS-delivery status.
+/// * `permitted_category_ids` - A list of category IDs relevant to the user's current role.
+///
+/// # Returns
+/// A vector of `NotificationPreferenceResponse` objects representing the user's settings.
 pub fn get_preferences(
-    user_prefs: &HashMap<i32, bool>,
-    allowed_ids: &[i32],
+    current_user_preferences: &HashMap<i32, bool>,
+    permitted_category_ids: &[i32],
 ) -> Vec<NotificationPreferenceResponse> {
-    allowed_ids.iter().filter_map(|&category_id| {
+    permitted_category_ids.iter().filter_map(|&category_id| {
         let category_slug = find_category_slug_by_id(category_id)?;
         let index = (category_id - 1) as usize;
-        let (_, name) = NOTIFICATION_CATEGORIES[index];
+        let (_, display_name) = NOTIFICATION_CATEGORIES[index];
         
-        let os_enabled = *user_prefs.get(&category_id).unwrap_or(&true);
+        let is_os_delivery_enabled = *current_user_preferences.get(&category_id).unwrap_or(&true);
         
         Some(NotificationPreferenceResponse {
             category_id,
             category_slug: category_slug.to_string(),
-            category_name: name.to_string(),
-            os_enabled,
+            category_name: display_name.to_string(),
+            os_enabled: is_os_delivery_enabled,
             updated_at: None,
         })
     }).collect()

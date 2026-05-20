@@ -3,7 +3,9 @@ use crate::core::state::AppState;
 use crate::core::errors::AppError;
 use crate::model::responses::inventory::product_detail_response::ProductDetailResponse;
 
-/// GET /api/v1/inventory/products/{id}
+/// Handle requests to retrieve detailed information for a single product.
+///
+/// **Note: This endpoint is currently unimplemented.**
 pub async fn get_product(
     State(_state): State<AppState>,
     Path(_id): Path<uuid::Uuid>,

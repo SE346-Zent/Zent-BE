@@ -6,9 +6,14 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 use chrono::Utc;
 
+/// Contains a set of security tokens and the hash for database verification.
+
 pub struct TokenBundle {
+    /// The JSON Web Token (JWT) for immediate authentication.
     pub access_token: String,
+    /// The raw refresh token for obtaining new access tokens.
     pub refresh_token: String,
+    /// The SHA-256 hash of the refresh token for secure server-side storage.
     pub refresh_token_hash: String,
 }
 
@@ -18,13 +23,13 @@ pub fn generate_token_bundle(
     access_token_ttl_seconds: i64,
     encoding_key: &EncodingKey,
 ) -> Result<TokenBundle, AppError> {
-    let now = Utc::now().timestamp();
+    let current_timestamp_seconds = Utc::now().timestamp();
 
     // 1. Generate Access Token (JWT)
     let claims = Claims {
         sub: user_id.to_string(),
-        iat: now as usize,
-        exp: (now + access_token_ttl_seconds) as usize,
+        iat: current_timestamp_seconds as usize,
+        exp: (current_timestamp_seconds + access_token_ttl_seconds) as usize,
     };
 
     let access_token = encode(&Header::default(), &claims, encoding_key)
@@ -47,9 +52,11 @@ pub fn generate_token_bundle(
     })
 }
 
+/// Utility to hash a refresh token using SHA-256 for secure lookup and verification.
+
 /// Utility to hash a refresh token (useful for lookups)
-pub fn hash_refresh_token(token: &str) -> String {
+pub fn hash_refresh_token(raw_refresh_token: &str) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(token.as_bytes());
+    hasher.update(raw_refresh_token.as_bytes());
     format!("{:x}", hasher.finalize())
 }

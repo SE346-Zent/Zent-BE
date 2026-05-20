@@ -10,6 +10,8 @@ use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::list_response::WorkOrderListItem;
 use super::fetch_paginated_work_orders;
 
+/// Retrieve a filtered, paginated list of work orders based on the authenticated user's role and province.
+
 #[utoipa::path(
     get, path = "/api/v1/work_orders", params(WorkOrderQuery),
     responses(

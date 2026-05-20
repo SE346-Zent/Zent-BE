@@ -21,6 +21,20 @@ use crate::entities::{work_orders as work_orders_ent, users};
     ),
     security(("bearer_auth" = []))
 )]
+/// Handle requests from technicians to register new parts against a specific work order.
+///
+/// This handler verifies the work order exists, validates that the requesting 
+/// technician is assigned to it, and performs a multi-table database transaction
+/// to persist the part registration form and any associated photo records.
+///
+/// # Arguments
+/// * `authenticated_user` - The currently authenticated user (must be the assigned technician).
+/// * `db_connection` - Shared database connection pool.
+/// * `work_order_id` - The unique ID of the work order to which parts are being added.
+/// * `add_parts_payload` - The request containing part metadata and photo filenames.
+///
+/// # Returns
+/// A result containing a successful message-only `ApiResponse`, or an `AppError`.
 pub async fn add_parts(
     Extension(auth): Extension<AuthUser>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -40,10 +54,10 @@ pub async fn add_parts(
 
     let effect = crate::services::v1::inventory::add_parts::decide_add_parts(payload, wo, auth.user.id)?;
 
-    db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
-        effect.new_part_form.insert(txn).await?;
-        for img in effect.images { img.insert(txn).await?; }
-        for link in effect.image_links { link.insert(txn).await?; }
+    db_connection.transaction::<_, (), AppError>(|txn| Box::pin(async move {
+        add_parts_effect.part_form_model.insert(txn).await?;
+        for image_model in add_parts_effect.image_models { image_model.insert(txn).await?; }
+        for link_model in add_parts_effect.image_link_models { link_model.insert(txn).await?; }
         Ok(())
     })).await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 
