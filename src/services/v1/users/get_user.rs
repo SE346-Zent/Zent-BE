@@ -11,11 +11,58 @@ pub struct GetUserEffect {
 }
 
 /// Validate and prepare user detail retrieval.
+///
+/// RBAC rules:
+/// - SuperAdmin: can view any user.
+/// - Admin: can only view users in their own province.
+/// - Others: forbidden.
+///
+/// Deleted users are treated as Not Found.
 pub fn decide_get_user(
-    _current_user: users::Model,
-    _target_user: users::Model,
+    current_user: users::Model,
+    target_user: users::Model,
 ) -> Result<GetUserEffect, AppError> {
-    unimplemented!()
+    // Reject deleted users
+    if target_user.deleted_at.is_some() {
+        return Err(AppError::NotFound("User not found".to_string()));
+    }
+
+    let current_role = current_user.role_id;
+
+    match current_role {
+        2 => {
+            // SuperAdmin: can view anyone
+        }
+        1 => {
+            // Admin: must be in the same province
+            let admin_province = current_user.province.as_deref().unwrap_or("");
+            let target_province = target_user.province.as_deref().unwrap_or("");
+            if admin_province != target_province {
+                return Err(AppError::Forbidden(
+                    "You can only view users in your province".to_string(),
+                ));
+            }
+        }
+        _ => {
+            return Err(AppError::Forbidden(
+                "Only administrators can view user details".to_string(),
+            ));
+        }
+    }
+
+    let response_data = UserResponseData {
+        id: target_user.id,
+        role_id: target_user.role_id,
+        full_name: target_user.full_name,
+        email: target_user.email,
+        phone: Some(target_user.phone_number),
+        province: target_user.province,
+        account_status_id: target_user.account_status,
+        created_at: target_user.created_at.to_rfc3339(),
+        updated_at: target_user.updated_at.to_rfc3339(),
+    };
+
+    Ok(GetUserEffect { response_data })
 }
 
 #[cfg(test)]
@@ -40,6 +87,7 @@ mod tests {
             account_status: 1,
             role_id,
             province: None,
+            avatar_url: None,
             fcm_token: None,
             installation_id: None,
             created_at: Utc::now(),

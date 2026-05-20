@@ -41,6 +41,11 @@ use crate::model::{
             update_preference_request::UpdateNotificationPreferenceRequest,
         },
         pagination::PaginationRequest,
+        users::{
+            profile_update_request::ProfileUpdateRequest,
+            user_create_request::UserCreateRequest,
+            user_status_update_request::UserStatusUpdateRequest,
+        },
     },
     responses::{
         auth::login_response::LoginResponseData,
@@ -59,12 +64,17 @@ use crate::model::{
         },
         base::MessageOnlyResponse,
         pagination::PaginationResponse,
+        users::{
+            user_response_data::UserResponseData,
+            user_list_response_data::UserListResponseData,
+            me_response_data::MeResponseData,
+        },
     },
 };
 
 use crate::core::errors::ErrorResponse;
 
-use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, chat};
+use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, chat, users};
 
 // API Documentation Service (v1)
 //
@@ -74,6 +84,13 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        users::get_me::get_me_handler,
+        users::update_me::update_me_handler,
+        users::close_account::close_account_handler,
+        users::list_users::list_users_handler,
+        users::get_user::get_user_handler,
+        users::create_user::create_user_handler,
+        users::update_user_status::update_user_status_handler,
         auth::login_handler,
         auth::logout_handler,
         auth::register_handler,
@@ -160,9 +177,15 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
             crate::model::responses::chat::message_response::MessageResponse,
             crate::model::requests::chat::list_rooms_query::ListRoomsQuery,
             crate::handlers::v1::chat::upload_attachment::AttachmentUploadResponse,
+            ProfileUpdateRequest,
+            UserCreateRequest,
+            UserStatusUpdateRequest,
+            UserResponseData,
+            UserListResponseData,
+            MeResponseData,
         )
     ),
-    modifiers(&SecurityAddon),
+    modifiers(&SecurityAddon, &EndpointPathTitles),
     tags(
         (name = "auth", description = "Authentication endpoints"),
         (name = "work_orders", description = "Work order management"),
@@ -170,6 +193,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
         (name = "notifications", description = "Notification management"),
         (name = "media", description = "Media/OCI endpoints"),
         (name = "chat", description = "Chat & messaging endpoints"),
+        (name = "users", description = "User management endpoints"),
     )
 )]
 pub struct ApiDoc;
@@ -188,6 +212,32 @@ impl Modify for SecurityAddon {
                     .build(),
             ),
         );
+    }
+}
+
+/// Sets every operation's summary to `{METHOD} {path}` so Scalar tabs
+/// show short endpoint identifiers instead of verbose Rust doc comments.
+struct EndpointPathTitles;
+
+impl Modify for EndpointPathTitles {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        for (path, item) in openapi.paths.paths.iter_mut() {
+            if let Some(op) = &mut item.get {
+                op.summary = Some(format!("GET {}", path));
+            }
+            if let Some(op) = &mut item.post {
+                op.summary = Some(format!("POST {}", path));
+            }
+            if let Some(op) = &mut item.put {
+                op.summary = Some(format!("PUT {}", path));
+            }
+            if let Some(op) = &mut item.patch {
+                op.summary = Some(format!("PATCH {}", path));
+            }
+            if let Some(op) = &mut item.delete {
+                op.summary = Some(format!("DELETE {}", path));
+            }
+        }
     }
 }
 

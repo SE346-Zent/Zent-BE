@@ -11,8 +11,44 @@ pub struct UpdateStatusEffect {
 }
 
 /// Validate and prepare status update.
-pub fn decide_can_update_status(_current_user: users::Model, _req: UserStatusUpdateRequest) -> Result<UpdateStatusEffect, AppError> {
-    unimplemented!()
+///
+/// RBAC rules:
+/// - SuperAdmin: can update any user's status.
+/// - Admin: can only update users in their own province.
+/// - Others: forbidden.
+pub fn decide_can_update_status(
+    current_user: users::Model,
+    target_user: users::Model,
+    req: UserStatusUpdateRequest,
+) -> Result<UpdateStatusEffect, AppError> {
+    let current_role = current_user.role_id;
+
+    match current_role {
+        2 => {
+            // SuperAdmin: can update anyone
+        }
+        1 => {
+            // Admin: must be in the same province
+            let admin_province = current_user.province.as_deref().unwrap_or("");
+            let target_province = target_user.province.as_deref().unwrap_or("");
+            if admin_province != target_province {
+                return Err(AppError::Forbidden(
+                    "You can only update users in your province".to_string(),
+                ));
+            }
+        }
+        _ => {
+            return Err(AppError::Forbidden(
+                "Only administrators can update user status".to_string(),
+            ));
+        }
+    }
+
+    let mut user_active_model: users::ActiveModel = target_user.into();
+    user_active_model.account_status = sea_orm::Set(req.account_status_id);
+    user_active_model.updated_at = sea_orm::Set(chrono::Utc::now());
+
+    Ok(UpdateStatusEffect { user_active_model })
 }
 
 #[cfg(test)]
@@ -38,6 +74,7 @@ mod tests {
             account_status: 1,
             role_id,
             province: None,
+            avatar_url: None,
             fcm_token: None,
             installation_id: None,
             created_at: Utc::now(),
@@ -51,9 +88,10 @@ mod tests {
     #[case(ROLE_ADMIN, 3, "ok")]
     #[case(ROLE_TECHNICIAN, 1, "forbidden")]
     fn test_decide_can_update_status_rbac(#[case] role_id: i32, #[case] target_status: i32, #[case] expected: &str) {
-        let user = mock_user(role_id);
+        let current_user = mock_user(role_id);
+        let target_user = mock_user(ROLE_TECHNICIAN);
         let req = UserStatusUpdateRequest { account_status_id: target_status };
-        let res = decide_can_update_status(user, req);
+        let res = decide_can_update_status(current_user, target_user, req);
         
         match expected {
             "ok" => {

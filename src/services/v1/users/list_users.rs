@@ -13,12 +13,24 @@ pub struct ListUsersEffect {
 }
 
 /// Validate and prepare user listing.
+///
+/// Only Admin and SuperAdmin may list users. The caller (orchestration layer)
+/// is responsible for filtering by province / role before calling this function.
+/// This function enforces the RBAC gate and passes through the pre-filtered results.
 pub fn decide_list_users(
-    _current_user: users::Model,
-    _users: Vec<users::Model>,
-    _total: u64,
+    current_user: users::Model,
+    users: Vec<users::Model>,
+    total: u64,
 ) -> Result<ListUsersEffect, AppError> {
-    unimplemented!()
+    // RBAC: only Admin (1) or SuperAdmin (2) may list users.
+    // Role IDs are resolved upstream via LookupTables; here we accept the raw i32.
+    // The middleware already gates on Admin/SuperAdmin, but we double-check.
+    match current_user.role_id {
+        1 | 2 => {} // Admin or SuperAdmin
+        _ => return Err(AppError::Forbidden("Only administrators can list users".to_string())),
+    }
+
+    Ok(ListUsersEffect { users, total })
 }
 
 #[cfg(test)]
@@ -44,6 +56,7 @@ mod tests {
             account_status: 1,
             role_id,
             province: None,
+            avatar_url: None,
             fcm_token: None,
             installation_id: None,
             created_at: Utc::now(),

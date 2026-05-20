@@ -37,6 +37,7 @@ mod tests {
             account_status: 1,
             role_id: 3,
             province: None,
+            avatar_url: None,
             fcm_token: None,
             installation_id: None,
             created_at: Utc.with_ymd_and_hms(2026, 5, 17, 12, 0, 0).unwrap(),

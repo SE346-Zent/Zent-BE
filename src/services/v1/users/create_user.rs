@@ -12,8 +12,74 @@ pub struct CreateUserEffect {
 }
 
 /// Validate and prepare user creation.
-pub fn decide_can_create_user(_current_user: users::Model, _req: UserCreateRequest) -> Result<CreateUserEffect, AppError> {
-    unimplemented!()
+///
+/// RBAC rules (role IDs: 1=Admin, 2=SuperAdmin, 3=Customer, 4=Technician):
+/// - SuperAdmin (2): can create SuperAdmin (2), Admin (1), and Technician (4).
+/// - Admin (1): can create Technician (4) and Customer (3).
+/// - Others: forbidden.
+///
+/// Province handling:
+/// - SuperAdmin: uses the province from the request (must be provided for Admin, optional for Technician).
+/// - Admin: province is forced to the admin's own province.
+pub fn decide_can_create_user(current_user: users::Model, req: UserCreateRequest) -> Result<CreateUserEffect, AppError> {
+    let current_role = current_user.role_id;
+    let target_role = req.role_id;
+
+    // Determine allowed target roles based on current role
+    let allowed = match current_role {
+        2 => target_role == 1 || target_role == 2 || target_role == 4, // SA → SA, Admin, Tech
+        1 => target_role == 3 || target_role == 4,                     // Admin → Customer, Tech
+        _ => false,
+    };
+
+    if !allowed {
+        return Err(AppError::Forbidden(
+            "You are not authorized to create a user with this role".to_string(),
+        ));
+    }
+
+    // Determine province
+    let province = match current_role {
+        2 => {
+            // SuperAdmin uses the province from the request
+            req.province.clone()
+        }
+        1 => {
+            // Admin's province is forced; use their own province
+            current_user.province.clone()
+        }
+        _ => None,
+    };
+
+    let now = chrono::Utc::now();
+
+    let user_active_model = users::ActiveModel {
+        id: sea_orm::Set(uuid::Uuid::new_v4()),
+        full_name: sea_orm::Set(req.full_name),
+        email: sea_orm::Set(req.email),
+        phone_number: sea_orm::Set(req.phone.unwrap_or_default()),
+        role_id: sea_orm::Set(target_role),
+        province: sea_orm::Set(province),
+        account_status: sea_orm::Set(1), // Active by default when created by admin
+        created_at: sea_orm::Set(now),
+        updated_at: sea_orm::Set(now),
+        ..Default::default()
+    };
+
+    // Handle password: use provided, or mark for generation
+    let plain_password = if let Some(pwd) = req.password {
+        Some(pwd)
+    } else if req.generate_password.unwrap_or(false) {
+        let generated = crate::utils::otp::generate_6digit_otp();
+        Some(generated)
+    } else {
+        None
+    };
+
+    Ok(CreateUserEffect {
+        user_active_model,
+        plain_password,
+    })
 }
 
 #[cfg(test)]
@@ -40,6 +106,7 @@ mod tests {
             account_status: 1,
             role_id,
             province: None,
+            avatar_url: None,
             fcm_token: None,
             installation_id: None,
             created_at: Utc::now(),
@@ -70,6 +137,7 @@ mod tests {
             phone: None,
             password: None,
             generate_password: Some(true),
+            province: None,
         };
         let res = decide_can_create_user(current_user, req);
         
