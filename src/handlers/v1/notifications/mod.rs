@@ -6,6 +6,7 @@
 pub mod get_preferences;
 pub mod update_preferences;
 pub mod list;
+pub mod send_notification;
 pub mod unread_count;
 
 use axum::{Router, middleware};

@@ -1,7 +1,6 @@
 pub mod get_preferences;
 pub mod update_preference;
 pub mod list;
-pub mod send_notification;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -16,6 +15,8 @@ pub const NOTIFICATION_CATEGORIES: &[(&str, &str)] = &[
     ("about_to_start", "About to Start"),
     ("work_order_rejection_form", "Work Order Rejection Form"),
     ("add_new_part", "Add New Part"),
+    ("work_order_escalation", "Work Order Escalation"),
+    ("chat_message", "Chat Message"),
 ];
 
 // ── Shared Data Types ──────────────────────────────────────────────────

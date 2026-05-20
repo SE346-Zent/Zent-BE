@@ -89,6 +89,10 @@ impl EmailProducer {
         // Ensure topology is set up (Idempotent)
         setup_email_topology(&channel).await?;
 
+        // Enable publisher confirms so we know the broker received the message
+        use lapin::options::ConfirmSelectOptions;
+        channel.confirm_select(ConfirmSelectOptions::default()).await?;
+
         let confirm = channel.basic_publish(
             EMAIL_EXCHANGE,
             EMAIL_ROUTING_KEY,

@@ -57,5 +57,5 @@ pub async fn list(
         }
         _ => return Err(AppError::Forbidden("Role not recognized".to_string())),
     };
-    fetch_paginated_work_orders(db, valkey_client, lookup_tables, query.pagination, &cache_key_prefix, resolved_tech_id, resolved_province, resolved_customer_id).await
+    fetch_paginated_work_orders(db, valkey_client, lookup_tables, query.pagination, &cache_key_prefix, resolved_tech_id, resolved_province, resolved_customer_id, query.date).await
 }

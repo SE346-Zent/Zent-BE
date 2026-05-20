@@ -58,8 +58,16 @@ where
                 }
             }
 
+            // Resolve the user's actual role name for a clearer error message
+            let user_role_name = lookup_tables
+                .roles_by_name
+                .iter()
+                .find(|(_, &id)| id == auth_user.user.role_id)
+                .map(|(name, _)| name.as_str())
+                .unwrap_or("Unknown");
+
             Err(AppError::Forbidden(format!(
-                "Role mismatch: user has role_id {}, but required one of: [{}]",
+                "Role mismatch: you are '{user_role_name}' (role_id {}), but this endpoint requires one of: [{}]",
                 auth_user.user.role_id,
                 roles.iter().map(|r| r.as_str()).collect::<Vec<_>>().join(", ")
             )))

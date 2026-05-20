@@ -5,6 +5,7 @@ use lapin::{
     types::FieldTable,
     Connection, ConnectionProperties,
 };
+use tokio_executor_trait::Tokio as TokioExecutor;
 use futures::stream::StreamExt;
 use tracing::{info, error, warn};
 use lettre::{Message, AsyncSmtpTransport, AsyncTransport, Tokio1Executor};

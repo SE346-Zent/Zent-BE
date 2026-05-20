@@ -32,6 +32,12 @@ pub mod work_order_reject_forms;
 pub mod work_order_state_history;
 pub mod work_order_statuses;
 pub mod work_order_symptoms;
+pub mod work_order_escalations;
 pub mod work_orders;
+pub mod work_order_appointment_changes;
 pub mod policy;
+pub mod chat_rooms;
+pub mod chat_room_members;
+pub mod chat_room_image_links;
+
 

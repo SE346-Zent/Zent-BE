@@ -12,24 +12,21 @@ use crate::infrastructure::cache::ValkeyClient;
 
 /// Dispatch a notification to a specific user.
 ///
-/// This function executes the multi-stage delivery process:
-/// 1. Persists the notification to MongoDB (in-app history) using the bucket pattern.
-/// 2. Increments the unread count in Valkey.
-/// 3. Checks user preferences to determine if push notification (OS delivery) is enabled.
-/// 4. If enabled, creates an outbox record in MySQL for the relay worker to process.
+/// **chat_message category (FCM-only, no bell icon):**
+/// Chat messages are never saved to MongoDB (they don't appear in the
+/// bell-icon notification list). An FCM push is sent only when the user
+/// is offline (not connected via WebSocket). When online, the message
+/// is delivered in real-time via WebSocket — no push needed.
 ///
-/// # Arguments
-/// * `mongodb_db` - Shared MongoDB database connection.
-/// * `valkey_client` - Optional shared Valkey cache client.
-/// * `db_connection` - Shared SQL database connection pool.
-/// * `recipient_user_id` - Unique ID of the user receiving the notification.
-/// * `category_slug` - Human-readable slug for the notification category.
-/// * `notification_title` - The headline of the notification.
-/// * `notification_body` - The primary content of the notification.
-/// * `notification_data` - Additional JSON metadata associated with the event.
+/// **All other categories (bell icon + optional FCM):**
+/// Always saved to MongoDB (in-app bell-icon notification list) and
+/// the Valkey unread counter is incremented. Then checks the user's
+/// notification preferences: if push is enabled for this category
+/// (or no preferences set — default enabled), creates an outbox record
+/// which triggers FCM push delivery via the relay → consumer pipeline.
+/// No online/offline gating — FCM is always sent when push is enabled.
 ///
-/// # Returns
-/// A result indicating success (`Ok(())`) or an `AppError`.
+/// `category_slug` must be one of the slugs in `NOTIFICATION_CATEGORIES`.
 pub async fn send_notification(
     mongodb_db: &mongodb::Database,
     valkey_client: Option<Arc<ValkeyClient>>,
@@ -41,20 +38,38 @@ pub async fn send_notification(
     notification_data: serde_json::Value,
 ) -> Result<(), AppError> {
     // ── Resolve category id ────────────────────────────────────────
-    let category_id = super::find_category_id_by_slug(category_slug)
+    let category_id = crate::services::v1::notifications::find_category_id_by_slug(category_slug)
         .ok_or_else(|| AppError::BadRequest(format!("Invalid category slug: {}", category_slug)))?;
 
     let notification_id = Uuid::new_v4();
     let current_timestamp = Utc::now();
 
-    // ── 1. Save to MongoDB (in-app notification list — always) ────
-    save_notification_to_mongodb(mongodb_db, notification_id, recipient_user_id, category_id, notification_title, notification_body, &notification_data, current_timestamp)
-        .await
-        .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to save notification to MongoDB: {}", err)))?;
+    // ── chat_message: FCM-only, no bell icon ───────────────────────
+    if category_slug == "chat_message" {
+        // Never save chat messages to MongoDB (no bell icon listing)
+        // Only send FCM push when the user is offline
+        let ws_manager = crate::infrastructure::ws::get_ws_manager();
+        if ws_manager.is_connected(&recipient_user_id).await {
+            info!("User {} is online — chat message delivered via WS, skipping FCM", recipient_user_id);
+            return Ok(());
+        }
+        // User is offline: check preferences, then send FCM
+        if !is_push_enabled_for_user(mongodb_db, recipient_user_id, category_id).await {
+            info!("Push disabled for user {} — skipping chat FCM", recipient_user_id);
+            return Ok(());
+        }
+        // Fall through to outbox creation below (no MongoDB save, no Valkey increment)
+    } else {
+        // ── All other categories: bell icon + optional FCM ─────────
+        // 1. Save to MongoDB (in-app bell-icon notification list)
+        save_notification_to_mongodb(mongodb_db, notification_id, recipient_user_id, category_id, notification_title, notification_body, &notification_data, current_timestamp)
+            .await
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to save notification to MongoDB: {}", e)))?;
 
-    // ── 2. Increment Valkey unread counter ─────────────────────────
-    if let Some(vk) = valkey_client.as_ref() {
-        increment_unread_count(vk, recipient_user_id).await;
+        // ── 2. Increment Valkey unread counter ─────────────────────────
+        if let Some(vk) = valkey_client.as_ref() {
+            increment_unread_count(vk, recipient_user_id).await;
+        }
     }
 
     // ── 3. Check user preferences — skip outbox if push disabled ──

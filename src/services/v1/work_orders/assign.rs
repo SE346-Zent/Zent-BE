@@ -77,6 +77,13 @@ pub fn decide_assign_work_order(
         )));
     }
 
+    // Ensure the work order doesn't already have a technician (use reassign instead)
+    if work_order.technician_id.is_some() {
+        return Err(AppError::BadRequest(
+            "Work order already has a technician — use reassign instead".into(),
+        ));
+    }
+
     // Ensure we don't assign a completed or rejected work order
     if work_order.work_order_status_id == completed_status_id {
         return Err(AppError::BadRequest(
@@ -150,9 +157,12 @@ mod tests {
             work_order_number: "".to_string(),
             reject_form_id: None,
             about_to_start_notified: false,
+            customer_complaint: None,
+            customer_complaint_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
+            chat_room_id: None,
         }
     }
 

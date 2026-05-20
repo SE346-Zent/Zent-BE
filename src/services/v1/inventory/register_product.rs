@@ -1,4 +1,6 @@
+use sea_orm::Set;
 use crate::core::errors::AppError;
+use crate::entities::products;
 use crate::model::requests::inventory::register_product_request::RegisterProductRequest;
 
 /// Represents the calculated results and side-effects of a successful product registration request.

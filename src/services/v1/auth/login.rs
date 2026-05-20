@@ -8,9 +8,11 @@ use crate::{
     services::v1::core::token_service,
 };
 
+use sea_orm::Set;
+use crate::entities::sessions;
+use uuid::Uuid;
 use chrono::Utc;
 use jsonwebtoken::EncodingKey;
-use uuid::Uuid;
 
 /// Represents the calculated results and side-effects of a successful login attempt.
 ///
@@ -81,7 +83,7 @@ pub fn decide_login(
         encoding_key,
     )?;
 
-    // 5. Prepare session data
+    // 5. Prepare session ActiveModel
     let session_id = Uuid::new_v4();
     let session_duration_seconds = session_ttl.0;
     let session_expires_at = Utc::now() + chrono::Duration::seconds(session_duration_seconds);
@@ -135,6 +137,7 @@ mod tests {
             province: None,
             fcm_token: None,
             installation_id: None,
+            avatar_url: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: if deleted { Some(Utc::now()) } else { None },

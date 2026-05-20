@@ -24,7 +24,19 @@ mod m20260512_100000_drop_overtimes;
 mod m20260512_164300_add_fcm_token_and_outbox;
 mod m20260513_100000_add_about_to_start_notified;
 mod m20260514_000000_extend_outbox_records;
-mod m20260515_000000_part_audit_log;mod m20260514_153057_update_internet_time_image;
+mod m20260515_000000_part_audit_log;
+mod m20260514_153057_update_internet_time_image;
+mod m20260516_100000_add_work_order_complaint;
+mod m20260517_100000_add_escalation_level;
+mod m20260518_100000_add_work_order_escalations;
+mod m20260519_100000_add_work_order_appointment_changes;
+mod m20260519_110000_add_work_order_pause;
+mod m20260519_120000_drop_work_order_pause;
+mod m20260520_100000_add_chat_tables;
+mod m20260520_110000_add_avatar_and_chat_image_links;
+mod m20260521_100000_add_wo_id_to_chat_rooms;
+mod m20260522_100000_add_performance_indexes;
+mod m20260523_100000_add_chat_room_id_to_work_orders;
 
 
 pub struct Migrator;
@@ -59,6 +71,17 @@ impl MigratorTrait for Migrator {
             Box::new(m20260514_000000_extend_outbox_records::Migration),
             Box::new(m20260515_000000_part_audit_log::Migration),
             Box::new(m20260514_153057_update_internet_time_image::Migration),
+            Box::new(m20260516_100000_add_work_order_complaint::Migration),
+            Box::new(m20260517_100000_add_escalation_level::Migration),
+            Box::new(m20260518_100000_add_work_order_escalations::Migration),
+            Box::new(m20260519_100000_add_work_order_appointment_changes::Migration),
+            Box::new(m20260519_110000_add_work_order_pause::Migration),
+            Box::new(m20260519_120000_drop_work_order_pause::Migration),
+            Box::new(m20260520_100000_add_chat_tables::Migration),
+            Box::new(m20260520_110000_add_avatar_and_chat_image_links::Migration),
+            Box::new(m20260521_100000_add_wo_id_to_chat_rooms::Migration),
+            Box::new(m20260522_100000_add_performance_indexes::Migration),
+            Box::new(m20260523_100000_add_chat_room_id_to_work_orders::Migration),
         ]
     }
 }

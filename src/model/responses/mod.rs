@@ -6,3 +6,4 @@ pub mod base;
 pub mod pagination;
 pub mod media;
 pub mod users;
+pub mod chat;

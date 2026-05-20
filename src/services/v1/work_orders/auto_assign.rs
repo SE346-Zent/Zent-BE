@@ -172,9 +172,12 @@ mod tests {
             work_order_number: "".to_string(),
             reject_form_id: None,
             about_to_start_notified: false,
+            customer_complaint: None,
+            customer_complaint_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
+            chat_room_id: None,
         }
     }
 
@@ -190,6 +193,7 @@ mod tests {
             province: Some("".to_string()),
             fcm_token: None,
             installation_id: None,
+            avatar_url: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
