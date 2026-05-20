@@ -5,6 +5,7 @@ use lapin::{
     types::FieldTable,
     Connection, ConnectionProperties,
 };
+use tokio_executor_trait::Tokio as TokioExecutor;
 use futures::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use tracing::{info, error};
@@ -36,32 +37,27 @@ pub struct NotificationMessage {
 /// MongoDB save and Valkey unread counter increment are now handled
 /// in `send_notification()` before the outbox is created.
 pub async fn start_notification_consumer(state: AppState) {
-    let connection = match &state.rabbitmq {
-        Some(c) => c.clone(),
-        None => return,
-    };
-
     let url = AppConfig::get().rabbitmq_url.clone();
 
     tokio::spawn(async move {
-        let mut conn_opt = connection;
-
         loop {
-            let channel = match conn_opt.create_channel().await {
+            // Dial independently — do not gate on state.rabbitmq
+            let fresh_url = crate::infrastructure::mq::ensure_heartbeat(&url);
+            let conn = match Connection::connect(&fresh_url, ConnectionProperties::default().with_executor(TokioExecutor::current())).await {
+                Ok(c) => Arc::new(c),
+                Err(e) => {
+                    error!("Notification consumer: failed to connect: {:?}. Retrying in 5s...", e);
+                    sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+            };
+
+            let channel = match conn.create_channel().await {
                 Ok(c) => c,
                 Err(e) => {
                     error!("Notification consumer: Failed to create channel: {:?}. Reconnecting...", e);
-                    match Connection::connect(&url, ConnectionProperties::default()).await {
-                        Ok(new_conn) => {
-                            conn_opt = Arc::new(new_conn);
-                            continue;
-                        }
-                        Err(re) => {
-                            error!("Notification consumer: Failed to reconnect: {:?}. Retrying in 5s...", re);
-                            sleep(Duration::from_secs(5)).await;
-                            continue;
-                        }
-                    }
+                    sleep(Duration::from_secs(5)).await;
+                    continue;
                 }
             };
 
@@ -73,7 +69,7 @@ pub async fn start_notification_consumer(state: AppState) {
 
             let mut consumer = match channel.basic_consume(
                 NOTIFICATION_QUEUE,
-                "notification_consumer",
+                "",   // broker-generated unique tag
                 BasicConsumeOptions::default(),
                 FieldTable::default(),
             ).await {

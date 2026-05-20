@@ -10,6 +10,8 @@ use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::list_response::WorkOrderListItem;
 use super::fetch_paginated_work_orders;
 
+/// Retrieve a filtered, paginated list of work orders based on the authenticated user's role and province.
+
 #[utoipa::path(
     get, path = "/api/v1/work_orders", params(WorkOrderQuery),
     responses(
@@ -55,5 +57,5 @@ pub async fn list(
         }
         _ => return Err(AppError::Forbidden("Role not recognized".to_string())),
     };
-    fetch_paginated_work_orders(db, valkey_client, lookup_tables, query.pagination, &cache_key_prefix, resolved_tech_id, resolved_province, resolved_customer_id).await
+    fetch_paginated_work_orders(db, valkey_client, lookup_tables, query.pagination, &cache_key_prefix, resolved_tech_id, resolved_province, resolved_customer_id, query.date).await
 }

@@ -2,9 +2,18 @@ use crate::core::config::AppConfig;
 use crate::core::errors::AppError;
 use reqwest::header::CONTENT_TYPE;
 
+/// Upload a binary object to Oracle Cloud Infrastructure (OCI) Object Storage using a Pre-Authenticated Request (PAR).
+///
+/// # Arguments
+/// * `object_name` - The destination name/path of the object in the OCI bucket.
+/// * `binary_data` - The raw byte data to be uploaded.
+/// * `content_type` - The MIME type of the object (e.g., 'image/jpeg').
+///
+/// # Returns
+/// A result containing the name of the uploaded object on success, or an `AppError`.
 pub async fn upload_object(
     object_name: &str,
-    data: Vec<u8>,
+    binary_data: Vec<u8>,
     content_type: &str,
 ) -> Result<String, AppError> {
     let cfg = AppConfig::get();
@@ -16,7 +25,7 @@ pub async fn upload_object(
     let client = reqwest::Client::new();
     let resp = client.put(write_url)
         .header(CONTENT_TYPE, content_type)
-        .body(data)
+        .body(binary_data)
         .send()
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to upload via PAR: {}", e)))?;

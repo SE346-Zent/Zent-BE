@@ -1,20 +1,31 @@
 use std::collections::HashMap;
 use crate::core::errors::AppError;
 
-/// Toggle OS delivery for a single category.
+/// Update the user's OS notification delivery preference for a specific category.
 ///
-/// Returns `Err` when the category id is not allowed for the user's role.
+/// This pure function validates that the requested category is within the set of
+/// categories permitted for the user's specific role before updating the
+/// preference mapping.
+///
+/// # Arguments
+/// * `target_category_id` - The ID of the notification category to update.
+/// * `is_os_delivery_enabled` - Boolean indicating if push notifications should be enabled.
+/// * `current_user_preferences` - A mutable reference to the user's existing category preferences.
+/// * `permitted_category_ids` - A slice of category IDs allowed for the user's role.
+///
+/// # Returns
+/// A result indicating success (`Ok(())`) or a `BadRequest` error if the category is not permitted.
 pub fn update_preference(
-    category_id: i32,
-    os_enabled: bool,
-    user_prefs: &mut HashMap<i32, bool>,
-    allowed_ids: &[i32],
+    target_category_id: i32,
+    is_os_delivery_enabled: bool,
+    current_user_preferences: &mut HashMap<i32, bool>,
+    permitted_category_ids: &[i32],
 ) -> Result<(), AppError> {
-    if !allowed_ids.contains(&category_id) {
-        return Err(AppError::BadRequest(format!("Invalid notification category ID for your role: {}", category_id)));
+    if !permitted_category_ids.contains(&target_category_id) {
+        return Err(AppError::BadRequest(format!("Invalid notification category ID for your role: {}", target_category_id)));
     }
 
-    user_prefs.insert(category_id, os_enabled);
+    current_user_preferences.insert(target_category_id, is_os_delivery_enabled);
     Ok(())
 }
 

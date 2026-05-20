@@ -2,9 +2,12 @@ use serde::Deserialize;
 use crate::core::config::AppConfig;
 use crate::core::errors::AppError;
 
+/// Represents a geographical location with latitude and longitude coordinates.
 #[derive(Debug, serde::Deserialize, Clone, Copy)]
 pub struct Location {
+    /// Latitude coordinate.
     pub lat: f64,
+    /// Longitude coordinate.
     pub lng: f64,
 }
 
@@ -14,14 +17,24 @@ struct NominatimResponse {
     lon: String,
 }
 
+/// Convert a structured physical address into geographical coordinates (lat/lng) using the Nominatim API.
+///
+/// # Arguments
+/// * `street_address` - The street-level address or building information.
+/// * `city_name` - The name of the city.
+/// * `province_name` - The name of the province or state.
+/// * `country_name` - The name of the country.
+///
+/// # Returns
+/// A result containing a `Location` struct with latitude and longitude, or an `AppError`.
 pub async fn geocode_address(
-    address: &str,
-    city: &str,
-    province: &str,
-    country: &str,
+    street_address: &str,
+    city_name: &str,
+    province_name: &str,
+    country_name: &str,
 ) -> Result<Location, AppError> {
     let cfg = AppConfig::get();
-    let full_address = format!("{}, {}, {}, {}", address, city, province, country);
+    let full_address = format!("{}, {}, {}, {}", street_address, city_name, province_name, country_name);
     let url = format!(
         "https://nominatim.openstreetmap.org/search?q={}&format=json&limit=1",
         urlencoding::encode(&full_address)
@@ -45,18 +58,18 @@ pub async fn geocode_address(
         AppError::BadRequest(format!("Address not found: '{}'", full_address))
     })?;
 
-    let lat: f64 = first.lat.parse().unwrap_or(0.0);
-    let lon: f64 = first.lon.parse().unwrap_or(0.0);
+    let latitude: f64 = first.lat.parse().unwrap_or(0.0);
+    let longitude: f64 = first.lon.parse().unwrap_or(0.0);
 
     tracing::info!(
         "Geocoded address: '{}' -> Coordinates: (lat: {}, lon: {})",
         full_address,
-        lat,
-        lon
+        latitude,
+        longitude
     );
 
     Ok(Location {
-        lat,
-        lng: lon,
+        lat: latitude,
+        lng: longitude,
     })
 }

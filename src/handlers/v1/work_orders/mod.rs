@@ -1,15 +1,26 @@
+//! Work Order API Handlers (v1)
+//!
+//! This module provides the entry points for work order related API requests,
+//! including routing, caching strategies, and integration with domain services.
 pub mod create;
 pub mod list;
 pub mod get_details;
 pub mod assign;
 pub mod complete;
+pub mod reassign;
 pub mod refuse;
 pub mod start;
 pub mod approve_refusal;
 pub mod deny_refusal;
 pub mod history;
 pub mod cancel;
+pub mod complaint;
+pub mod change_appointment;
+pub mod reject_form_list;
+pub mod reject_form_detail;
 
+pub use change_appointment::change_appointment;
+pub use complaint::complaint;
 pub use create::create;
 pub use list::list;
 pub use get_details::get_details;
@@ -20,7 +31,10 @@ pub use start::start;
 pub use approve_refusal::approve_refusal;
 pub use deny_refusal::deny_refusal;
 pub use history::history;
+pub use reassign::reassign;
 pub use cancel::cancel;
+pub use reject_form_list::reject_form_list;
+pub use reject_form_detail::reject_form_detail;
 
 // Re-export __path_* items for utoipa OpenApi derive
 pub use create::__path_create;
@@ -33,7 +47,12 @@ pub use start::__path_start;
 pub use approve_refusal::__path_approve_refusal;
 pub use deny_refusal::__path_deny_refusal;
 pub use history::__path_history;
+pub use reassign::__path_reassign;
 pub use cancel::__path_cancel;
+pub use complaint::__path_complaint;
+pub use change_appointment::__path_change_appointment;
+pub use reject_form_list::__path_reject_form_list;
+pub use reject_form_detail::__path_reject_form_detail;
 
 use axum::{Router, middleware};
 use std::collections::HashMap;
@@ -60,6 +79,8 @@ use crate::infrastructure::cache::ValkeyClient;
 /// Sentinel value stored during the idempotency claim window.
 pub(crate) const IDEMPOTENCY_PENDING: &str = "__PENDING__";
 
+/// Initialize and configure the work order sub-router with role-based access control.
+
 pub fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(create))
@@ -82,6 +103,9 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/assign", axum::routing::post(assign))
         .route("/{id}/refusal/approve", axum::routing::post(approve_refusal))
         .route("/{id}/refusal/deny", axum::routing::post(deny_refusal))
+        .route("/{id}/reassign", axum::routing::post(reassign))
+        .route("/reject_forms", axum::routing::get(reject_form_list))
+        .route("/reject_forms/{id}", axum::routing::get(reject_form_detail))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Admin]),
@@ -100,6 +124,8 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
 }
 
 //pub async fn cancel() -> axum::http::StatusCode { axum::http::StatusCode::NOT_IMPLEMENTED }
+
+/// Retrieve a work order model using a cache-first strategy with database fallback.
 
 /// Load a work order model — cache-first, DB-fallback.
 /// Checks `cache:work_order_model:{id}`, returns the raw `work_orders::Model` if found.
@@ -145,6 +171,8 @@ pub(crate) async fn get_cached_work_order_model(
 
     Ok(model)
 }
+
+/// Update the write-through cache for a work order and invalidate related listing caches.
 
 /// Write-through cache: after a successful mutation, re-fetch the work order with
 /// its related entities, build the full WorkOrderDetails and cache the raw model,
@@ -205,6 +233,8 @@ pub(crate) async fn write_through_work_order_cache(
     }
 }
 
+/// Perform a paginated search for work orders with support for various filters and caching.
+
 pub(crate) async fn fetch_paginated_work_orders(
     db: Arc<DatabaseConnection>,
     valkey_client: Option<Arc<ValkeyClient>>,
@@ -214,6 +244,7 @@ pub(crate) async fn fetch_paginated_work_orders(
     technician_id: Option<Uuid>,
     province_filter: Option<String>,
     customer_id: Option<Uuid>,
+    date_filter: Option<chrono::NaiveDate>,
 ) -> Result<axum::Json<ApiResponse<Vec<WorkOrderListItem>>>, AppError> {
     let mut conn_opt = None;
     let mut full_cache_key = String::new();
@@ -222,8 +253,8 @@ pub(crate) async fn fetch_paginated_work_orders(
         if let Ok(mut conn) = client.get_connection().await {
             let gen: u64 = conn.get("cache:work_orders:generation").await.unwrap_or(0);
             full_cache_key = format!(
-                "cache:work_orders:gen:{}:prefix:{}:p:{}:l:{}",
-                gen, cache_key_prefix, pagination.page, pagination.limit
+                "cache:work_orders:gen:{}:prefix:{}:p:{}:l:{}:d:{:?}",
+                gen, cache_key_prefix, pagination.page, pagination.limit, date_filter
             );
             if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&full_cache_key).await {
                 if let Ok((data, meta)) = serde_json::from_str::<(Vec<WorkOrderListItem>, PaginationResponse)>(&cached_json) {
@@ -238,6 +269,11 @@ pub(crate) async fn fetch_paginated_work_orders(
     if let Some(tech_id) = technician_id { query = query.filter(work_orders_ent::Column::TechnicianId.eq(tech_id)); }
     if let Some(province) = province_filter { query = query.filter(work_orders_ent::Column::Province.eq(province)); }
     if let Some(cust_id) = customer_id { query = query.filter(work_orders_ent::Column::CustomerId.eq(cust_id)); }
+    if let Some(ref date) = date_filter {
+        let start = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let end = date.and_hms_opt(23, 59, 59).unwrap().and_utc();
+        query = query.filter(work_orders_ent::Column::Appointment.between(start, end));
+    }
 
     let paginator = query.clone().order_by_desc(work_orders_ent::Column::CreatedAt).paginate(db.as_ref(), pagination.limit);
     let total_records = paginator.num_items().await?;
@@ -258,6 +294,8 @@ pub(crate) async fn fetch_paginated_work_orders(
 
     Ok(axum::Json(ApiResponse::success_with_meta(200, "Work orders retrieved successfully", data, meta)))
 }
+
+/// Periodically clean up unassigned work orders that have exceeded the allowed wait window.
 
 /// Cron-triggered cleanup: cancels all pending unassigned work orders that have exceeded
 /// the threshold defined in the policy and notifies the customer.
@@ -329,11 +367,19 @@ pub async fn run_cleanup(
     Ok(())
 }
 
+/// Attempt to automatically assign a single work order to a suitable technician.
+
 pub(crate) async fn try_auto_assign_single(
     state: &AppState,
     db: Arc<DatabaseConnection>,
     wo: work_orders_ent::Model,
 ) -> bool {
+    // Deduplication guard: if already assigned (by the other path), skip.
+    if wo.technician_id.is_some() {
+        tracing::info!("WO {} already has a technician — skipping auto-assign (already assigned)", wo.work_order_number);
+        return true;
+    }
+
     let luts = &state.lookup_tables;
     let tech_role_id = match luts.roles_by_name.get("Technician") {
         Some(id) => *id,
@@ -365,11 +411,11 @@ pub(crate) async fn try_auto_assign_single(
         Ok(None) => { tracing::info!("Auto-assign: no suitable tech for WO {} — admin needed", wo.work_order_number); return false; }
         Err(e) => { tracing::error!("Auto-assign failed for WO {}: {}", wo.work_order_number, e); return false; }
     };
-    let assigned_tech_id = effect.work_order.technician_id.clone().unwrap().unwrap();
+    let assigned_tech_id = effect.work_order_model.technician_id.clone().unwrap().unwrap();
 
     if let Err(e) = db.transaction::<_, (), anyhow::Error>(|txn| Box::pin(async move {
-        effect.work_order.update(txn).await.map_err(|e| anyhow::anyhow!(e))?;
-        effect.state_history.insert(txn).await.map_err(|e| anyhow::anyhow!(e))?;
+        effect.work_order_model.update(txn).await.map_err(|e| anyhow::anyhow!(e))?;
+        effect.state_history_model.insert(txn).await.map_err(|e| anyhow::anyhow!(e))?;
         Ok(())
     })).await { tracing::error!("Auto-assign tx failed for WO {}: {}", wo.work_order_number, e); return false; }
 
@@ -388,7 +434,7 @@ pub(crate) async fn try_auto_assign_single(
         });
 
         // Notify technician
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             state.mongodb.as_ref(),
             state.valkey.clone(),
             db.as_ref(),
@@ -400,7 +446,7 @@ pub(crate) async fn try_auto_assign_single(
         ).await;
 
         // Notify customer
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             state.mongodb.as_ref(),
             state.valkey.clone(),
             db.as_ref(),
@@ -413,9 +459,13 @@ pub(crate) async fn try_auto_assign_single(
     }
 
     if let Some(rmq) = state.rabbitmq.as_ref() {
-        if let (Some(c), Some(t)) = (cust, tech) {
+        if let (Some(c), Some(t)) = (cust.as_ref(), tech.as_ref()) {
             let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(rmq, &state.templates, &c.email, &c.full_name, &wo.work_order_number, &t.full_name, &wo.appointment.to_string()).await;
         }
+    }
+    // Auto-create 1-on-1 chat room between technician and customer
+    if let (Some(ref t), Some(ref c)) = (&tech, &cust) {
+        let _ = assign::ensure_chat_room(db.as_ref(), t.id, c.id, wo.id).await;
     }
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation
     write_through_work_order_cache(db.as_ref(), state.valkey.clone(), &state.lookup_tables, wo.id).await;

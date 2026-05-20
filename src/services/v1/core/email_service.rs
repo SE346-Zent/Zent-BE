@@ -4,16 +4,18 @@ use crate::core::errors::AppError;
 use lapin::Connection;
 use crate::services::v1::core::helpers::mq::publish_email_task;
 
+/// Dispatch a verification email containing a security code for account activation.
+
 pub async fn send_verification_email(
-    rabbitmq: &Arc<Connection>,
+    rabbitmq_connection: &Arc<Connection>,
     templates: &HashMap<String, String>,
-    to: &str,
-    name: &str,
-    code: &str,
+    recipient_email: &str,
+    recipient_name: &str,
+    security_code: &str,
 ) -> Result<(), AppError> {
     // Escape variables for secure HTML rendering
-    let escaped_name = v_htmlescape::escape(name).to_string();
-    let escaped_code = v_htmlescape::escape(code).to_string();
+    let escaped_name = v_htmlescape::escape(recipient_name).to_string();
+    let escaped_code = v_htmlescape::escape(security_code).to_string();
 
     // 1. Prepare email template from cache
     let email_body = if let Some(template_content) = templates.get("verification_email.html") {
@@ -30,23 +32,25 @@ pub async fn send_verification_email(
 
     // 2. Deliver async email task to RabbitMQ
     let email_payload = serde_json::json!({
-        "to": to,
+        "to": recipient_email,
         "subject": "Zent Account Verification",
         "body": email_body
     });
     
-    publish_email_task(rabbitmq, email_payload, "verification email").await
+    publish_email_task(rabbitmq_connection, email_payload, "verification email").await
 }
 
+/// Dispatch a password reset email containing a temporary recovery code.
+
 pub async fn send_forgot_password_email(
-    rabbitmq: &Arc<Connection>,
+    rabbitmq_connection: &Arc<Connection>,
     templates: &HashMap<String, String>,
-    to: &str,
-    name: &str,
-    code: &str,
+    recipient_email: &str,
+    recipient_name: &str,
+    security_code: &str,
 ) -> Result<(), AppError> {
-    let escaped_name = v_htmlescape::escape(name).to_string();
-    let escaped_code = v_htmlescape::escape(code).to_string();
+    let escaped_name = v_htmlescape::escape(recipient_name).to_string();
+    let escaped_code = v_htmlescape::escape(security_code).to_string();
 
     let email_body = if let Some(template_content) = templates.get("forgot_password_email.html") {
         template_content
@@ -61,41 +65,45 @@ pub async fn send_forgot_password_email(
     };
 
     let email_payload = serde_json::json!({
-        "to": to,
+        "to": recipient_email,
         "subject": "Zent Password Reset Request",
         "body": email_body
     });
     
-    publish_email_task(rabbitmq, email_payload, "reset email").await
+    publish_email_task(rabbitmq_connection, email_payload, "reset email").await
 }
 
+/// Dispatch a welcome email to newly registered users upon successful verification.
+
 pub async fn send_welcome_email(
-    rabbitmq: &Arc<Connection>,
+    rabbitmq_connection: &Arc<Connection>,
     _templates: &HashMap<String, String>,
-    to: &str,
-    name: &str,
+    recipient_email: &str,
+    recipient_name: &str,
 ) -> Result<(), AppError> {
-    let escaped_name = v_htmlescape::escape(name).to_string();
+    let escaped_name = v_htmlescape::escape(recipient_name).to_string();
     let email_payload = serde_json::json!({
-        "to": to,
+        "to": recipient_email,
         "subject": "Welcome to Zent!",
         "body": format!("Welcome to Zent, {}! Your account has been successfully created.", escaped_name)
     });
     
-    publish_email_task(rabbitmq, email_payload, "welcome email").await
+    publish_email_task(rabbitmq_connection, email_payload, "welcome email").await
 }
 
+/// Notify a customer via email that their work order request has been successfully received.
+
 pub async fn send_work_order_created_email(
-    rabbitmq: &Arc<Connection>,
+    rabbitmq_connection: &Arc<Connection>,
     templates: &HashMap<String, String>,
-    to: &str,
-    name: &str,
+    recipient_email: &str,
+    recipient_name: &str,
     work_order_number: &str,
     service_type: &str,
     appointment: &str,
     address: &str,
 ) -> Result<(), AppError> {
-    let escaped_name = v_htmlescape::escape(name).to_string();
+    let escaped_name = v_htmlescape::escape(recipient_name).to_string();
     let escaped_wo_number = v_htmlescape::escape(work_order_number).to_string();
     let escaped_service = v_htmlescape::escape(service_type).to_string();
     let escaped_appointment = v_htmlescape::escape(appointment).to_string();
@@ -117,22 +125,24 @@ pub async fn send_work_order_created_email(
     };
 
     let email_payload = serde_json::json!({
-        "to": to,
+        "to": recipient_email,
         "subject": format!("Work Order Created: {}", work_order_number),
         "body": email_body
     });
     
-    publish_email_task(rabbitmq, email_payload, "work order creation email").await
+    publish_email_task(rabbitmq_connection, email_payload, "work order creation email").await
 }
 
+/// Inform a customer that a technician's refusal was denied and the order is being reassigned.
+
 pub async fn send_work_order_refusal_denied_email(
-    rabbitmq: &Arc<Connection>,
+    rabbitmq_connection: &Arc<Connection>,
     templates: &HashMap<String, String>,
-    to: &str,
-    name: &str,
+    recipient_email: &str,
+    recipient_name: &str,
     work_order_number: &str,
 ) -> Result<(), AppError> {
-    let escaped_name = v_htmlescape::escape(name).to_string();
+    let escaped_name = v_htmlescape::escape(recipient_name).to_string();
     let escaped_wo_number = v_htmlescape::escape(work_order_number).to_string();
 
     let email_body = if let Some(template_content) = templates.get("work_order_refusal_denied_email.html") {
@@ -148,24 +158,26 @@ pub async fn send_work_order_refusal_denied_email(
     };
 
     let email_payload = serde_json::json!({
-        "to": to,
+        "to": recipient_email,
         "subject": format!("Work Order Update: {}", work_order_number),
         "body": email_body
     });
 
-    publish_email_task(rabbitmq, email_payload, "work order refusal denied email").await
+    publish_email_task(rabbitmq_connection, email_payload, "work order refusal denied email").await
 }
 
+/// Notify a customer that a specific technician has been assigned to their work order.
+
 pub async fn send_work_order_assigned_email(
-    rabbitmq: &Arc<Connection>,
+    rabbitmq_connection: &Arc<Connection>,
     templates: &HashMap<String, String>,
-    to: &str,
-    name: &str,
+    recipient_email: &str,
+    recipient_name: &str,
     work_order_number: &str,
     technician_name: &str,
     appointment: &str,
 ) -> Result<(), AppError> {
-    let escaped_name = v_htmlescape::escape(name).to_string();
+    let escaped_name = v_htmlescape::escape(recipient_name).to_string();
     let escaped_wo_number = v_htmlescape::escape(work_order_number).to_string();
     let escaped_tech_name = v_htmlescape::escape(technician_name).to_string();
     let escaped_appointment = v_htmlescape::escape(appointment).to_string();
@@ -185,27 +197,64 @@ pub async fn send_work_order_assigned_email(
     };
 
     let email_payload = serde_json::json!({
-        "to": to,
+        "to": recipient_email,
         "subject": format!("Work Order Assigned: {}", work_order_number),
         "body": email_body
     });
     
-    publish_email_task(rabbitmq, email_payload, "work order assigned email").await
+    publish_email_task(rabbitmq_connection, email_payload, "work order assigned email").await
+}
+
+pub async fn send_work_order_reassigned_email(
+    rabbitmq: &Arc<Connection>,
+    templates: &HashMap<String, String>,
+    to: &str,
+    name: &str,
+    work_order_number: &str,
+    technician_name: &str,
+    appointment: &str,
+) -> Result<(), AppError> {
+    let escaped_name = v_htmlescape::escape(name).to_string();
+    let escaped_wo_number = v_htmlescape::escape(work_order_number).to_string();
+    let escaped_tech_name = v_htmlescape::escape(technician_name).to_string();
+    let escaped_appointment = v_htmlescape::escape(appointment).to_string();
+
+    let email_body = if let Some(template_content) = templates.get("work_order_reassigned_email.html") {
+        template_content
+            .replace("{{name}}", &escaped_name)
+            .replace("{{work_order_number}}", &escaped_wo_number)
+            .replace("{{technician_name}}", &escaped_tech_name)
+            .replace("{{appointment}}", &escaped_appointment)
+    } else {
+        tracing::warn!("Template 'work_order_reassigned_email.html' not found in cache! Using minimal HTML fallback.");
+        format!(
+            "<html><body><h2>Work Order Reassigned, {}!</h2><p>Your work order <strong>{}</strong> has been reassigned to technician <strong>{}</strong>.</p><p>Appointment: {}</p></body></html>",
+            escaped_name, escaped_wo_number, escaped_tech_name, escaped_appointment
+        )
+    };
+
+    let email_payload = serde_json::json!({
+        "to": to,
+        "subject": format!("Work Order Reassigned: {}", work_order_number),
+        "body": email_body
+    });
+    
+    publish_email_task(rabbitmq, email_payload, "work order reassigned email").await
 }
 
 /// Generic send_email helper — publishes arbitrary email content via RabbitMQ.
 /// Used by cleanup/cancel flows that don't need templated emails.
 pub async fn send_email(
-    rabbitmq: &Arc<Connection>,
-    to: &str,
+    rabbitmq_connection: &Arc<Connection>,
+    recipient_email: &str,
     subject: &str,
     body: &str,
 ) -> Result<(), AppError> {
     let email_payload = serde_json::json!({
-        "to": to,
+        "to": recipient_email,
         "subject": subject,
         "body": body,
     });
 
-    publish_email_task(rabbitmq, email_payload, "generic email").await
+    publish_email_task(rabbitmq_connection, email_payload, "generic email").await
 }

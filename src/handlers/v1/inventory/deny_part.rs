@@ -3,7 +3,9 @@ use crate::core::state::AppState;
 use crate::core::errors::AppError;
 use crate::model::requests::inventory::deny_part_request::DenyPartRequest;
 
-/// POST /api/v1/inventory/parts/{id}/deny
+/// Handle requests to deny a part registration form with a reason.
+///
+/// **Note: This endpoint is currently unimplemented.**
 pub async fn deny_part(
     State(_state): State<AppState>,
     Path(_id): Path<uuid::Uuid>,

@@ -4,15 +4,21 @@ use tracing::{info, error};
 
 use crate::entities::outbox_records;
 
-/// Cron job that deletes delivered outbox records older than the given retention period.
+/// Create a new cron job that periodically deletes delivered outbox records.
 ///
-/// Runs daily at 03:00 (system time).
+/// The job runs daily at 03:00 (system time).
+///
+/// # Arguments
+/// * `db_connection` - The MySQL database connection pool to execute the deletion.
+///
+/// # Returns
+/// A result containing the `tokio_cron_scheduler::Job` or an `anyhow::Error`.
 pub fn clean_up_outbox_job(
-    db: sea_orm::DatabaseConnection,
+    db_connection: sea_orm::DatabaseConnection,
 ) -> Result<Job, anyhow::Error> {
     // Run daily at 03:00: "0 0 3 * * *"
     let job = Job::new_async("0 0 3 * * *", move |_uuid, _l| {
-        let db_clone = db.clone();
+        let db_clone = db_connection.clone();
         Box::pin(async move {
             info!("Running outbox cleanup job...");
 

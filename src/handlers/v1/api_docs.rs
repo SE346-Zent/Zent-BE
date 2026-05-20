@@ -30,7 +30,11 @@ use crate::model::{
             list_query::WorkOrderQuery,
             start_request::StartWorkOrderRequest,
             approve_refusal_request::ApproveRefusalRequest,
+            complaint_request::ComplaintWorkOrderRequest,
+            reassign_request::ReassignWorkOrderRequest,
             refuse_request::{RefuseWorkOrderRequest, RefuseWorkOrderMultipart},
+            change_appointment_request::ChangeAppointmentRequest,
+            reject_form_query::RejectFormQuery,
         },
         notifications::{
             list_query::NotificationListQuery,
@@ -45,7 +49,9 @@ use crate::model::{
             create_response::WorkOrderResponseData,
             list_response::WorkOrderListItem,
             details_response::WorkOrderDetails,
-            history_response::WorkOrderStateHistoryEntry,
+            history_response::{WorkOrderStateHistoryEntry, WorkOrderHistoryDetail, ClosingFormEntry, ComplaintEntry},
+            reject_form_list_response::RejectFormListItem,
+            reject_form_detail_response::RejectFormDetail,
         },
         notifications::{
             notification_list_response::NotificationListItem,
@@ -58,7 +64,12 @@ use crate::model::{
 
 use crate::core::errors::ErrorResponse;
 
-use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
+use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, chat};
+
+// API Documentation Service (v1)
+//
+// This module provides the OpenAPI/utoipa configuration and the Scalar UI
+// for interactive API documentation, protected by basic authentication.
 
 #[derive(OpenApi)]
 #[openapi(
@@ -84,6 +95,11 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
         work_orders::deny_refusal,
         work_orders::history,
         work_orders::cancel,
+        work_orders::complaint,
+        work_orders::reassign,
+        work_orders::change_appointment,
+        work_orders::reject_form_list,
+        work_orders::reject_form_detail,
         notifications::list::list,
         notifications::get_preferences::get_preferences,
         notifications::update_preferences::update_preferences,
@@ -91,6 +107,9 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
         media::upload_closing_form_photo,
         media::update_closing_form_photo,
         media::upload_closing_form_signature,
+        chat::list_rooms::list_rooms,
+        chat::get_messages::get_messages,
+        chat::upload_attachment::upload_attachment,
     ),
     components(
         schemas(
@@ -108,6 +127,9 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
             crate::model::requests::work_orders::assign_request::AssignWorkOrderRequest,
             crate::model::requests::work_orders::complete_request::CompleteWorkOrderRequest,
             crate::model::requests::work_orders::cancel_request::CancelWorkOrderRequest,
+            ComplaintWorkOrderRequest,
+            ReassignWorkOrderRequest,
+            ChangeAppointmentRequest,
             crate::model::requests::work_orders::complete_request::PartChangeInput,
             LoginResponseData,
             VerifyForgotPasswordOtpResponseData,
@@ -124,10 +146,20 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
             ApproveRefusalRequest,
             crate::model::requests::inventory::add_parts_request::AddPartsRequest,
             WorkOrderStateHistoryEntry,
+            WorkOrderHistoryDetail,
+            ClosingFormEntry,
+            ComplaintEntry,
+            RejectFormQuery,
+            RejectFormListItem,
+            RejectFormDetail,
             NotificationListQuery,
             UpdateNotificationPreferenceRequest,
             NotificationListItem,
             NotificationPreferenceResponse,
+            crate::model::responses::chat::room_response::ChatRoomResponse,
+            crate::model::responses::chat::message_response::MessageResponse,
+            crate::model::requests::chat::list_rooms_query::ListRoomsQuery,
+            crate::handlers::v1::chat::upload_attachment::AttachmentUploadResponse,
         )
     ),
     modifiers(&SecurityAddon),
@@ -137,6 +169,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications};
         (name = "inventory", description = "Inventory management"),
         (name = "notifications", description = "Notification management"),
         (name = "media", description = "Media/OCI endpoints"),
+        (name = "chat", description = "Chat & messaging endpoints"),
     )
 )]
 pub struct ApiDoc;
@@ -158,12 +191,14 @@ impl Modify for SecurityAddon {
     }
 }
 
+/// Middleware to enforce basic authentication for the interactive API documentation UI.
+
 async fn check_docs_auth(
-    req: Request<axum::body::Body>,
-    next: Next,
+    request: Request<axum::body::Body>,
+    next_middleware_service: Next,
 ) -> Result<Response, impl IntoResponse> {
     let config = AppConfig::get();
-    let auth_header = req
+    let auth_header = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok());
@@ -174,10 +209,10 @@ async fn check_docs_auth(
                 if let Ok(credentials) = String::from_utf8(decoded) {
                     let parts: Vec<&str> = credentials.splitn(2, ':').collect();
                     if parts.len() == 2 {
-                        let user_ok = parts[0].as_bytes().ct_eq(config.docs_username.as_bytes());
-                        let pass_ok = parts[1].as_bytes().ct_eq(config.docs_password.as_bytes());
-                        if user_ok.unwrap_u8() == 1 && pass_ok.unwrap_u8() == 1 {
-                            return Ok(next.run(req).await);
+                        let is_username_valid = parts[0].as_bytes().ct_eq(config.docs_username.as_bytes());
+                        let is_password_valid = parts[1].as_bytes().ct_eq(config.docs_password.as_bytes());
+                        if is_username_valid.unwrap_u8() == 1 && is_password_valid.unwrap_u8() == 1 {
+                            return Ok(next_middleware_service.run(request).await);
                         }
                     }
                 }
@@ -193,6 +228,8 @@ async fn check_docs_auth(
 
     Err(response)
 }
+
+/// Initialize the documentation router, mounting the Scalar UI with auth protection.
 
 pub fn router() -> axum::Router<crate::core::state::AppState> {
     axum::Router::new()

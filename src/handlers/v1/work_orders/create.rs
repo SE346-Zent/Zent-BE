@@ -7,6 +7,7 @@ use crate::core::errors::ErrorResponse;
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::AppError;
 use crate::core::config::AppConfig;
+use crate::core::state::AppState;
 use crate::extractor::auth_user::AuthUser;
 use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::work_orders::create_work_order_request::CreateWorkOrderRequest;
@@ -33,10 +34,10 @@ use super::IDEMPOTENCY_PENDING;
 )]
 pub async fn create(
     Extension(auth): Extension<AuthUser>,
+    State(state): State<AppState>,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
     State(valkey_client): State<Option<Arc<ValkeyClient>>>,
-    State(rabbitmq): State<Option<Arc<lapin::Connection>>>,
     headers: axum::http::HeaderMap,
     Json(payload): Json<CreateWorkOrderRequest>,
 ) -> Result<Json<ApiResponse<WorkOrderResponseData>>, AppError> {
@@ -65,21 +66,13 @@ pub async fn create(
                 Some(val) if val == IDEMPOTENCY_PENDING => { tokio::time::sleep(poll_delay).await; }
                 Some(json_str) => {
                     let cached_val: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| AppError::Internal(e.into()))?;
-
-                    // cached_val is {"payload": <full request body>, "response": <response>}
-                    // Compare the current request body directly against the cached payload
                     let current_payload = serde_json::to_value(&payload).map_err(|e| AppError::Internal(e.into()))?;
                     if current_payload == cached_val["payload"] {
-                        // Same payload — genuine retry (e.g. network timeout), return cached response
                         let response: WorkOrderResponseData = serde_json::from_value(cached_val["response"].clone()).map_err(|e| AppError::Internal(e.into()))?;
                         return Ok(Json(ApiResponse::success(201, "Work order created successfully", response)));
                     }
-
-                    // Different payload — the same idempotency key was used with a
-                    // different request body. Reject to prevent silent overwrites.
                     return Err(AppError::Conflict(format!(
-                        "Idempotency key '{}' was already used with a different request body",
-                        key
+                        "Idempotency key '{}' was already used with a different request body", key
                     )));
                 }
             }
@@ -103,39 +96,54 @@ pub async fn create(
     let effect = create_svc::decide_create_work_order(payload.clone(), auth.user.id, pending_status_id)?;
 
     let wo_model = db.transaction::<_, work_orders_ent::Model, AppError>(|txn| Box::pin(async move {
-        let wo = effect.work_order.insert(txn).await?;
-        effect.state_history.insert(txn).await?;
+        let wo = effect.work_order_model.insert(txn).await?;
+        effect.state_history_model.insert(txn).await?;
         Ok(wo)
     })).await.map_err(|e| match e {
         sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
         sea_orm::TransactionError::Transaction(e) => e,
     })?;
 
-    // Write-through cache: store full WorkOrderDetails in cache and bump list generation
+    // Write-through cache
     super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), wo_model.id).await;
 
-    // Publish to MQ for asynchronous auto-assignment
-    if let Some(rmq) = rabbitmq.as_ref() {
-        let producer = crate::infrastructure::mq::work_order::WorkOrderProducer::new(Some(rmq.clone()));
-        let payload = serde_json::json!({ "id": wo_model.id });
-        match serde_json::to_vec(&payload) {
-            Ok(payload_bytes) => {
-                tracing::info!("Publishing WO {} to MQ for auto-assignment", wo_model.id);
-                if let Err(e) = producer.publish_created(&payload_bytes).await {
-                    tracing::warn!("Failed to publish WO {} to MQ: {} — auto-assign will not run", wo_model.id, e);
-                }
+    // --- Direct auto-assign ---
+    // Spawn as a background task so it doesn't block the HTTP response.
+    {
+        let state_clone = state.clone();
+        let db_clone = db.clone();
+        let wo_id = wo_model.id;
+        tokio::spawn(async move {
+            let wo_fresh = match work_orders_ent::Entity::find_by_id(wo_id).one(db_clone.as_ref()).await {
+                Ok(Some(w)) => w,
+                Ok(None) => { tracing::warn!("WO {} not found for direct auto-assign", wo_id); return; }
+                Err(e) => { tracing::warn!("Failed to fetch WO {} for direct auto-assign: {}", wo_id, e); return; }
+            };
+            tracing::info!("Running auto-assign directly for WO {}", wo_id);
+            let success = super::try_auto_assign_single(&state_clone, db_clone, wo_fresh).await;
+            if !success {
+                tracing::info!("Direct auto-assign did not complete for WO {} — admin may need to assign manually", wo_id);
             }
-            Err(e) => {
-                tracing::warn!("Failed to serialize WO {} for MQ: {} — auto-assign will not run", wo_model.id, e);
-            }
-        }
-    } else {
-        tracing::warn!("RabbitMQ not available — WO {} will not be auto-assigned", wo_model.id);
+        });
     }
 
-    let status_text = "Pending assignment".to_string();
+    // --- MQ publish (commented out — direct call is the sole path) ---
+    // {
+    //     let producer = crate::infrastructure::mq::work_order::WorkOrderProducer::new();
+    //     let mq_payload = serde_json::json!({ "id": wo_model.id });
+    //     if let Ok(payload_bytes) = serde_json::to_vec(&mq_payload) {
+    //         tracing::info!("Publishing WO {} to MQ for auto-assignment", wo_model.id);
+    //         if let Err(e) = producer.publish_created(&payload_bytes).await {
+    //             tracing::warn!("Failed to publish WO {} to MQ: {}", wo_model.id, e);
+    //         }
+    //     }
+    // }
 
-    let response = WorkOrderResponseData { id: wo_model.id, work_order_number: wo_model.work_order_number, status: status_text };
+    let response = WorkOrderResponseData {
+        id: wo_model.id,
+        work_order_number: wo_model.work_order_number,
+        status: "Pending assignment".to_string(),
+    };
 
     if let (Some(mut conn), Some(cache_key)) = (conn_opt, cache_key_opt) {
         let _: () = conn.set_ex(&cache_key, json!({"payload":payload,"response":response}).to_string(), cfg.idempotency_final_ttl_seconds).await?;

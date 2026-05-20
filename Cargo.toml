@@ -10,7 +10,7 @@ default-members = [".", "migration", "seeder"]
 [dependencies]
 anyhow = "1.0.102"
 argon2 = { version = "0.5.3", features = ["std"] }
-axum = { version = "0.8.8", features = ["multipart", "macros"] }
+axum = { version = "0.8.8", features = ["multipart", "macros", "ws"] }
 axum-extra = { version = "0.12.5", features = ["typed-header"] }
 base64 = "0.22.1"
 chrono = { version = "0.4.44", features = ["serde"] }
@@ -21,6 +21,7 @@ geo = { version = "0.32.0", features = ["serde"] }
 http = "1.4.0"
 image = { version = "0.25.9", features = ["serde"] }
 lapin = "2.3.4"
+tokio-executor-trait = "2.1"
 jsonwebtoken = { version = "10.3.0", features = ["hmac", "rust_crypto"] }
 lettre = { version = "0.11.19", features = [
     "serde",

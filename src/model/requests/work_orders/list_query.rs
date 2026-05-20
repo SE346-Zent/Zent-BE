@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use uuid::Uuid;
+use chrono::NaiveDate;
 use crate::model::requests::pagination::PaginationRequest;
 
 #[derive(Deserialize, Debug, utoipa::IntoParams, utoipa::ToSchema)]
@@ -15,4 +16,8 @@ pub struct WorkOrderQuery {
     
     /// Optional filter by technician ID (Super Admin and Admin only)
     pub technician_id: Option<Uuid>,
+
+    /// Optional filter by appointment date (format: YYYY-MM-DD). Returns work orders whose
+    /// appointment falls within that date.
+    pub date: Option<NaiveDate>,
 }

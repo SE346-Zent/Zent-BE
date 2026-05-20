@@ -4,3 +4,4 @@ pub mod inventory;
 pub mod notifications;
 pub mod work_orders;
 pub mod media;
+pub mod chat;

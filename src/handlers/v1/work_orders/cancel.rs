@@ -11,6 +11,8 @@ use crate::model::requests::work_orders::cancel_request::CancelWorkOrderRequest;
 use crate::model::responses::base::ApiResponse;
 use crate::entities::users;
 
+/// Cancel a work order, subject to business rules regarding lead time before the appointment.
+
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/cancel", request_body = CancelWorkOrderRequest,
     responses(
@@ -51,8 +53,8 @@ pub async fn cancel(
     )?;
 
     db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
-        effect.work_order.update(txn).await?;
-        effect.state_history.insert(txn).await?;
+        effect.work_order_model.update(txn).await?;
+        effect.state_history_model.insert(txn).await?;
         Ok(())
     }))
     .await.map_err(|e| match e {

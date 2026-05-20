@@ -7,12 +7,23 @@ use crate::{
     entities::{work_order_reject_forms, work_order_state_history, work_orders},
 };
 
+/// Represents the calculated results and side-effects of an administrator approving a refusal.
+
 #[derive(Debug)]
 pub struct ApproveRefusalEffect {
-    pub work_order: work_orders::ActiveModel,
-    pub reject_form: work_order_reject_forms::ActiveModel,
-    pub state_history: work_order_state_history::ActiveModel,
+    /// The database model for the updated work order (transitioned to 'Refused' status).
+    pub work_order_model: work_orders::ActiveModel,
+    /// The database model for the updated rejection form (marked as approved).
+    pub reject_form_model: work_order_reject_forms::ActiveModel,
+    /// The database model for the state history entry recording the refusal approval.
+    pub state_history_model: work_order_state_history::ActiveModel,
 }
+
+/// Determine the outcome of approving a technician's refusal of a work order.
+///
+/// This function verifies that the work order and rejection form are correctly linked,
+/// marks the form as approved by the administrator, and transitions the work order
+/// to a permanent 'Refused' status.
 
 /// Admin approves the technician's refusal.
 /// This means the admin accepts the reason and permanently refuses the work order.
@@ -20,38 +31,38 @@ pub fn decide_approve_refusal(
     work_order: work_orders::Model,
     reject_form: work_order_reject_forms::Model,
     admin_id: Uuid,
-    refused_status_id: i32,
+    target_refused_status_id: i32,
 ) -> Result<ApproveRefusalEffect, AppError> {
     if work_order.reject_form_id != Some(reject_form.id) {
         return Err(AppError::BadRequest("Work order does not match this rejection form".to_string()));
     }
 
-    let now = Utc::now();
+    let current_timestamp = Utc::now();
 
     // 1. Mark form as approved
-    let mut active_form: work_order_reject_forms::ActiveModel = reject_form.into();
-    active_form.approved = Set(true);
-    active_form.approver_id = Set(Some(admin_id));
-    active_form.updated_at = Set(Some(now));
+    let mut reject_form_active_model: work_order_reject_forms::ActiveModel = reject_form.into();
+    reject_form_active_model.approved = Set(true);
+    reject_form_active_model.approver_id = Set(Some(admin_id));
+    reject_form_active_model.updated_at = Set(Some(current_timestamp));
 
     // 2. Terminate work order
-    let mut active_wo: work_orders::ActiveModel = work_order.clone().into();
-    active_wo.work_order_status_id = Set(refused_status_id);
-    active_wo.updated_at = Set(now);
+    let mut work_order_active_model: work_orders::ActiveModel = work_order.clone().into();
+    work_order_active_model.work_order_status_id = Set(target_refused_status_id);
+    work_order_active_model.updated_at = Set(current_timestamp);
 
-    let state_history = work_order_state_history::ActiveModel {
+    let state_history_active_model = work_order_state_history::ActiveModel {
         id: Set(Uuid::new_v4()),
         work_order_id: Set(work_order.id),
         from_status_id: Set(Some(work_order.work_order_status_id)),
-        to_status_id: Set(refused_status_id),
+        to_status_id: Set(target_refused_status_id),
         changed_by_id: Set(admin_id),
-        changed_at: Set(now),
+        changed_at: Set(current_timestamp),
     };
 
     Ok(ApproveRefusalEffect {
-        work_order: active_wo,
-        reject_form: active_form,
-        state_history,
+        work_order_model: work_order_active_model,
+        reject_form_model: reject_form_active_model,
+        state_history_model: state_history_active_model,
     })
 }
 
@@ -84,9 +95,12 @@ mod tests {
             work_order_number: "".to_string(),
             reject_form_id: None,
             about_to_start_notified: false,
+            customer_complaint: None,
+            customer_complaint_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
+            chat_room_id: None,
         }
     }
 
@@ -104,32 +118,32 @@ mod tests {
 
     #[test]
     fn test_decide_approve_refusal_success() {
-        let mut wo = dummy_work_order();
-        let rf = dummy_reject_form();
-        wo.reject_form_id = Some(rf.id);
+        let mut work_order = dummy_work_order();
+        let reject_form = dummy_reject_form();
+        work_order.reject_form_id = Some(reject_form.id);
         
         let admin_id = Uuid::new_v4();
-        let rejected_status_id = 99;
+        let target_refused_status_id = 99;
 
-        let result = decide_approve_refusal(wo, rf.clone(), admin_id, rejected_status_id);
+        let result = decide_approve_refusal(work_order, reject_form.clone(), admin_id, target_refused_status_id);
         assert!(result.is_ok());
         let effect = result.unwrap();
 
-        assert_eq!(effect.work_order.work_order_status_id, Set(rejected_status_id));
-        assert_eq!(effect.reject_form.approved, Set(true));
-        assert_eq!(effect.reject_form.approver_id, Set(Some(admin_id)));
-        assert_eq!(effect.state_history.to_status_id, Set(rejected_status_id));
+        assert_eq!(effect.work_order_model.work_order_status_id, Set(target_refused_status_id));
+        assert_eq!(effect.reject_form_model.approved, Set(true));
+        assert_eq!(effect.reject_form_model.approver_id, Set(Some(admin_id)));
+        assert_eq!(effect.state_history_model.to_status_id, Set(target_refused_status_id));
     }
 
     #[test]
     fn test_decide_approve_refusal_mismatch() {
-        let wo = dummy_work_order();
-        let rf = dummy_reject_form();
+        let work_order = dummy_work_order();
+        let reject_form = dummy_reject_form();
         
         let admin_id = Uuid::new_v4();
-        let rejected_status_id = 99;
+        let target_refused_status_id = 99;
 
-        let result = decide_approve_refusal(wo, rf, admin_id, rejected_status_id);
+        let result = decide_approve_refusal(work_order, reject_form, admin_id, target_refused_status_id);
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::BadRequest(msg) => assert_eq!(msg, "Work order does not match this rejection form"),

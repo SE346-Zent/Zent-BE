@@ -3,29 +3,45 @@ use crate::{
     entities::users,
 };
 
-/// Plain struct representing the side-effects that need to be persisted
+/// Represents the calculated results and side-effects of a successful registration OTP verification.
 pub struct VerifyOtpEffect {
-    pub user_id: uuid::Uuid,
-    pub active_status_id: i32,
-    pub email: String,
-    pub full_name: String,
+    /// The unique identifier of the user who has been verified.
+    pub verified_user_id: uuid::Uuid,
+    /// The database ID representing the 'Active' account status.
+    pub target_active_status_id: i32,
+    /// The email address of the verified user.
+    pub user_email: String,
+    /// The full name of the verified user.
+    pub user_full_name: String,
 }
 
-/// Pure logic to decide the outcome of an OTP verification attempt.
+/// Determine the outcome of a registration OTP verification based on the Lua script result and user existence.
+///
+/// This pure function maps the integer codes returned by the Valkey Lua script
+/// to appropriate application-level results, and ensures the user record exists
+/// for the verified email.
+///
+/// # Arguments
+/// * `lua_verification_result` - The integer result code from the `verify_otp` Lua script.
+/// * `user_record` - An optional database model of the user matching the email.
+/// * `target_active_status_id` - The database ID to be assigned to the user upon success.
+///
+/// # Returns
+/// A result containing the `VerifyOtpEffect` on success, or an `AppError`.
 pub fn decide_verify_otp(
-    lua_result: i32,
-    user_model: Option<&users::Model>,
-    active_status_id: i32,
+    lua_verification_result: i32,
+    user_record: Option<&users::Model>,
+    target_active_status_id: i32,
 ) -> Result<VerifyOtpEffect, AppError> {
-    match lua_result {
+    match lua_verification_result {
         1 => {
-            match user_model {
+            match user_record {
                 Some(user) => {
                     Ok(VerifyOtpEffect {
-                        user_id: user.id,
-                        active_status_id,
-                        email: user.email.clone(),
-                        full_name: user.full_name.clone(),
+                        verified_user_id: user.id,
+                        target_active_status_id,
+                        user_email: user.email.clone(),
+                        user_full_name: user.full_name.clone(),
                     })
                 }
                 None => Err(AppError::NotFound("User not found".to_string())),
@@ -34,7 +50,7 @@ pub fn decide_verify_otp(
         -1 => Err(AppError::BadRequest("OTP expired or invalid".to_string())),
         -2 => Err(AppError::BadRequest("Invalid OTP".to_string())),
         -3 => Err(AppError::Forbidden("Too many attempts".to_string())),
-        _ => Err(AppError::Internal(anyhow::anyhow!("Unexpected result: {}", lua_result))),
+        _ => Err(AppError::Internal(anyhow::anyhow!("Unexpected result: {}", lua_verification_result))),
     }
 }
 
@@ -59,6 +75,7 @@ mod tests {
             province: None,
             fcm_token: None,
             installation_id: None,
+            avatar_url: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
@@ -73,20 +90,20 @@ mod tests {
     #[case(-3, false, "Forbidden")] // Too many attempts
     #[case(99, false, "Internal")] // Internal
     fn test_decide_verify_otp_exhaustive(
-        #[case] lua_result: i32,
-        #[case] provide_user: bool,
+        #[case] lua_verification_result: i32,
+        #[case] provide_user_record: bool,
         #[case] expected_result: &str,
         mock_user: users::Model,
     ) {
-        let user_ref = if provide_user { Some(&mock_user) } else { None };
-        let result = decide_verify_otp(lua_result, user_ref, 2);
+        let user_record_ref = if provide_user_record { Some(&mock_user) } else { None };
+        let result = decide_verify_otp(lua_verification_result, user_record_ref, 2);
 
         match expected_result {
             "Ok" => {
                 assert!(result.is_ok());
-                let effect = result.unwrap();
-                assert_eq!(effect.user_id, mock_user.id);
-                assert_eq!(effect.active_status_id, 2);
+                let verify_effect = result.unwrap();
+                assert_eq!(verify_effect.verified_user_id, mock_user.id);
+                assert_eq!(verify_effect.target_active_status_id, 2);
             }
             "NotFound" => {
                 assert!(matches!(result, Err(AppError::NotFound(_))));

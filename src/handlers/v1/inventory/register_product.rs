@@ -4,7 +4,9 @@ use crate::core::errors::AppError;
 use crate::model::requests::inventory::register_product_request::RegisterProductRequest;
 use crate::model::responses::inventory::register_product_response::RegisterProductResponse;
 
-/// POST /api/v1/inventory/products/register
+/// Handle requests to register a new product by a customer.
+///
+/// **Note: This endpoint is currently unimplemented.**
 pub async fn register_product(
     State(_state): State<AppState>,
     Json(_payload): Json<RegisterProductRequest>,

@@ -7,10 +7,32 @@ use crate::{
     entities::{work_orders, users, work_order_state_history},
 };
 
+/// Represents the calculated results and side-effects of a successful automated work order assignment.
+
 pub struct AutoAssignWorkOrderEffect {
-    pub work_order: work_orders::ActiveModel,
-    pub state_history: work_order_state_history::ActiveModel,
+    /// The database model for the work order, updated with the assigned technician.
+    pub work_order_model: work_orders::ActiveModel,
+    /// The database model for the state history entry recording the assignment event.
+    pub state_history_model: work_order_state_history::ActiveModel,
 }
+
+/// Determine the best technician for a work order based on geographical proximity and schedule gaps.
+///
+/// This algorithm finds a technician who is available during the requested appointment time
+/// and prioritizes the one with the largest available gap in their schedule to maintain
+/// a balanced workload.
+///
+/// # Arguments
+/// * `work_order` - The database model for the work order to be assigned.
+/// * `technicians` - A list of eligible technicians to evaluate.
+/// * `technician_agendas` - A mapping of technician IDs to their existing assigned work orders.
+/// * `policies` - System configuration policies (e.g., workday start/end hours, default buffers).
+/// * `assigned_status_id` - The database ID for the 'Assigned' status.
+/// * `done_status_id` - The database ID for the 'Completed' status (to exclude finished jobs from agenda analysis).
+/// * `system_user_id` - The unique ID of the system/automated actor performing the assignment.
+///
+/// # Returns
+/// A result containing an `Option<AutoAssignWorkOrderEffect>` if a suitable technician is found, or an `AppError`.
 
 pub fn decide_auto_assign(
     work_order: work_orders::Model,
@@ -22,7 +44,7 @@ pub fn decide_auto_assign(
     system_user_id: Uuid,
 ) -> Result<Option<AutoAssignWorkOrderEffect>, AppError> {
     let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap();
-    let j_new_s = work_order.appointment.with_timezone(&tz_offset);
+    let target_appointment_start = work_order.appointment.with_timezone(&tz_offset);
 
     let workday_start: u32 = policies.get("workday_start")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing workday_start policy")))?
@@ -34,7 +56,7 @@ pub fn decide_auto_assign(
         .unwrap_or(5);
     
     let buffer = Duration::hours(buffer_hours);
-    let j_new_e = j_new_s + buffer;
+    let target_appointment_end = target_appointment_start + buffer;
 
     let mut best_technician_id = None;
     let mut max_delta = Duration::milliseconds(-1);
@@ -44,54 +66,54 @@ pub fn decide_auto_assign(
         // sort by appointment
         agenda.sort_by_key(|wo| wo.appointment);
 
-        let mut j_minus_1 = None;
-        let mut j_plus_1 = None;
+        let mut previous_appointment_start = None;
+        let mut next_appointment_start = None;
 
         for job in &agenda {
             if job.id == work_order.id || job.work_order_status_id == done_status_id {
                 continue;
             }
-            let job_s = job.appointment.with_timezone(&tz_offset);
+            let other_appointment_start = job.appointment.with_timezone(&tz_offset);
             
             // Only care about jobs on the same day
-            if job_s.date_naive() != j_new_s.date_naive() {
+            if other_appointment_start.date_naive() != target_appointment_start.date_naive() {
                 continue;
             }
 
-            if job_s <= j_new_s {
-                j_minus_1 = Some(job_s);
-            } else if j_plus_1.is_none() {
-                j_plus_1 = Some(job_s);
+            if other_appointment_start <= target_appointment_start {
+                previous_appointment_start = Some(other_appointment_start);
+            } else if next_appointment_start.is_none() {
+                next_appointment_start = Some(other_appointment_start);
             }
         }
 
         // Calculate estimated completion of previous job
-        let j_minus_1_e = match j_minus_1 {
+        let previous_appointment_end = match previous_appointment_start {
             Some(s) => s + buffer,
             None => {
-                let start = j_new_s.date_naive().and_hms_opt(workday_start, 0, 0).unwrap();
+                let start = target_appointment_start.date_naive().and_hms_opt(workday_start, 0, 0).unwrap();
                 tz_offset.from_local_datetime(&start).unwrap()
             }
         };
 
         // Check validity conditions
-        if j_minus_1_e > j_new_s {
+        if previous_appointment_end > target_appointment_start {
             continue; // Overlaps with previous job
         }
 
-        if let Some(j_plus_1_s) = j_plus_1 {
-            if j_new_e > j_plus_1_s {
+        if let Some(next_appointment_start_val) = next_appointment_start {
+            if target_appointment_end > next_appointment_start_val {
                 continue; // Overlaps with next job
             }
         }
 
         // Compute delta (gap difference)
-        let delta = if let Some(j_plus_1_s) = j_plus_1 {
-            let d1 = j_new_s - j_minus_1_e;
-            let d2 = j_plus_1_s - j_new_e;
+        let delta = if let Some(next_appointment_start_val) = next_appointment_start {
+            let d1 = target_appointment_start - previous_appointment_end;
+            let d2 = next_appointment_start_val - target_appointment_end;
             if d1 < d2 { d1 } else { d2 }
         } else {
-            j_new_s - j_minus_1_e
+            target_appointment_start - previous_appointment_end
         };
 
         if delta > max_delta {
@@ -115,7 +137,7 @@ pub fn decide_auto_assign(
             changed_at: Set(Utc::now()),
         };
 
-        Ok(Some(AutoAssignWorkOrderEffect { work_order: active_wo, state_history }))
+        Ok(Some(AutoAssignWorkOrderEffect { work_order_model: active_wo, state_history_model: state_history }))
     } else {
         Ok(None)
     }
@@ -150,9 +172,12 @@ mod tests {
             work_order_number: "".to_string(),
             reject_form_id: None,
             about_to_start_notified: false,
+            customer_complaint: None,
+            customer_complaint_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
+            chat_room_id: None,
         }
     }
 
@@ -168,6 +193,7 @@ mod tests {
             province: Some("".to_string()),
             fcm_token: None,
             installation_id: None,
+            avatar_url: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
@@ -204,7 +230,7 @@ mod tests {
         let result = decide_auto_assign(wo, technicians, agendas, &policies, 2, 4, Uuid::new_v4());
         assert!(result.is_ok());
         let effect = result.unwrap().unwrap();
-        assert_eq!(effect.work_order.technician_id, Set(Some(tech2_id)));
+        assert_eq!(effect.work_order_model.technician_id, Set(Some(tech2_id)));
     }
 
     #[test]

@@ -5,3 +5,4 @@ pub mod inventory;
 pub mod base;
 pub mod pagination;
 pub mod media;
+pub mod chat;
