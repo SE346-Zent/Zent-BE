@@ -49,26 +49,27 @@ pub async fn send_notification(
         // Never save chat messages to MongoDB (no bell icon listing)
         // Only send FCM push when the user is offline
         let ws_manager = crate::infrastructure::ws::get_ws_manager();
-        if ws_manager.is_connected(&user_id).await {
-            info!("User {} is online — chat message delivered via WS, skipping FCM", user_id);
+        if ws_manager.is_connected(&recipient_user_id).await {
+            info!("User {} is online — chat message delivered via WS, skipping FCM", recipient_user_id);
             return Ok(());
         }
         // User is offline: check preferences, then send FCM
-        if !is_push_enabled_for_user(mongodb, user_id, category_id).await {
-            info!("Push disabled for user {} — skipping chat FCM", user_id);
+        if !is_push_enabled_for_user(mongodb_db, recipient_user_id, category_id).await {
+            info!("Push disabled for user {} — skipping chat FCM", recipient_user_id);
             return Ok(());
         }
         // Fall through to outbox creation below (no MongoDB save, no Valkey increment)
     } else {
         // ── All other categories: bell icon + optional FCM ─────────
         // 1. Save to MongoDB (in-app bell-icon notification list)
-        save_notification_to_mongodb(mongodb, notification_id, user_id, category_id, title, body, &data, now)
+        save_notification_to_mongodb(mongodb_db, notification_id, recipient_user_id, category_id, notification_title, notification_body, &notification_data, current_timestamp)
             .await
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to save notification to MongoDB: {}", e)))?;
 
-    // ── 2. Increment Valkey unread counter ─────────────────────────
-    if let Some(vk) = valkey_client.as_ref() {
-        increment_unread_count(vk, recipient_user_id).await;
+        // ── 2. Increment Valkey unread counter ─────────────────────────
+        if let Some(vk) = valkey_client.as_ref() {
+            increment_unread_count(vk, recipient_user_id).await;
+        }
     }
 
     // ── 3. Check user preferences — skip outbox if push disabled ──

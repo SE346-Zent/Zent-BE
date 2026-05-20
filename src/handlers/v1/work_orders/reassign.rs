@@ -70,8 +70,8 @@ pub async fn reassign(
     )?;
 
     db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
-        effect.work_order.update(txn).await?;
-        effect.state_history.insert(txn).await?;
+        effect.work_order_model.update(txn).await?;
+        effect.state_history_model.insert(txn).await?;
         Ok(())
     }))
     .await.map_err(|e| match e {

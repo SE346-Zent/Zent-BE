@@ -89,7 +89,6 @@ pub fn decide_login(
     let session_expires_at = Utc::now() + chrono::Duration::seconds(session_duration_seconds);
 
     Ok(LoginEffect {
-        session,
         session_id,
         user_id: user_record.id,
         refresh_token_hash: token_bundle.refresh_token_hash,
@@ -138,6 +137,7 @@ mod tests {
             province: None,
             fcm_token: None,
             installation_id: None,
+            avatar_url: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: if deleted { Some(Utc::now()) } else { None },

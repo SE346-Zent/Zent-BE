@@ -105,7 +105,7 @@ pub fn decide_reassign_work_order(
     };
 
     Ok(AssignWorkOrderEffect {
-        work_order: active_wo,
-        state_history,
+        work_order_model: active_wo,
+        state_history_model: state_history,
     })
 }

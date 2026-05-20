@@ -54,10 +54,10 @@ pub async fn add_parts(
 
     let effect = crate::services::v1::inventory::add_parts::decide_add_parts(payload, wo, auth.user.id)?;
 
-    db_connection.transaction::<_, (), AppError>(|txn| Box::pin(async move {
-        add_parts_effect.part_form_model.insert(txn).await?;
-        for image_model in add_parts_effect.image_models { image_model.insert(txn).await?; }
-        for link_model in add_parts_effect.image_link_models { link_model.insert(txn).await?; }
+    db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
+        effect.part_form_model.insert(txn).await?;
+        for image_model in effect.image_models { image_model.insert(txn).await?; }
+        for link_model in effect.image_link_models { link_model.insert(txn).await?; }
         Ok(())
     })).await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 
