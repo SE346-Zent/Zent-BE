@@ -24,6 +24,7 @@ use crate::model::{
             verify_forgot_password_otp_request::VerifyForgotPasswordOtpRequest,
             reset_password_request::ResetPasswordRequest,
             logout_request::LogoutRequest,
+            change_password_request::ChangePasswordRequest,
         },
         work_orders::{
             create_work_order_request::CreateWorkOrderRequest,
@@ -100,6 +101,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
         auth::forgot_password_handler,
         auth::verify_forgot_password_otp_handler,
         auth::reset_password_handler,
+        auth::change_password_handler,
         work_orders::create,
         work_orders::list,
         work_orders::get_details,
@@ -139,6 +141,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
             VerifyForgotPasswordOtpRequest,
             ResetPasswordRequest,
             LogoutRequest,
+            ChangePasswordRequest,
             CreateWorkOrderRequest,
             WorkOrderQuery,
             crate::model::requests::work_orders::assign_request::AssignWorkOrderRequest,

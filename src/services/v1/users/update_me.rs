@@ -17,8 +17,44 @@ pub struct UpdateMeEffect {
 }
 
 /// Validate and prepare the profile update.
-pub fn decide_update_me(_user: users::Model, _req: ProfileUpdateRequest) -> Result<UpdateMeEffect, AppError> {
-    unimplemented!()
+///
+/// Only the owner of the account can update their profile (enforced by AuthUser extraction).
+/// Deleted accounts are rejected. Only provided fields are updated; omitted fields keep
+/// their current value.
+pub fn decide_update_me(user: users::Model, req: ProfileUpdateRequest) -> Result<UpdateMeEffect, AppError> {
+    // Reject deleted accounts
+    if user.deleted_at.is_some() {
+        return Err(AppError::Unauthorized("Account is deactivated".to_string()));
+    }
+
+    let new_name = req.full_name.unwrap_or_else(|| user.full_name.clone());
+    let new_email = req.email.unwrap_or_else(|| user.email.clone());
+    let new_phone = req.phone.unwrap_or_else(|| user.phone_number.clone());
+
+    let now = chrono::Utc::now();
+
+    let user_active_model = users::ActiveModel {
+        id: sea_orm::Set(user.id),
+        full_name: sea_orm::Set(new_name.clone()),
+        email: sea_orm::Set(new_email.clone()),
+        phone_number: sea_orm::Set(new_phone.clone()),
+        updated_at: sea_orm::Set(now),
+        ..Default::default()
+    };
+
+    let response_data = MeResponseData {
+        id: user.id,
+        role_id: user.role_id,
+        full_name: new_name,
+        email: new_email,
+        phone: Some(new_phone),
+        province: user.province,
+        account_status_id: user.account_status,
+        created_at: user.created_at.to_rfc3339(),
+        updated_at: now.to_rfc3339(),
+    };
+
+    Ok(UpdateMeEffect { user_active_model, response_data })
 }
 
 #[cfg(test)]

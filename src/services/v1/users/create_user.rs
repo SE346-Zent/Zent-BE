@@ -27,8 +27,8 @@ pub fn decide_can_create_user(current_user: users::Model, req: UserCreateRequest
 
     // Determine allowed target roles based on current role
     let allowed = match current_role {
-        2 => target_role == 1 || target_role == 2 || target_role == 4, // SA → SA, Admin, Tech
-        1 => target_role == 3 || target_role == 4,                     // Admin → Customer, Tech
+        2 => target_role == 1 || target_role == 4, // SA → SA, Admin, Tech
+        1 => target_role == 4,                     // Admin → Customer, Tech
         _ => false,
     };
 
@@ -66,19 +66,13 @@ pub fn decide_can_create_user(current_user: users::Model, req: UserCreateRequest
         ..Default::default()
     };
 
-    // Handle password: use provided, or mark for generation
-    let plain_password = if let Some(pwd) = req.password {
-        Some(pwd)
-    } else if req.generate_password.unwrap_or(false) {
-        let generated = crate::utils::otp::generate_6digit_otp();
-        Some(generated)
-    } else {
-        None
-    };
+    // Password: always auto-generated — first 6 chars of a fresh UUID
+    let raw_uuid = uuid::Uuid::new_v4().to_string();
+    let plain_password: String = raw_uuid.chars().take(6).collect();
 
     Ok(CreateUserEffect {
         user_active_model,
-        plain_password,
+        plain_password: Some(plain_password),
     })
 }
 

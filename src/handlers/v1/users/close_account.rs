@@ -1,6 +1,6 @@
 use axum::{extract::State, Json};
 use std::sync::Arc;
-use sea_orm::DatabaseConnection;
+use sea_orm::{DatabaseConnection, ActiveModelTrait};
 use crate::{
     core::errors::AppError,
     extractor::auth_user::AuthUser,
@@ -20,9 +20,10 @@ use crate::{
     security(("jwt" = []))
 )]
 pub async fn close_account_handler(
-    State(_db): State<Arc<DatabaseConnection>>,
+    State(db): State<Arc<DatabaseConnection>>,
     AuthUser { user, .. }: AuthUser,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    close_account::decide_close_account(user)?;
+    let effect = close_account::decide_close_account(user)?;
+    effect.user_active_model.update(db.as_ref()).await?;
     Ok(Json(ApiResponse::success(200, "Account closed successful", ())))
 }

@@ -11,8 +11,19 @@ pub struct GetMeEffect {
 }
 
 /// Retrieve the current user's profile information.
-pub fn decide_get_me(_user: users::Model) -> GetMeEffect {
-    unimplemented!()
+pub fn decide_get_me(user: users::Model) -> GetMeEffect {
+    let response_data = MeResponseData {
+        id: user.id,
+        role_id: user.role_id,
+        full_name: user.full_name,
+        email: user.email,
+        phone: Some(user.phone_number),
+        province: user.province,
+        account_status_id: user.account_status,
+        created_at: user.created_at.to_rfc3339(),
+        updated_at: user.updated_at.to_rfc3339(),
+    };
+    GetMeEffect { response_data }
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use axum::{extract::State, Json};
 use std::sync::Arc;
-use sea_orm::DatabaseConnection;
+use sea_orm::{DatabaseConnection, ActiveModelTrait};
 use crate::{
     core::errors::AppError,
     extractor::auth_user::AuthUser,
@@ -23,10 +23,11 @@ use crate::{
     security(("jwt" = []))
 )]
 pub async fn update_me_handler(
-    State(_db): State<Arc<DatabaseConnection>>,
+    State(db): State<Arc<DatabaseConnection>>,
     AuthUser { user, .. }: AuthUser,
     Json(payload): Json<ProfileUpdateRequest>,
 ) -> Result<Json<ApiResponse<MeResponseData>>, AppError> {
     let effect = update_me::decide_update_me(user, payload)?;
+    effect.user_active_model.update(db.as_ref()).await?;
     Ok(Json(ApiResponse::success(200, "Update profile successful", effect.response_data)))
 }
