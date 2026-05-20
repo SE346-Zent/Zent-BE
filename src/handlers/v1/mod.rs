@@ -4,6 +4,7 @@ pub mod media;
 pub mod notifications;
 pub mod work_orders;
 pub mod inventory;
+pub mod chat;
 
 use axum::{Router, middleware};
 use crate::core::state::AppState;
@@ -19,7 +20,8 @@ pub fn router(state: AppState) -> Router<AppState> {
         .nest("/work_orders", work_orders_router(state.clone()))
         .nest("/inventory", inventory::router(state.clone()))
         .nest("/notifications", notifications::notifications_router(state.clone()))
-        .nest("/media", media::media_router(state))
+        .nest("/media", media::media_router(state.clone()))
+        .nest("/chat", chat::router(state))
 }
 
 /// Configure the work order sub-router with role-based access control and detailed endpoints.
@@ -27,6 +29,7 @@ pub fn router(state: AppState) -> Router<AppState> {
 fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(work_orders::create))
+        .route("/{id}/complaint", axum::routing::post(work_orders::complaint))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Customer]),
@@ -46,9 +49,13 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/cancel", axum::routing::post(work_orders::cancel))
         .route("/{id}/refusal/approve", axum::routing::post(work_orders::approve_refusal))
         .route("/{id}/refusal/deny", axum::routing::post(work_orders::deny_refusal))
+        .route("/{id}/reassign", axum::routing::post(work_orders::reassign))
+        .route("/{id}/change-appointment", axum::routing::post(work_orders::change_appointment))
+        .route("/reject_forms", axum::routing::get(work_orders::reject_form_list))
+        .route("/reject_forms/{id}", axum::routing::get(work_orders::reject_form_detail))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            require_role::<AppState>(&[Role::Admin]),
+            require_role::<AppState>(&[Role::Admin, Role::SuperAdmin]),
         ));
 
     let list_route = Router::new()

@@ -111,6 +111,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state.valkey.clone(),
         state.rabbitmq.clone(),
     ).expect("Failed to build auto assign job");
+
+    let escalation_job = infrastructure::cron_tasks::escalation::build_escalation_job(
+        db.clone(),
+        state.lookup_tables.clone(),
+        state.mongodb.clone(),
+        state.valkey.clone(),
+    ).expect("Failed to build escalation job");
     
     app_scheduler.register_job(user_cleanup_job)
         .await
@@ -127,6 +134,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     app_scheduler.register_job(auto_assign_job)
         .await
         .expect("Failed to register auto assign job");
+
+    app_scheduler.register_job(escalation_job)
+        .await
+        .expect("Failed to register escalation job");
+
+    let chat_room_cleanup_job = infrastructure::cron_tasks::cleanup_chat_rooms::build_cleanup_chat_rooms_job(
+        db.clone(),
+        state.lookup_tables.clone(),
+    ).expect("Failed to build chat room cleanup job");
+
+    app_scheduler.register_job(chat_room_cleanup_job)
+        .await
+        .expect("Failed to register chat room cleanup job");
 
     let outbox_cleanup_job = infrastructure::cron_tasks::cleanup_outbox::clean_up_outbox_job(
         db.clone(),
@@ -169,6 +189,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build();
 
     let app = Router::new()
+        .route("/chat", axum::routing::get(handlers::v1::chat::ws::ws_handler))
         .nest("/api/v1", handlers::v1::router(state.clone()))
         .route_layer(axum::middleware::from_fn(move |req: axum::extract::Request, next: axum::middleware::Next| {
             let requests_counter = requests_counter.clone();

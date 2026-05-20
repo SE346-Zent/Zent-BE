@@ -1,6 +1,6 @@
 use axum::{extract::{State, Path}, Json, Extension};
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, TransactionTrait};
+use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, TransactionTrait, Set};
 use uuid::Uuid;
 use validator::Validate;
 use sea_orm::{QueryFilter, ColumnTrait};
@@ -10,7 +10,7 @@ use crate::extractor::auth_user::AuthUser;
 use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::work_orders::assign_request::AssignWorkOrderRequest;
 use crate::model::responses::base::ApiResponse;
-use crate::entities::{work_orders as work_orders_ent, users};
+use crate::entities::{work_orders as work_orders_ent, users, chat_rooms, chat_room_members};
 
 /// Assign a work order to a specific technician, performing location and schedule validation.
 
@@ -41,7 +41,10 @@ pub async fn assign(
     // Write-through: use the cache for individual work order instead of querying DB
     let work_order = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
 
-    if auth.role.name == "Admin" {
+    // Province check: only regular Admins are province-scoped; SuperAdmin can assign anywhere
+    let admin_role_id = *luts.roles_by_name.get("Admin")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Admin role missing from lookup tables")))?;
+    if auth.user.role_id == admin_role_id {
         let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Admin has no province assigned".to_string()))?;
         if p != &work_order.province { return Err(AppError::Forbidden("Admin province does not match work order province".to_string())); }
     }
@@ -62,7 +65,7 @@ pub async fn assign(
     let cust = users::Entity::find_by_id(work_order.customer_id).one(db.as_ref()).await?;
 
     // Send push + in-app notifications to both technician and customer
-    if let (Some(t), Some(c)) = (tech.as_ref(), cust.as_ref()) {
+    if let (Some(ref t), Some(ref c)) = (&tech, &cust) {
         let notification_data = serde_json::json!({
             "workOrderId": work_order.id,
             "workOrderNumber": work_order.work_order_number,
@@ -71,7 +74,7 @@ pub async fn assign(
         });
 
         // Notify the technician
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             mongodb.as_ref(),
             valkey_client.clone(),
             db.as_ref(),
@@ -83,7 +86,7 @@ pub async fn assign(
         ).await;
 
         // Notify the customer
-        let _ = crate::services::v1::notifications::send_notification::send_notification(
+        let _ = crate::handlers::v1::notifications::send_notification::send_notification(
             mongodb.as_ref(),
             valkey_client.clone(),
             db.as_ref(),
@@ -97,9 +100,105 @@ pub async fn assign(
 
     // Send email notification (existing)
     if let Some(rmq) = rabbitmq_opt.as_ref() {
-        if let (Some(t), Some(c)) = (tech, cust) {
+        if let (Some(ref t), Some(ref c)) = (&tech, &cust) {
             let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(rmq, &templates, &c.email, &c.full_name, &work_order.work_order_number, &t.full_name, &work_order.appointment.to_string()).await;
         }
     }
+    // Auto-create 1-on-1 chat room between technician and customer
+    if let (Some(ref t), Some(ref c)) = (&tech, &cust) {
+        let room_id = ensure_chat_room(db.as_ref(), t.id, c.id, work_order.id).await?;
+        // Wire the FK on the work order so we can find the room from the WO later
+        work_orders_ent::Entity::update_many()
+            .filter(work_orders_ent::Column::Id.eq(work_order.id))
+            .set(work_orders_ent::ActiveModel {
+                chat_room_id: Set(Some(room_id)),
+                ..Default::default()
+            })
+            .exec(db.as_ref())
+            .await?;
+    }
+
     Ok(Json(ApiResponse::success(200, "Work order assigned successfully", ())))
+}
+
+/// Ensure a 1-on-1 chat room exists between two users. Creates one if not found.
+///
+/// Invariant: exactly one room per user pair. If a room was soft-deleted, it is
+/// reactivated. Only active (non-deleted) memberships are considered when
+/// searching for an existing room — this prevents the inconsistent-state bug
+/// where a room is reactivated but its memberships remain soft-deleted.
+pub(super) async fn ensure_chat_room(
+    db: &DatabaseConnection,
+    user_a: Uuid,
+    user_b: Uuid,
+    work_order_id: Uuid,
+) -> Result<Uuid, AppError> {
+    // Find rooms where user_a is an active member
+    let a_rooms: Vec<Uuid> = chat_room_members::Entity::find()
+        .filter(chat_room_members::Column::UserId.eq(user_a))
+        .filter(chat_room_members::Column::DeletedAt.is_null())
+        .all(db)
+        .await?
+        .into_iter()
+        .map(|m| m.room_id)
+        .collect();
+
+    // Check if any of those rooms also have user_b as an active member
+    if !a_rooms.is_empty() {
+        let shared = chat_room_members::Entity::find()
+            .filter(chat_room_members::Column::RoomId.is_in(a_rooms.clone()))
+            .filter(chat_room_members::Column::UserId.eq(user_b))
+            .filter(chat_room_members::Column::DeletedAt.is_null())
+            .one(db)
+            .await?;
+        if let Some(m) = shared {
+            // Reactivate the room if it was soft-deleted, update work_order link.
+            // Memberships are already active (we filtered by DeletedAt.is_null()).
+            let room = chat_rooms::Entity::find_by_id(m.room_id)
+                .one(db)
+                .await?
+                .ok_or_else(|| AppError::NotFound("Chat room not found".to_string()))?;
+            let mut room_active: chat_rooms::ActiveModel = room.into();
+            room_active.work_order_id = Set(Some(work_order_id));
+            room_active.deleted_at = Set(None);
+            room_active.updated_at = Set(Some(chrono::Utc::now()));
+            room_active.update(db).await?;
+            return Ok(m.room_id);
+        }
+    }
+
+    // No active shared room exists — create one
+    let now = chrono::Utc::now();
+    let room_id = Uuid::new_v4();
+
+    let room = chat_rooms::ActiveModel {
+        id: Set(room_id),
+        room_name: Set("Direct Chat".to_string()),
+        created_by: Set(user_a),
+        work_order_id: Set(Some(work_order_id)),
+        created_at: Set(now),
+        updated_at: Set(None),
+        deleted_at: Set(None),
+    };
+    room.insert(db).await?;
+
+    let m1 = chat_room_members::ActiveModel {
+        room_id: Set(room_id),
+        user_id: Set(user_a),
+        created_at: Set(now),
+        updated_at: Set(None),
+        deleted_at: Set(None),
+    };
+    m1.insert(db).await?;
+
+    let m2 = chat_room_members::ActiveModel {
+        room_id: Set(room_id),
+        user_id: Set(user_b),
+        created_at: Set(now),
+        updated_at: Set(None),
+        deleted_at: Set(None),
+    };
+    m2.insert(db).await?;
+
+    Ok(room_id)
 }

@@ -205,7 +205,42 @@ pub async fn send_work_order_assigned_email(
     publish_email_task(rabbitmq_connection, email_payload, "work order assigned email").await
 }
 
-/// Generic email dispatcher that publishes arbitrary subject and body content via RabbitMQ.
+pub async fn send_work_order_reassigned_email(
+    rabbitmq: &Arc<Connection>,
+    templates: &HashMap<String, String>,
+    to: &str,
+    name: &str,
+    work_order_number: &str,
+    technician_name: &str,
+    appointment: &str,
+) -> Result<(), AppError> {
+    let escaped_name = v_htmlescape::escape(name).to_string();
+    let escaped_wo_number = v_htmlescape::escape(work_order_number).to_string();
+    let escaped_tech_name = v_htmlescape::escape(technician_name).to_string();
+    let escaped_appointment = v_htmlescape::escape(appointment).to_string();
+
+    let email_body = if let Some(template_content) = templates.get("work_order_reassigned_email.html") {
+        template_content
+            .replace("{{name}}", &escaped_name)
+            .replace("{{work_order_number}}", &escaped_wo_number)
+            .replace("{{technician_name}}", &escaped_tech_name)
+            .replace("{{appointment}}", &escaped_appointment)
+    } else {
+        tracing::warn!("Template 'work_order_reassigned_email.html' not found in cache! Using minimal HTML fallback.");
+        format!(
+            "<html><body><h2>Work Order Reassigned, {}!</h2><p>Your work order <strong>{}</strong> has been reassigned to technician <strong>{}</strong>.</p><p>Appointment: {}</p></body></html>",
+            escaped_name, escaped_wo_number, escaped_tech_name, escaped_appointment
+        )
+    };
+
+    let email_payload = serde_json::json!({
+        "to": to,
+        "subject": format!("Work Order Reassigned: {}", work_order_number),
+        "body": email_body
+    });
+    
+    publish_email_task(rabbitmq, email_payload, "work order reassigned email").await
+}
 
 /// Generic send_email helper — publishes arbitrary email content via RabbitMQ.
 /// Used by cleanup/cancel flows that don't need templated emails.

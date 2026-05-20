@@ -5,6 +5,7 @@ use lapin::{
     types::FieldTable,
     Connection, ConnectionProperties,
 };
+use tokio_executor_trait::Tokio as TokioExecutor;
 use futures::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use sea_orm::{EntityTrait, Set, ActiveModelTrait};
@@ -265,12 +266,7 @@ pub async fn start_fcm_consumer(
     connection: Option<Arc<Connection>>,
     db: sea_orm::DatabaseConnection,
 ) {
-    let mut conn_opt = match connection {
-        Some(c) => c,
-        None => return,
-    };
-
-    // Load service account credentials at startup
+    // Load service account credentials at startup — bail early if misconfigured
     let creds = match FcmCredentials::from_config() {
         Ok(c) => c,
         Err(e) => {
@@ -278,31 +274,33 @@ pub async fn start_fcm_consumer(
             return;
         }
     };
-    let token_cache: Arc<Mutex<Option<CachedToken>>> = Arc::new(Mutex::new(None));
 
+    // connection parameter kept for API compatibility but not used;
+    // the consumer dials independently so it works even when the shared
+    // connection is None or has already died.
+    let _ = connection;
+    let token_cache: Arc<Mutex<Option<CachedToken>>> = Arc::new(Mutex::new(None));
     let url = AppConfig::get().rabbitmq_url.clone();
 
     tokio::spawn(async move {
         loop {
-            let channel = match conn_opt.create_channel().await {
+            // --- Establish a dedicated connection ---
+            let fresh_url = crate::infrastructure::mq::ensure_heartbeat(&url);
+            let conn = match Connection::connect(&fresh_url, ConnectionProperties::default().with_executor(TokioExecutor::current())).await {
+                Ok(c) => Arc::new(c),
+                Err(e) => {
+                    error!("FCM consumer: Failed to connect to RabbitMQ: {:?}. Retrying in 5s...", e);
+                    sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+            };
+
+            let channel = match conn.create_channel().await {
                 Ok(c) => c,
                 Err(e) => {
-                    error!("FCM consumer: Failed to create channel: {:?}. Reconnecting...", e);
-                    // Try to create a fresh connection
-                    match Connection::connect(
-                        &url,
-                        ConnectionProperties::default(),
-                    ).await {
-                        Ok(new_conn) => {
-                            conn_opt = Arc::new(new_conn);
-                            continue;
-                        }
-                        Err(re) => {
-                            error!("FCM consumer: Failed to reconnect: {:?}. Retrying in 5s...", re);
-                            sleep(Duration::from_secs(5)).await;
-                            continue;
-                        }
-                    }
+                    error!("FCM consumer: Failed to create channel: {:?}. Retrying in 5s...", e);
+                    sleep(Duration::from_secs(5)).await;
+                    continue;
                 }
             };
 
@@ -314,7 +312,7 @@ pub async fn start_fcm_consumer(
 
             let mut consumer = match channel.basic_consume(
                 FCM_QUEUE,
-                "fcm_consumer",
+                "",   // broker-generated unique tag
                 BasicConsumeOptions::default(),
                 FieldTable::default(),
             ).await {

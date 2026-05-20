@@ -3,6 +3,7 @@ use lapin::{
     types::FieldTable,
     BasicProperties, ExchangeKind, ConnectionProperties,
 };
+use tokio_executor_trait::Tokio as TokioExecutor;
 use tracing::warn;
 use crate::core::config::AppConfig;
 use std::sync::Arc;
@@ -92,7 +93,7 @@ impl FcmProducer {
 
         // Slow path: shared connection is stale (e.g. after consumer reconnect).
         let url = super::ensure_heartbeat(&AppConfig::get().rabbitmq_url);
-        let fresh_conn = lapin::Connection::connect(&url, ConnectionProperties::default()).await
+        let fresh_conn = lapin::Connection::connect(&url, ConnectionProperties::default().with_executor(TokioExecutor::current())).await
             .map_err(|e| anyhow::anyhow!("Failed to create fresh connection for FCM: {}", e))?;
         publish_on_fcm(&fresh_conn, payload).await
     }
@@ -101,6 +102,10 @@ impl FcmProducer {
 async fn publish_on_fcm(conn: &lapin::Connection, payload: &[u8]) -> Result<(), anyhow::Error> {
     let channel = conn.create_channel().await?;
     setup_fcm_topology(&channel).await?;
+
+    // Enable publisher confirms so we know the broker received the message
+    use lapin::options::ConfirmSelectOptions;
+    channel.confirm_select(ConfirmSelectOptions::default()).await?;
 
     let confirm = channel.basic_publish(
         FCM_EXCHANGE,

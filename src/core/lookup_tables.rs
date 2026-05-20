@@ -93,8 +93,8 @@ impl LookupTables {
         notification_categories_by_role.insert("technician".to_string(), vec![1, 2]);
         // Customer gets: work_order_assigned (1), about_to_start (2)
         notification_categories_by_role.insert("customer".to_string(), vec![1, 2]);
-        // Admin gets: work_order_rejection_form (3), add_new_part (4)
-        notification_categories_by_role.insert("admin".to_string(), vec![3, 4]);
+        // Admin gets: work_order_rejection_form (3), add_new_part (4), work_order_escalation (5)
+        notification_categories_by_role.insert("admin".to_string(), vec![3, 4, 5]);
 
         Ok(Self {
             roles,

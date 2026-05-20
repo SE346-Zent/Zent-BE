@@ -1,6 +1,7 @@
 use lapin::{
     Connection, ConnectionProperties,
 };
+use tokio_executor_trait::Tokio as TokioExecutor;
 
 pub mod email;
 pub mod work_order;

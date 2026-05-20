@@ -3,9 +3,8 @@ use lapin::{
     types::FieldTable,
     BasicProperties, ExchangeKind, ConnectionProperties,
 };
-use tracing::warn;
+use tokio_executor_trait::Tokio as TokioExecutor;
 use crate::core::config::AppConfig;
-use std::sync::Arc;
 
 pub const WORK_ORDER_EXCHANGE: &str = "work_order_exchange";
 pub const WORK_ORDER_CREATED_QUEUE: &str = "work_order_created_queue";
@@ -67,41 +66,34 @@ pub async fn setup_work_order_topology(channel: &lapin::Channel) -> Result<(), l
     Ok(())
 }
 
-pub struct WorkOrderProducer {
-    connection: Option<Arc<lapin::Connection>>,
-}
+/// Producer that publishes work-order-created events to RabbitMQ.
+///
+/// Always creates a fresh connection per publish to avoid the stale-shared-connection
+/// problem: the consumer reconnects independently and updates its own handle, but the
+/// shared `AppState::rabbitmq` is never refreshed. Publishing on the stale connection
+/// can silently drop messages (lapin reports success on a dead connection).
+pub struct WorkOrderProducer;
 
 impl WorkOrderProducer {
-    pub fn new(connection: Option<Arc<lapin::Connection>>) -> Self {
-        Self { connection }
+    pub fn new() -> Self {
+        Self
     }
 
     pub async fn publish_created(&self, payload: &[u8]) -> Result<(), anyhow::Error> {
-        let conn = match &self.connection {
-            Some(c) => c,
-            None => return Ok(()),
-        };
-
-        // Fast path: try with the shared connection
-        match publish_created_on(conn, payload).await {
-            Ok(()) => return Ok(()),
-            Err(e) => {
-                warn!("Work order publish on shared connection failed: {}. Retrying with fresh connection...", e);
-            }
-        }
-
-        // Slow path: shared connection is stale (e.g. after consumer reconnect).
-        // Create a fresh connection for this one publish.
         let url = super::ensure_heartbeat(&AppConfig::get().rabbitmq_url);
-        let fresh_conn = lapin::Connection::connect(&url, ConnectionProperties::default()).await
-            .map_err(|e| anyhow::anyhow!("Failed to create fresh connection: {}", e))?;
-        publish_created_on(&fresh_conn, payload).await
+        let conn = lapin::Connection::connect(&url, ConnectionProperties::default().with_executor(TokioExecutor::current())).await
+            .map_err(|e| anyhow::anyhow!("Failed to connect to RabbitMQ for WO publish: {}", e))?;
+        publish_created_on(&conn, payload).await
     }
 }
 
 async fn publish_created_on(conn: &lapin::Connection, payload: &[u8]) -> Result<(), anyhow::Error> {
     let channel = conn.create_channel().await?;
     setup_work_order_topology(&channel).await?;
+
+    // Enable publisher confirms so we know the broker received the message
+    use lapin::options::ConfirmSelectOptions;
+    channel.confirm_select(ConfirmSelectOptions::default()).await?;
 
     let confirm = channel.basic_publish(
         WORK_ORDER_EXCHANGE,
