@@ -43,8 +43,7 @@ pub fn decide_auto_assign(
     done_status_id: i32,
     system_user_id: Uuid,
 ) -> Result<Option<AutoAssignWorkOrderEffect>, AppError> {
-    let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap();
-    let target_appointment_start = work_order.appointment.with_timezone(&tz_offset);
+    let target_appointment_start = crate::utils::time::to_utc7_time(work_order.appointment);
 
     let workday_start: u32 = policies.get("workday_start")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing workday_start policy")))?
@@ -73,7 +72,7 @@ pub fn decide_auto_assign(
             if job.id == work_order.id || job.work_order_status_id == done_status_id {
                 continue;
             }
-            let other_appointment_start = job.appointment.with_timezone(&tz_offset);
+            let other_appointment_start = crate::utils::time::to_utc7_time(job.appointment);
             
             // Only care about jobs on the same day
             if other_appointment_start.date_naive() != target_appointment_start.date_naive() {
@@ -92,7 +91,7 @@ pub fn decide_auto_assign(
             Some(s) => s + buffer,
             None => {
                 let start = target_appointment_start.date_naive().and_hms_opt(workday_start, 0, 0).unwrap();
-                tz_offset.from_local_datetime(&start).unwrap()
+                crate::utils::time::get_utc7_offset().from_local_datetime(&start).unwrap()
             }
         };
 
@@ -172,8 +171,6 @@ mod tests {
             work_order_number: "".to_string(),
             reject_form_id: None,
             about_to_start_notified: false,
-            customer_complaint: None,
-            customer_complaint_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
@@ -206,7 +203,7 @@ mod tests {
         policies.insert("workday_start".to_string(), "8".to_string());
         policies.insert("buffer".to_string(), "2".to_string());
 
-        let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap();
+        let tz_offset = crate::utils::time::get_utc7_offset();
         // Today at 12:00 PM local time
         let appointment = tz_offset.with_ymd_and_hms(2023, 10, 10, 12, 0, 0).unwrap().with_timezone(&Utc);
         let wo = dummy_work_order(appointment);
@@ -238,7 +235,7 @@ mod tests {
         let mut policies = HashMap::new();
         policies.insert("workday_start".to_string(), "8".to_string());
 
-        let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap();
+        let tz_offset = crate::utils::time::get_utc7_offset();
         let appointment = tz_offset.with_ymd_and_hms(2023, 10, 10, 12, 0, 0).unwrap().with_timezone(&Utc);
         let wo = dummy_work_order(appointment);
 
@@ -249,7 +246,7 @@ mod tests {
 
     #[test]
     fn test_decide_auto_assign_missing_policies() {
-        let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap();
+        let tz_offset = crate::utils::time::get_utc7_offset();
         let appointment = tz_offset.with_ymd_and_hms(2023, 10, 10, 12, 0, 0).unwrap().with_timezone(&Utc);
         let wo = dummy_work_order(appointment);
 
@@ -263,7 +260,7 @@ mod tests {
         policies.insert("workday_start".to_string(), "8".to_string());
         policies.insert("buffer".to_string(), "2".to_string());
 
-        let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap();
+        let tz_offset = crate::utils::time::get_utc7_offset();
         let appointment = tz_offset.with_ymd_and_hms(2023, 10, 10, 12, 0, 0).unwrap().with_timezone(&Utc);
         let wo = dummy_work_order(appointment);
 

@@ -24,19 +24,20 @@ pub struct ClosingFormEntry {
     pub created_at: DateTime<Utc>,
 }
 
-/// Customer complaint associated with a work order.
+/// Rating associated with a work order.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ComplaintEntry {
-    pub message: String,
-    pub submitted_at: DateTime<Utc>,
+pub struct RatingEntry {
+    pub rating: i32,
+    pub comment: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
-/// Full work order history detail: state transitions, optional closing form, optional complaint.
+/// Full work order history detail: state transitions, optional closing form, optional rating.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkOrderHistoryDetail {
     pub state_history: Vec<WorkOrderStateHistoryEntry>,
     pub closing_form: Option<ClosingFormEntry>,
-    pub complaint: Option<ComplaintEntry>,
+    pub rating: Option<RatingEntry>,
 }

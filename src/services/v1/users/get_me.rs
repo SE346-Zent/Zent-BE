@@ -20,6 +20,7 @@ pub fn decide_get_me(user: users::Model) -> GetMeEffect {
         phone: Some(user.phone_number),
         province: user.province,
         account_status_id: user.account_status,
+        employee_id: crate::utils::user::get_employee_id(user.role_id, user.id),
         created_at: user.created_at.to_rfc3339(),
         updated_at: user.updated_at.to_rfc3339(),
     };

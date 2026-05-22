@@ -48,6 +48,11 @@ pub async fn history(
         None
     };
 
-    let entries = crate::services::v1::work_orders::history::decide_get_history_detail(history_rows, &luts, wo, closing_form);
+    let rating = crate::entities::work_order_ratings::Entity::find()
+        .filter(crate::entities::work_order_ratings::Column::WorkOrderId.eq(id))
+        .one(db.as_ref())
+        .await?;
+
+    let entries = crate::services::v1::work_orders::history::decide_get_history_detail(history_rows, &luts, wo, closing_form, rating);
     Ok(Json(ApiResponse::success(200, "Work order history detail retrieved successfully", entries)))
 }

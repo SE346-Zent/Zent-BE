@@ -93,7 +93,7 @@ pub async fn create(
 
     let pending_status_id = luts.work_order_statuses_by_name.get("Pending").copied()
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Pending' status missing")))?;
-    let effect = create_svc::decide_create_work_order(payload.clone(), auth.user.id, pending_status_id)?;
+    let effect = create_svc::decide_create_work_order(payload.clone(), auth.user.id, pending_status_id, &luts.policies)?;
 
     let wo_model = db.transaction::<_, work_orders_ent::Model, AppError>(|txn| Box::pin(async move {
         let wo = effect.work_order_model.insert(txn).await?;

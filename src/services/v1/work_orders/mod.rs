@@ -13,7 +13,7 @@ pub mod start;
 pub mod reassign;
 pub mod refuse;
 pub mod cancel;
-pub mod complaint;
+pub mod rate;
 pub mod complete;
 pub mod escalation;
 pub mod history;

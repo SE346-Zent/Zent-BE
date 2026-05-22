@@ -31,7 +31,7 @@ pub fn router(state: AppState) -> Router<AppState> {
 fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(work_orders::create))
-        .route("/{id}/complaint", axum::routing::post(work_orders::complaint))
+        .route("/{id}/rate", axum::routing::post(work_orders::rate))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Customer]),

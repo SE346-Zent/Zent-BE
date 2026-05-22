@@ -46,8 +46,7 @@ pub fn decide_assign_work_order(
     completed_status_id: i32,
     admin_user_id: Uuid,
 ) -> Result<AssignWorkOrderEffect, AppError> {
-    let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap(); // GMT+7
-    let appointment_local = work_order.appointment.with_timezone(&tz_offset);
+    let appointment_local = crate::utils::time::to_utc7_time(work_order.appointment);
 
     let workday_start: u32 = policies
         .get("workday_start")
@@ -157,8 +156,6 @@ mod tests {
             work_order_number: "".to_string(),
             reject_form_id: None,
             about_to_start_notified: false,
-            customer_complaint: None,
-            customer_complaint_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,

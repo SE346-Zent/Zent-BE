@@ -94,8 +94,6 @@ pub async fn seed_random_work_orders(
                 work_order_symptom_id: Set(*symptom_ids.choose(&mut rng).unwrap_or(&1)),
                 product_id: Set(*product_ids.choose(&mut rng).unwrap()),
                 about_to_start_notified: Set(false),
-                customer_complaint: Set(None),
-                customer_complaint_at: Set(None),
                 chat_room_id: Set(None),
             }
         })

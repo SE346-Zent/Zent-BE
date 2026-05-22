@@ -14,8 +14,8 @@ pub struct CreateUserEffect {
 /// Validate and prepare user creation.
 ///
 /// RBAC rules (role IDs: 1=Admin, 2=SuperAdmin, 3=Customer, 4=Technician):
-/// - SuperAdmin (2): can create SuperAdmin (2), Admin (1), and Technician (4).
-/// - Admin (1): can create Technician (4) and Customer (3).
+/// - SuperAdmin (2): can create Admin (1), and Technician (4).
+/// - Admin (1): can create Technician (4).
 /// - Others: forbidden.
 ///
 /// Province handling:
@@ -27,8 +27,8 @@ pub fn decide_can_create_user(current_user: users::Model, req: UserCreateRequest
 
     // Determine allowed target roles based on current role
     let allowed = match current_role {
-        2 => target_role == 1 || target_role == 4, // SA → SA, Admin, Tech
-        1 => target_role == 4,                     // Admin → Customer, Tech
+        2 => target_role == 1 || target_role == 4, // SA → Admin, Tech
+        1 => target_role == 4,                     // Admin → Tech
         _ => false,
     };
 

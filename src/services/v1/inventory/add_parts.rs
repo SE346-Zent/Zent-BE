@@ -56,6 +56,7 @@ pub fn decide_add_parts(
         serial_number: Set(add_parts_payload.serial_number),
         description: Set(add_parts_payload.description),
         work_order_id: Set(work_order_record.id),
+        work_order_number: Set(add_parts_payload.work_order_number),
         created_at: Set(current_timestamp),
         updated_at: Set(current_timestamp),
         deleted_at: Set(None),
@@ -117,8 +118,6 @@ mod tests {
             work_order_number: "".to_string(),
             reject_form_id: None,
             about_to_start_notified: false,
-            customer_complaint: None,
-            customer_complaint_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
@@ -137,6 +136,7 @@ mod tests {
             model_code: Some("MC-123".to_string()),
             serial_number: "SN-123".to_string(),
             description: Some("desc".to_string()),
+            work_order_number: "WO-123".to_string(),
             photos: vec!["img.png".to_string()],
         };
 
@@ -146,6 +146,7 @@ mod tests {
 
         assert_eq!(add_parts_effect.part_form_model.part_number, Set("PN-123".to_string()));
         assert_eq!(add_parts_effect.part_form_model.work_order_id, Set(work_order_record.id));
+        assert_eq!(add_parts_effect.part_form_model.work_order_number, Set("WO-123".to_string()));
         
         assert_eq!(add_parts_effect.image_models.len(), 1);
         assert_eq!(add_parts_effect.image_models[0].object_name, Set("img.png".to_string()));
@@ -164,6 +165,7 @@ mod tests {
             model_code: None,
             serial_number: "SN-123".to_string(),
             description: None,
+            work_order_number: "WO-123".to_string(),
             photos: vec![],
         };
 

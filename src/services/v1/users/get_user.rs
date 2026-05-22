@@ -58,6 +58,8 @@ pub fn decide_get_user(
         phone: Some(target_user.phone_number),
         province: target_user.province,
         account_status_id: target_user.account_status,
+        employee_id: crate::utils::user::get_employee_id(target_user.role_id, target_user.id),
+        rating_counts: None,
         created_at: target_user.created_at.to_rfc3339(),
         updated_at: target_user.updated_at.to_rfc3339(),
     };

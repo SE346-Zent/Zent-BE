@@ -50,6 +50,7 @@ pub fn decide_update_me(user: users::Model, req: ProfileUpdateRequest) -> Result
         phone: Some(new_phone),
         province: user.province,
         account_status_id: user.account_status,
+        employee_id: crate::utils::user::get_employee_id(user.role_id, user.id),
         created_at: user.created_at.to_rfc3339(),
         updated_at: now.to_rfc3339(),
     };

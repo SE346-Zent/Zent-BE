@@ -73,6 +73,8 @@ pub async fn create_user_handler(
         phone: Some(user_model.phone_number),
         province: user_model.province,
         account_status_id: user_model.account_status,
+        employee_id: crate::utils::user::get_employee_id(user_model.role_id, user_model.id),
+        rating_counts: None,
         created_at: user_model.created_at.to_rfc3339(),
         updated_at: user_model.updated_at.to_rfc3339(),
     })))

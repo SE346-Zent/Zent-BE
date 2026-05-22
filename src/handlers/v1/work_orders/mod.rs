@@ -14,13 +14,13 @@ pub mod approve_refusal;
 pub mod deny_refusal;
 pub mod history;
 pub mod cancel;
-pub mod complaint;
+pub mod rate;
 pub mod change_appointment;
 pub mod reject_form_list;
 pub mod reject_form_detail;
 
 pub use change_appointment::change_appointment;
-pub use complaint::complaint;
+pub use rate::rate;
 pub use create::create;
 pub use list::list;
 pub use get_details::get_details;
@@ -49,7 +49,7 @@ pub use deny_refusal::__path_deny_refusal;
 pub use history::__path_history;
 pub use reassign::__path_reassign;
 pub use cancel::__path_cancel;
-pub use complaint::__path_complaint;
+pub use rate::__path_rate;
 pub use change_appointment::__path_change_appointment;
 pub use reject_form_list::__path_reject_form_list;
 pub use reject_form_detail::__path_reject_form_detail;
@@ -85,6 +85,7 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(create))
         .route("/{id}/cancel", axum::routing::post(cancel))
+        .route("/{id}/rate", axum::routing::post(rate))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Customer]),

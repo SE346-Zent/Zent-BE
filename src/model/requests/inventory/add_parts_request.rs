@@ -20,6 +20,9 @@ pub struct AddPartsRequest {
     /// Optional description of the part condition or details.
     #[validate(length(max = 1000))]
     pub description: Option<String>,
+    /// The associated work order number.
+    #[validate(length(max = 255))]
+    pub work_order_number: String,
     /// OCI object names for photos (already uploaded or to be uploaded separately).
     #[serde(default)]
     #[validate(length(max = 5))]

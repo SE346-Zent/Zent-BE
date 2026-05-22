@@ -80,6 +80,8 @@ pub async fn list_users_handler(
             phone: Some(u.phone_number),
             province: u.province,
             account_status_id: u.account_status,
+            employee_id: crate::utils::user::get_employee_id(u.role_id, u.id),
+            rating_counts: None,
             created_at: u.created_at.to_rfc3339(),
             updated_at: u.updated_at.to_rfc3339(),
         }).collect(),

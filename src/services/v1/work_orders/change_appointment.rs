@@ -1,6 +1,7 @@
 use chrono::Utc;
 use sea_orm::Set;
 use uuid::Uuid;
+use std::collections::HashMap;
 
 use crate::{
     core::errors::AppError,
@@ -18,12 +19,14 @@ pub struct ChangeAppointmentEffect {
 /// Rules:
 /// - Only when work order status is "Pending" or "Assigned"
 /// - No reason required — just the new appointment that overwrites the existing one
+/// - Appointment must fall within workday hours
 pub fn decide_change_appointment(
     work_order: work_orders::Model,
     new_appointment: chrono::DateTime<Utc>,
     pending_status_id: i32,
     assigned_status_id: i32,
     changed_by_id: Uuid,
+    policies: &HashMap<String, String>,
 ) -> Result<ChangeAppointmentEffect, AppError> {
     // Only allow changes when status is Pending or Assigned
     if work_order.work_order_status_id != pending_status_id
@@ -32,6 +35,33 @@ pub fn decide_change_appointment(
         return Err(AppError::BadRequest(
             "Appointment can only be changed when the work order is Pending or Assigned".into(),
         ));
+    }
+
+    // Workday Hours Validation
+    let appointment_local = crate::utils::time::to_utc7_time(new_appointment);
+
+    let workday_start: u32 = policies
+        .get("workday_start")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing workday_start policy")))?
+        .parse()
+        .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid workday_start policy")))?;
+
+    let workday_end: u32 = policies
+        .get("workday_end")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing workday_end policy")))?
+        .parse()
+        .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid workday_end policy")))?;
+
+    use chrono::Timelike;
+    let hour = appointment_local.hour();
+    if hour < workday_start || hour >= workday_end {
+        return Err(AppError::BadRequest(format!(
+            "Appointment hour {:02}:{:02} is outside workday limits ({:02}:00 - {:02}:00)",
+            hour,
+            appointment_local.minute(),
+            workday_start,
+            workday_end
+        )));
     }
 
     let now = Utc::now();
@@ -62,6 +92,14 @@ pub fn decide_change_appointment(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
+
+    fn get_mock_policies() -> HashMap<String, String> {
+        let mut policies = HashMap::new();
+        policies.insert("workday_start".to_string(), "8".to_string());
+        policies.insert("workday_end".to_string(), "17".to_string());
+        policies
+    }
 
     fn dummy_work_order(status_id: i32) -> work_orders::Model {
         work_orders::Model {
@@ -81,15 +119,13 @@ mod tests {
             city: "".to_string(),
             address: "".to_string(),
             building: None,
-            appointment: Utc::now(),
+            appointment: Utc.with_ymd_and_hms(2026, 1, 1, 3, 0, 0).unwrap(), // 10:00 AM GMT+7
             admin_id: None,
             technician_id: None,
             complete_form_id: None,
             work_order_number: "".to_string(),
             reject_form_id: None,
             about_to_start_notified: false,
-            customer_complaint: None,
-            customer_complaint_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
@@ -101,8 +137,9 @@ mod tests {
     fn test_change_appointment_pending() {
         let wo = dummy_work_order(1); // Pending
         let old_appointment = wo.appointment; // capture before wo is consumed
-        let new_appt = Utc::now() + chrono::Duration::days(1);
-        let result = decide_change_appointment(wo, new_appt, 1, 2, Uuid::new_v4());
+        let new_appt = Utc.with_ymd_and_hms(2026, 1, 2, 3, 0, 0).unwrap(); // 10:00 AM GMT+7
+        let policies = get_mock_policies();
+        let result = decide_change_appointment(wo, new_appt, 1, 2, Uuid::new_v4(), &policies);
         assert!(result.is_ok());
         let effect = result.unwrap();
         assert_eq!(effect.work_order.appointment, Set(new_appt));
@@ -112,16 +149,33 @@ mod tests {
     #[test]
     fn test_change_appointment_assigned() {
         let wo = dummy_work_order(2); // Assigned
-        let new_appt = Utc::now() + chrono::Duration::days(2);
-        let result = decide_change_appointment(wo, new_appt, 1, 2, Uuid::new_v4());
+        let new_appt = Utc.with_ymd_and_hms(2026, 1, 2, 3, 0, 0).unwrap(); // 10:00 AM GMT+7
+        let policies = get_mock_policies();
+        let result = decide_change_appointment(wo, new_appt, 1, 2, Uuid::new_v4(), &policies);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_change_appointment_invalid_hours() {
+        let wo = dummy_work_order(1); // Pending
+        let new_appt = Utc.with_ymd_and_hms(2026, 1, 2, 15, 0, 0).unwrap(); // 22:00 GMT+7
+        let policies = get_mock_policies();
+        let result = decide_change_appointment(wo, new_appt, 1, 2, Uuid::new_v4(), &policies);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::BadRequest(msg) => {
+                assert!(msg.contains("outside workday limits"));
+            }
+            _ => panic!("Expected BadRequest"),
+        }
     }
 
     #[test]
     fn test_change_appointment_rejected_when_in_progress() {
         let wo = dummy_work_order(3); // InProg
-        let new_appt = Utc::now() + chrono::Duration::days(1);
-        let result = decide_change_appointment(wo, new_appt, 1, 2, Uuid::new_v4());
+        let new_appt = Utc.with_ymd_and_hms(2026, 1, 2, 3, 0, 0).unwrap(); // 10:00 AM GMT+7
+        let policies = get_mock_policies();
+        let result = decide_change_appointment(wo, new_appt, 1, 2, Uuid::new_v4(), &policies);
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::BadRequest(msg) => {

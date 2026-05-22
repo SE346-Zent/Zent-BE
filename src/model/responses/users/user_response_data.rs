@@ -26,6 +26,12 @@ pub struct UserResponseData {
     /// Account status ID.
     pub account_status_id: i32,
 
+    /// Employee ID (optional).
+    pub employee_id: Option<String>,
+
+    /// Rating counts (1-5) for technicians (optional).
+    pub rating_counts: Option<std::collections::HashMap<String, i64>>,
+
     /// ISO-8601 creation timestamp.
     pub created_at: String,
 

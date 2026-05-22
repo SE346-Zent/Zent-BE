@@ -30,8 +30,6 @@ pub struct Model {
     pub work_order_number: String,
     pub reject_form_id: Option<Uuid>,
     pub about_to_start_notified: bool,
-    pub customer_complaint: Option<String>,
-    pub customer_complaint_at: Option<DateTimeUtc>,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
