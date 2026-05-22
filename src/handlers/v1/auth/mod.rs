@@ -13,6 +13,7 @@ pub mod verify_otp;
 pub mod resend_otp;
 pub mod logout;
 pub mod change_password;
+pub mod google_login;
 
 pub use forgot_password::forgot_password_handler;
 pub use verify_forgot_password_otp::verify_forgot_password_otp_handler;
@@ -24,6 +25,7 @@ pub use verify_otp::verify_otp_handler;
 pub use resend_otp::resend_otp_handler;
 pub use logout::logout_handler;
 pub use change_password::change_password_handler;
+pub use google_login::google_login_handler;
 
 // Re-export __path_* items for utoipa OpenApi derive
 pub use forgot_password::__path_forgot_password_handler;
@@ -36,6 +38,7 @@ pub use verify_otp::__path_verify_otp_handler;
 pub use resend_otp::__path_resend_otp_handler;
 pub use logout::__path_logout_handler;
 pub use change_password::__path_change_password_handler;
+pub use google_login::__path_google_login_handler;
 
 use axum::{Router, routing::post};
 use crate::core::state::AppState;
@@ -53,4 +56,5 @@ pub fn router() -> Router<AppState> {
         .route("/verify-forgot-password-otp", post(verify_forgot_password_otp_handler))
         .route("/reset-password", post(reset_password_handler))
         .route("/change-password", post(change_password_handler))
+        .route("/google-login", post(google_login_handler))
 }
