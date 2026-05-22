@@ -96,13 +96,24 @@ pub async fn google_login_handler(
     )?;
 
     // 6. Persist DB updates (insert user if new, update status if pending)
-    if let Some(user_model) = login_effect.user_active_model {
+    if let Some(mut user_model) = login_effect.user_active_model {
+        if let Some(fcm) = payload.fcm_token.clone() {
+            user_model.fcm_token = Set(Some(fcm));
+        }
         if existing_user.is_none() {
             user_model.insert(db.as_ref()).await?;
         } else {
             user_model.update(db.as_ref()).await?;
         }
+    } else if let Some(fcm) = payload.fcm_token {
+        if let Some(user_record) = existing_user {
+            let mut user_active: users::ActiveModel = user_record.into();
+            user_active.fcm_token = Set(Some(fcm));
+            user_active.updated_at = Set(Utc::now());
+            user_active.update(db.as_ref()).await?;
+        }
     }
+
 
     // 7. Save active session
     let active_session = sessions::ActiveModel {

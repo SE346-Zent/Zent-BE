@@ -10,3 +10,7 @@ pub mod cancel_request;
 pub mod rate_request;
 pub mod change_appointment_request;
 pub mod reject_form_query;
+pub mod geofence_check_request;
+
+pub use geofence_check_request::GeofenceCheckRequest;
+

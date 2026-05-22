@@ -18,6 +18,7 @@ pub mod rate;
 pub mod change_appointment;
 pub mod reject_form_list;
 pub mod reject_form_detail;
+pub mod check_geofence;
 
 pub use change_appointment::change_appointment;
 pub use rate::rate;
@@ -35,6 +36,7 @@ pub use reassign::reassign;
 pub use cancel::cancel;
 pub use reject_form_list::reject_form_list;
 pub use reject_form_detail::reject_form_detail;
+pub use check_geofence::check_geofence;
 
 // Re-export __path_* items for utoipa OpenApi derive
 pub use create::__path_create;
@@ -53,6 +55,8 @@ pub use rate::__path_rate;
 pub use change_appointment::__path_change_appointment;
 pub use reject_form_list::__path_reject_form_list;
 pub use reject_form_detail::__path_reject_form_detail;
+pub use check_geofence::__path_check_geofence;
+
 
 use axum::{Router, middleware};
 use std::collections::HashMap;
@@ -95,6 +99,8 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/start", axum::routing::post(start))
         .route("/{id}/refuse", axum::routing::post(refuse))
         .route("/{id}/complete", axum::routing::post(complete))
+        .route("/{id}/geofence", axum::routing::post(check_geofence))
+
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Technician]),

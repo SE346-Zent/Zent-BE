@@ -8,4 +8,7 @@ pub struct GoogleLoginRequest {
     /// The ID token obtained from Google or Firebase client SDKs.
     #[validate(length(min = 1, message = "ID token cannot be empty"))]
     pub id_token: String,
+    /// Optional FCM token for push notifications.
+    pub fcm_token: Option<String>,
 }
+

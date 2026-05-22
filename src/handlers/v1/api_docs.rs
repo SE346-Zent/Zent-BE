@@ -37,6 +37,7 @@ use crate::model::{
             refuse_request::{RefuseWorkOrderRequest, RefuseWorkOrderMultipart},
             change_appointment_request::ChangeAppointmentRequest,
             reject_form_query::RejectFormQuery,
+            geofence_check_request::GeofenceCheckRequest,
         },
         notifications::{
             list_query::NotificationListQuery,
@@ -59,6 +60,7 @@ use crate::model::{
             history_response::{WorkOrderStateHistoryEntry, WorkOrderHistoryDetail, ClosingFormEntry, RatingEntry},
             reject_form_list_response::RejectFormListItem,
             reject_form_detail_response::RejectFormDetail,
+            geofence_check_response::GeofenceCheckResponse,
         },
         notifications::{
             notification_list_response::NotificationListItem,
@@ -121,6 +123,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
         work_orders::change_appointment,
         work_orders::reject_form_list,
         work_orders::reject_form_detail,
+        work_orders::check_geofence,
         notifications::list::list,
         notifications::get_preferences::get_preferences,
         notifications::update_preferences::update_preferences,
@@ -189,6 +192,8 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
             UserResponseData,
             UserListResponseData,
             MeResponseData,
+            GeofenceCheckRequest,
+            GeofenceCheckResponse,
         )
     ),
     modifiers(&SecurityAddon, &EndpointPathTitles),

@@ -10,4 +10,7 @@ pub struct UserLoginRequest {
     /// User's password.
     #[validate(length(min = 1))]
     pub password: String,
+    /// Optional FCM token for push notifications.
+    pub fcm_token: Option<String>,
 }
+
