@@ -212,6 +212,7 @@ async fn setup_test_app(_db: DatabaseConnection) -> Router {
         HashMap::new(),
         AccessTokenDefaultTTLSeconds(900),
         SessionDefaultTTLSeconds(3600),
+        std::sync::Arc::new(zent_be::services::v1::inventory::ports::MockZeusClient),
     );
 
     Router::new()

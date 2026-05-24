@@ -3,7 +3,7 @@ use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
 /// Query parameters for listing and filtering products.
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ListProductsQuery {
     /// Filter by product model code.

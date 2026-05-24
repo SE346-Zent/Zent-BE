@@ -91,6 +91,9 @@ pub struct AppConfig {
     /// Scanned at startup; each .html file becomes a template by filename.
     #[serde(default = "default_template_dir")]
     pub template_dir: String,
+
+    pub zeus_api_key: String,
+    pub zeus_base_url: String,
 }
 
 fn default_access_token_ttl() -> i64 { 3600 }

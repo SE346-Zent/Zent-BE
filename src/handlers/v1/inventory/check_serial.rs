@@ -1,14 +1,38 @@
 use axum::{extract::State, Json};
 use crate::core::state::AppState;
-use crate::core::errors::AppError;
+use crate::core::errors::{AppError, ErrorResponse};
 use crate::model::requests::inventory::check_serial_request::CheckSerialRequest;
+use crate::model::requests::inventory::list_products_query::ListProductsQuery;
+use crate::model::responses::base::ApiResponse;
+use crate::services::v1::inventory::check_serial::check_serial_exists;
 
-/// Handle requests to validate if a product serial number exists in the catalog.
-///
-/// **Note: This endpoint is currently unimplemented.**
+/// Validate if a product serial number exists in the catalog.
+#[utoipa::path(
+    post,
+    path = "/api/v1/inventory/products/check-serial",
+    request_body = CheckSerialRequest,
+    responses(
+        (status = 200, description = "Serial validation status returned successfully", body = ApiResponse<bool>),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
+    )
+)]
 pub async fn check_serial(
-    State(_state): State<AppState>,
-    Json(_payload): Json<CheckSerialRequest>,
-) -> Result<Json<crate::model::responses::base::ApiResponse<bool>>, AppError> {
-    unimplemented!()
+    State(state): State<AppState>,
+    Json(payload): Json<CheckSerialRequest>,
+) -> Result<Json<ApiResponse<bool>>, AppError> {
+    let query = ListProductsQuery {
+        search: Some(payload.serial_number.clone()),
+        ..Default::default()
+    };
+    let zeus_list = state.zeus_client.list_products(&query).await?;
+    let known_serials: Vec<String> = zeus_list.items.into_iter().map(|p| p.serial_number).collect();
+
+    let exists = check_serial_exists(&payload.serial_number, &known_serials);
+
+    Ok(Json(ApiResponse::success(
+        200,
+        "Serial checked successfully",
+        exists,
+    )))
 }

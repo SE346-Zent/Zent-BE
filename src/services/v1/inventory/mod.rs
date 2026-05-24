@@ -12,3 +12,5 @@ pub mod check_serial;
 pub mod register_product;
 pub mod accept_part;
 pub mod deny_part;
+pub mod ports;
+pub mod check_warranty;

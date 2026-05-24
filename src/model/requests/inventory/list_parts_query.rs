@@ -3,7 +3,7 @@ use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
 /// Query parameters for listing and filtering parts in inventory.
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ListPartsQuery {
     /// Filter by product model code.

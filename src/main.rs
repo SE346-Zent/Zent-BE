@@ -64,6 +64,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Pre-load email templates into memory cache from the configured directory
     let templates: HashMap<String, String> = infrastructure::templates::load_templates(&cfg.template_dir).await;
 
+    let zeus_client = Arc::new(zent_be::infrastructure::clients::zeus::ZeusClient::new(
+        cfg.zeus_base_url.clone(),
+        cfg.zeus_api_key.clone(),
+    ));
+
     // Initialize AppState with directly injected infrastructure
     let state = AppState::new(
         cfg.jwt_sign_key.as_bytes(),
@@ -75,6 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         templates.clone(),
         core::state::AccessTokenDefaultTTLSeconds(cfg.access_token_ttl_seconds),
         core::state::SessionDefaultTTLSeconds(cfg.session_ttl_seconds),
+        zeus_client,
     );
 
     // Start background asynchronous AMQP work order consumer pool
