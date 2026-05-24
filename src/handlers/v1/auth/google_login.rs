@@ -5,7 +5,7 @@ use axum::{
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, *};
+use sea_orm::{DatabaseConnection, TransactionTrait, *};
 use jsonwebtoken::EncodingKey;
 use validator::Validate;
 use crate::core::errors::{AppError, ErrorResponse};
@@ -95,47 +95,73 @@ pub async fn google_login_handler(
         &encoding_key,
     )?;
 
-    // 6. Persist DB updates (insert user if new, update status if pending)
-    if let Some(mut user_model) = login_effect.user_active_model {
-        if let Some(fcm) = payload.fcm_token.clone() {
-            user_model.fcm_token = Set(Some(fcm));
-        }
-        if existing_user.is_none() {
-            user_model.insert(db.as_ref()).await?;
-        } else {
-            user_model.update(db.as_ref()).await?;
-        }
-    } else if let Some(fcm) = payload.fcm_token {
-        if let Some(user_record) = existing_user {
-            let mut user_active: users::ActiveModel = user_record.into();
-            user_active.fcm_token = Set(Some(fcm));
-            user_active.updated_at = Set(Utc::now());
-            user_active.update(db.as_ref()).await?;
-        }
-    }
+    // 6 & 7. Atomically persist user mutation and create session in one transaction.
+    //         If either write fails the whole operation is rolled back, preventing
+    //         half-applied auth state (e.g. account activated but no session created).
+    let fcm_token_for_txn = payload.fcm_token.clone();
+    let is_new_user = existing_user.is_none();
+    let existing_user_for_txn = existing_user.clone();
+    let session_id = login_effect.session_id;
+    let user_id = login_effect.user_id;
+    // Two separate owned copies: one for the closure, one for the Valkey whitelist.
+    let refresh_token_hash_for_txn = login_effect.refresh_token_hash.clone();
+    let refresh_token_hash_for_cache = login_effect.refresh_token_hash;
+    let client_ip_clone = client_ip_address.clone();
+    let session_expires = login_effect.session_expires_at;
+    let user_model_opt = login_effect.user_active_model;
+    let response_data = login_effect.response_data;
 
+    db.transaction::<_, (), AppError>(|txn| {
+        Box::pin(async move {
+            // User write
+            if let Some(mut user_model) = user_model_opt {
+                if let Some(fcm) = fcm_token_for_txn.clone() {
+                    user_model.fcm_token = Set(Some(fcm));
+                }
+                if is_new_user {
+                    user_model.insert(txn).await?;
+                } else {
+                    user_model.update(txn).await?;
+                }
+            } else if let Some(fcm) = fcm_token_for_txn {
+                if let Some(user_record) = existing_user_for_txn {
+                    let mut user_active: users::ActiveModel = user_record.into();
+                    user_active.fcm_token = Set(Some(fcm));
+                    user_active.updated_at = Set(Utc::now());
+                    user_active.update(txn).await?;
+                }
+            }
 
-    // 7. Save active session
-    let active_session = sessions::ActiveModel {
-        id: Set(login_effect.session_id),
-        user_id: Set(login_effect.user_id),
-        refresh_token_hash: Set(login_effect.refresh_token_hash.clone()),
-        ip_address: Set(client_ip_address),
-        device_fingerprint: Set(login_effect.user_id.to_string()),
-        created_at: Set(Utc::now()),
-        expires_at: Set(login_effect.session_expires_at),
-        ..Default::default()
-    };
-    active_session.insert(db.as_ref()).await?;
+            // Session write
+            let active_session = sessions::ActiveModel {
+                id: Set(session_id),
+                user_id: Set(user_id),
+                refresh_token_hash: Set(refresh_token_hash_for_txn),
+                ip_address: Set(client_ip_clone),
+                device_fingerprint: Set(user_id.to_string()),
+                created_at: Set(Utc::now()),
+                expires_at: Set(session_expires),
+                ..Default::default()
+            };
+            active_session.insert(txn).await?;
+
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|e| match e {
+        sea_orm::TransactionError::Connection(db_err) => AppError::Internal(anyhow::anyhow!("DB error: {}", db_err)),
+        sea_orm::TransactionError::Transaction(app_err) => app_err,
+    })?;
 
     // 8. Whitelist in Valkey
     if let Some(client) = valkey_client {
         if let Ok(mut conn) = client.get_connection().await {
-            let whitelist_key = format!("whitelist:session:{}", login_effect.session_id);
+            let whitelist_key = format!("whitelist:session:{}", session_id);
             let _: () = redis::AsyncCommands::set_ex(
                 &mut conn,
                 &whitelist_key,
-                &login_effect.refresh_token_hash,
+                &refresh_token_hash_for_cache,
                 session_ttl.0 as u64,
             )
             .await
@@ -145,5 +171,5 @@ pub async fn google_login_handler(
         }
     }
 
-    Ok(Json(ApiResponse::success(200, "Google login successful", login_effect.response_data)))
+    Ok(Json(ApiResponse::success(200, "Google login successful", response_data)))
 }

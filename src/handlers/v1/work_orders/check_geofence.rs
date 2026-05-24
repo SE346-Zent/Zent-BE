@@ -46,11 +46,16 @@ pub async fn check_geofence(
         &wo.country,
     ).await?;
 
-    // Retrieve allowed radius from policies (default to 2000 meters)
-    let radius: f64 = luts.policies
-        .get("geofencing_radius")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(2000.0);
+    // Retrieve allowed radius from policies (default to 2000 meters).
+    // Clamp to a finite positive value so NaN / inf / ≤0 from misconfigured
+    // policy entries cannot silently make every check fail or behave incorrectly.
+    let radius: f64 = {
+        let raw = luts.policies
+            .get("geofencing_radius")
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(2000.0);
+        if raw.is_finite() && raw > 0.0 { raw } else { 2000.0 }
+    };
 
     // Calculate distance
     let tech_point = Point::new(payload.longitude, payload.latitude);
