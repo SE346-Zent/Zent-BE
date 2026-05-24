@@ -7,7 +7,7 @@ use zent_be::core::state::AppState;
 use zent_be::core::config::AppConfig;
 use zent_be::infrastructure::cache::ValkeyClient;
 use zent_be::infrastructure::scheduler::AppScheduler;
-use zent_be::{core, handlers, infrastructure};
+use zent_be::{consumers, core, handlers, infrastructure};
 use sea_orm::DatabaseConnection;
 use lapin::Connection;
 
@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Start background asynchronous AMQP email consumer pool globally
-    infrastructure::consumers::email::start_email_consumer(rabbitmq.clone()).await;
+    consumers::email::start_email_consumer(rabbitmq.clone()).await;
 
     // Load lookup tables (roles, account_statuses, etc.) into memory
     let lookup_tables = core::lookup_tables::LookupTables::load(&db)
@@ -78,13 +78,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Start background asynchronous AMQP work order consumer pool
-    infrastructure::consumers::work_order::start_work_order_consumer(state.clone()).await;
+    consumers::work_order::start_work_order_consumer(state.clone()).await;
 
     // Start background FCM push notification consumer
-    infrastructure::consumers::fcm::start_fcm_consumer(rabbitmq.clone(), db.clone()).await;
+    consumers::fcm::start_fcm_consumer(rabbitmq.clone(), db.clone()).await;
 
     // Start background notification consumer (Phase 2 of outbox pattern)
-    infrastructure::consumers::notification::start_notification_consumer(state.clone()).await;
+    consumers::notification::start_notification_consumer(state.clone()).await;
 
     // Start background cron scheduler for maintenance tasks using pre-loaded LUT
     let app_scheduler: AppScheduler = infrastructure::scheduler::AppScheduler::new()

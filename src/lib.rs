@@ -1,6 +1,7 @@
 pub mod entities;
 pub mod extractor;
 pub mod handlers;
+pub mod consumers;
 pub mod infrastructure;
 pub mod model;
 pub mod services;
