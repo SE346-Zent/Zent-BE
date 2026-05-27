@@ -287,11 +287,26 @@ pub(crate) async fn fetch_paginated_work_orders(
 
     let models_with_related = query
         .order_by_desc(work_orders_ent::Column::CreatedAt)
+        .order_by_asc(work_orders_ent::Column::Id)
         .find_also_related(products::Entity).find_also_related(work_order_symptoms::Entity)
         .offset((pagination.page - 1) * pagination.limit).limit(pagination.limit)
         .all(db.as_ref()).await?;
 
-    let (data, meta) = list_svc::decide_list(models_with_related, &lookup_tables, &pagination, total_records);
+    // Fetch which work orders in this page have ratings
+    let wo_ids: Vec<Uuid> = models_with_related.iter().map(|(wo, _, _)| wo.id).collect();
+    let rated_ids: std::collections::HashSet<Uuid> = if wo_ids.is_empty() {
+        std::collections::HashSet::new()
+    } else {
+        crate::entities::work_order_ratings::Entity::find()
+            .filter(crate::entities::work_order_ratings::Column::WorkOrderId.is_in(wo_ids))
+            .all(db.as_ref())
+            .await?
+            .into_iter()
+            .map(|r| r.work_order_id)
+            .collect()
+    };
+
+    let (data, meta) = list_svc::decide_list(models_with_related, &lookup_tables, &pagination, total_records, &rated_ids);
 
     if let Some(mut conn) = conn_opt {
         if let Ok(cached_val) = serde_json::to_string(&(&data, &meta)) {

@@ -1,6 +1,6 @@
 use axum::{extract::{State, Query}, Json};
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, PaginatorTrait, QuerySelect};
+use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, PaginatorTrait, QuerySelect, QueryOrder, Order};
 use crate::{
     core::errors::AppError,
     entities::users,
@@ -47,11 +47,12 @@ pub async fn list_users_handler(
             }
         }
         1 => {
-            // Admin: only Technicians in their province
+            // Admin: only Technicians in their province (fail-closed if no province)
             select = select.filter(users::Column::RoleId.eq(4));
-            if let Some(ref province) = current_user.province {
-                select = select.filter(users::Column::Province.eq(province.clone()));
-            }
+            let ref province = current_user.province.as_ref().ok_or_else(|| {
+                AppError::Forbidden("Admin profile missing province assignment".to_string())
+            })?;
+            select = select.filter(users::Column::Province.eq(province.as_str()));
         }
         _ => {
             return Err(AppError::Forbidden("Only administrators can list users".to_string()));
@@ -64,6 +65,8 @@ pub async fn list_users_handler(
     let total = select.clone().count(db.as_ref()).await?;
 
     let users_list = select
+        .order_by(users::Column::CreatedAt, Order::Desc)
+        .order_by(users::Column::Id, Order::Asc)
         .offset((page.saturating_sub(1)) * page_size)
         .limit(page_size)
         .all(db.as_ref())

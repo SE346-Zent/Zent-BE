@@ -1,6 +1,6 @@
 use axum::{extract::{State, Path}, Json, Extension};
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait};
+use sea_orm::{DatabaseConnection, ActiveModelTrait, EntityTrait, QueryFilter, ColumnTrait, TransactionTrait};
 use uuid::Uuid;
 use validator::Validate;
 use crate::core::lookup_tables::LookupTables;
@@ -18,6 +18,7 @@ use redis::AsyncCommands;
         (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Not Found", body = ErrorResponse),
+        (status = 409, description = "Conflict - rating already exists", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
     security(("bearer_auth" = []))
@@ -38,25 +39,49 @@ pub async fn rate(
     let closed_status_id = *luts.work_order_statuses_by_name.get("Closed")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
 
-    // Check if rating already exists
-    let rating_exists = crate::entities::work_order_ratings::Entity::find()
-        .filter(crate::entities::work_order_ratings::Column::WorkOrderId.eq(id))
-        .one(db.as_ref())
-        .await?
-        .is_some();
-
-    // Call pure service logic
+    // Atomic check-and-insert inside a transaction to prevent concurrent duplicate ratings
+    let customer_id = auth.user.id;
+    let rating_val = payload.rating;
+    let comment_val = payload.comment;
     let effect = crate::services::v1::work_orders::rate::decide_rate_work_order(
         work_order.clone(),
-        auth.user.id,
+        customer_id,
         closed_status_id,
-        payload.rating,
-        payload.comment,
-        rating_exists,
+        rating_val,
+        comment_val,
+        false, // duplicate check done atomically inside transaction
     )?;
 
-    // Persist rating to DB
-    effect.rating_model.insert(db.as_ref()).await?;
+    let insert_result = db.transaction::<_, _, AppError>(|txn| {
+        let rating_model = effect.rating_model.clone();
+        let id_check = id;
+        Box::pin(async move {
+            // Re-check inside transaction for atomicity
+            let exists = crate::entities::work_order_ratings::Entity::find()
+                .filter(crate::entities::work_order_ratings::Column::WorkOrderId.eq(id_check))
+                .one(txn)
+                .await?
+                .is_some();
+            if exists {
+                return Err(AppError::Conflict("A rating has already been submitted for this work order".to_string()));
+            }
+            rating_model.insert(txn).await?;
+            Ok(())
+        })
+    }).await;
+
+    match insert_result {
+        Ok(()) => {},
+        Err(sea_orm::TransactionError::Connection(db_err)) => {
+            return Err(AppError::Internal(anyhow::anyhow!("Database error: {}", db_err)));
+        }
+        Err(sea_orm::TransactionError::Transaction(AppError::Conflict(msg))) => {
+            return Err(AppError::Conflict(msg));
+        }
+        Err(sea_orm::TransactionError::Transaction(e)) => {
+            return Err(e);
+        }
+    }
 
     // Write-through cache update for work order itself if needed (though work order did not change, let's keep consistency)
     super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), id).await;
