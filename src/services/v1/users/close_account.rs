@@ -16,9 +16,9 @@ pub struct CloseAccountEffect {
 /// Admin, SuperAdmin, and Technician accounts cannot be self-closed.
 pub fn decide_close_account(user: users::Model) -> Result<CloseAccountEffect, AppError> {
     // Only customers can close their own account
-    // if user.role_id != 3 {
-    //     return Err(AppError::Forbidden("Only customers can close their account".to_string()));
-    // }
+    if user.role_id != 3 {
+        return Err(AppError::Forbidden("Only customers can close their account".to_string()));
+    }
 
     // Terminated status per AccountStatusEnum
     const STATUS_TERMINATED: i32 = 5;

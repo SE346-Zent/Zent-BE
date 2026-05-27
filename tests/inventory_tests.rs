@@ -178,16 +178,16 @@ fn integration_role_access_matrix_10_parts_5_users() {
 
     // 10 parts with varying ownership / approval status
     let parts = vec![
-        make_part_entry("p0000000-0000-0000-0000-000000000001", "PN-001", "SN-001", "approved", "Battery", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000002", "PN-002", "SN-002", "approved", "Battery", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000003", "PN-003", "SN-003", "pending", "Display", "Used", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000004", "PN-004", "SN-004", "denied", "Charger", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000005", "PN-005", "SN-005", "approved", "Audio", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000006", "PN-006", "SN-006", "approved", "Battery", "Used", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000007", "PN-007", "SN-007", "pending", "Display", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000008", "PN-008", "SN-008", "approved", "Charger", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000009", "PN-009", "SN-009", "denied", "Audio", "Used", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000010", "PN-010", "SN-010", "pending", "Battery", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000001", "PN-001", "SN-001", "approved", "Battery", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000002", "PN-002", "SN-002", "approved", "Battery", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000003", "PN-003", "SN-003", "pending", "Display", "Used", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000004", "PN-004", "SN-004", "denied", "Charger", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000005", "PN-005", "SN-005", "approved", "Audio", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000006", "PN-006", "SN-006", "approved", "Battery", "Used", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000007", "PN-007", "SN-007", "pending", "Display", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000008", "PN-008", "SN-008", "approved", "Charger", "New", Some("b0000000-0000-0000-0000-000000000002"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000009", "PN-009", "SN-009", "denied", "Audio", "Used", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000010", "PN-010", "SN-010", "pending", "Battery", "New", Some("b0000000-0000-0000-0000-000000000001"), Some("c0000000-0000-0000-0000-000000000002"), None, None),
     ];
 
     let q = default_parts_query();
@@ -312,12 +312,12 @@ fn integration_product_registration_complex() {
     let result = register_product::decide_register_product(
         &req, user_id, "John Doe",
         Some("MODEL-A".to_string()), Some("Model A".to_string()),
-        Some(u("p1000000-0000-0000-0000-000000000001")), now,
+        Some(u("e1000000-0000-0000-0000-000000000001")), now,
     );
     assert!(result.is_ok());
     let effect = result.unwrap();
     assert!(!effect.should_send_confirmation_email); // No email on re-registration
-    assert_eq!(effect.registered_product_id, u("p1000000-0000-0000-0000-000000000001"));
+    assert_eq!(effect.registered_product_id, u("e1000000-0000-0000-0000-000000000001"));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -331,9 +331,9 @@ fn integration_product_isolation_across_roles() {
     let other = u("c0000000-0000-0000-0000-000000000002");
 
     let products = vec![
-        make_product_entry("p0000000-0000-0000-0000-000000000001", "Laptop X", "MOD-X", "SN-XXX", "c0000000-0000-0000-0000-000000000001", "Alice", &["b0000000-0000-0000-0000-000000000001"]),
-        make_product_entry("p0000000-0000-0000-0000-000000000002", "Laptop Y", "MOD-Y", "SN-YYY", "c0000000-0000-0000-0000-000000000002", "Bob", &["b0000000-0000-0000-0000-000000000001"]),
-        make_product_entry("p0000000-0000-0000-0000-000000000003", "Laptop Z", "MOD-Z", "SN-ZZZ", "c0000000-0000-0000-0000-000000000001", "Alice", &[]),
+        make_product_entry("e0000000-0000-0000-0000-000000000001", "Laptop X", "MOD-X", "SN-XXX", "c0000000-0000-0000-0000-000000000001", "Alice", &["b0000000-0000-0000-0000-000000000001"]),
+        make_product_entry("e0000000-0000-0000-0000-000000000002", "Laptop Y", "MOD-Y", "SN-YYY", "c0000000-0000-0000-0000-000000000002", "Bob", &["b0000000-0000-0000-0000-000000000001"]),
+        make_product_entry("e0000000-0000-0000-0000-000000000003", "Laptop Z", "MOD-Z", "SN-ZZZ", "c0000000-0000-0000-0000-000000000001", "Alice", &[]),
     ];
 
     let q = default_products_query();
@@ -379,7 +379,7 @@ fn integration_parts_pagination_edge_cases() {
     let mut parts = Vec::new();
     for i in 1..=25 {
         parts.push(make_part_entry(
-            &format!("p{:032}", i),
+            &format!("{:032x}", i),
             &format!("PN-{:03}", i),
             &format!("SN-{:03}", i),
             "approved", "Battery", "New",
@@ -422,10 +422,10 @@ fn integration_parts_pagination_edge_cases() {
 fn integration_part_filter_combinations() {
     let admin = u("a0000000-0000-0000-0000-000000000001");
     let parts = vec![
-        make_part_entry("p0000000-0000-0000-0000-000000000001", "PN-001", "SN-001", "approved", "Battery", "New", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000002", "PN-002", "SN-002", "pending", "Battery", "Used", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000003", "PN-003", "SN-003", "denied", "Charger", "New", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
-        make_part_entry("p0000000-0000-0000-0000-000000000004", "PN-CHG-001", "SN-CHG-001", "approved", "Charger", "New", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000001", "PN-001", "SN-001", "approved", "Battery", "New", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000002", "PN-002", "SN-002", "pending", "Battery", "Used", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000003", "PN-003", "SN-003", "denied", "Charger", "New", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
+        make_part_entry("d0000000-0000-0000-0000-000000000004", "PN-CHG-001", "SN-CHG-001", "approved", "Charger", "New", None, Some("c0000000-0000-0000-0000-000000000001"), None, None),
     ];
 
     // Filter by approval status
@@ -459,7 +459,7 @@ fn integration_product_detail_with_parts_rollup() {
 
     let product_with_relations = ProductWithRelations {
         product_record: products::Model {
-            id: u("p0000000-0000-0000-0000-000000000001"),
+            id: u("e0000000-0000-0000-0000-000000000001"),
             product_model_code: "MOD-Z".to_string(),
             customer_id: cust,
             product_name: "Laptop Z".to_string(),
@@ -481,7 +481,7 @@ fn integration_product_detail_with_parts_rollup() {
                 part_record: parts::Model {
                     id: u("b0000000-0000-0000-0000-000000000001"),
                     part_catalog_id: Uuid::new_v4(),
-                    product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
+                    product_id: Some(u("e0000000-0000-0000-0000-000000000001")),
                     serial_number: "SN-Z-P0".to_string(),
                     part_condition_id: 1,
                     manufactured_date: now,
@@ -502,7 +502,7 @@ fn integration_product_detail_with_parts_rollup() {
                 part_record: parts::Model {
                     id: u("b0000000-0000-0000-0000-000000000002"),
                     part_catalog_id: Uuid::new_v4(),
-                    product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
+                    product_id: Some(u("e0000000-0000-0000-0000-000000000001")),
                     serial_number: "SN-Z-P1".to_string(),
                     part_condition_id: 1,
                     manufactured_date: now,
@@ -523,7 +523,7 @@ fn integration_product_detail_with_parts_rollup() {
                 part_record: parts::Model {
                     id: u("b0000000-0000-0000-0000-000000000003"),
                     part_catalog_id: Uuid::new_v4(),
-                    product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
+                    product_id: Some(u("e0000000-0000-0000-0000-000000000001")),
                     serial_number: "SN-Z-P2".to_string(),
                     part_condition_id: 1,
                     manufactured_date: now,
@@ -548,7 +548,7 @@ fn integration_product_detail_with_parts_rollup() {
     assert!(detail.is_ok());
     let d = detail.unwrap();
     assert_eq!(d.parts.len(), 3, "Should roll up all 3 parts");
-    assert_eq!(d.product_id, u("p0000000-0000-0000-0000-000000000001"));
+    assert_eq!(d.product_id, u("e0000000-0000-0000-0000-000000000001"));
     assert_eq!(d.customer_name, format!("Customer {}", cust));
 
     // Verify parts approval statuses
