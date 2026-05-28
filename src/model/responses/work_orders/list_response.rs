@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -11,8 +10,6 @@ pub struct WorkOrderListItem {
     pub customer_name: String,
     pub product_name: String,
     pub address: String,
-    pub appointment: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
+    pub appointment: Option<String>,
+    pub created_at: String,
 }
-
-

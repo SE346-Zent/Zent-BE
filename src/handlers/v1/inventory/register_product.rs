@@ -3,7 +3,6 @@ use crate::core::state::AppState;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
 use crate::model::requests::inventory::register_product_request::RegisterProductRequest;
-use crate::model::requests::inventory::list_products_query::ListProductsQuery;
 use crate::model::responses::inventory::register_product_response::RegisterProductResponse;
 use crate::model::responses::base::ApiResponse;
 use crate::services::v1::inventory::register_product::{self, decide_register_product};
@@ -32,21 +31,21 @@ pub async fn register_product(
 ) -> Result<Json<ApiResponse<RegisterProductResponse>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-    // Query Zeus to verify the serial number exists in the product catalog
-    let query = ListProductsQuery {
-        search: Some(payload.serial_number.clone()),
-        ..Default::default()
+    let zeus_prod = state.zeus_client.find_product_by_serial(&payload.serial_number).await?;
+
+    let (product_model_code, model_name) = match &zeus_prod {
+        Some(p) => {
+            let model_def = product_models::Entity::find_by_id(p.product_model_code.clone())
+                .one(state.db.as_ref())
+                .await?;
+            (
+                Some(p.product_model_code.clone()),
+                Some(model_def.map(|m| m.model_name).unwrap_or(p.product_name.clone())),
+            )
+        }
+        None => (None, None),
     };
-    let zeus_list = state.zeus_client.list_products(&query).await?;
-    let zeus_prod = zeus_list.items.into_iter().find(|p| p.serial_number == payload.serial_number)
-        .ok_or_else(|| AppError::BadRequest(format!("Serial number '{}' not found in product catalog", payload.serial_number)))?;
 
-    // Retrieve product model definition from local database
-    let model_def = product_models::Entity::find_by_id(zeus_prod.product_model_code.clone())
-        .one(state.db.as_ref())
-        .await?;
-
-    // Query local database for existing registered products with the same serial number
     let existing = prod::Entity::find()
         .filter(prod::Column::SerialNumber.eq(&payload.serial_number))
         .one(state.db.as_ref())
@@ -57,14 +56,13 @@ pub async fn register_product(
         &payload,
         auth.user.id,
         &auth.user.full_name,
-        Some(zeus_prod.product_model_code.clone()),
-        Some(model_def.map(|m| m.model_name).unwrap_or(zeus_prod.product_name)),
+        product_model_code,
+        model_name,
         existing_id,
         Utc::now(),
     )?;
 
     let product_id = if existing_id.is_none() {
-        // Register the product on Zeus SCM API
         let zeus_registered = state.zeus_client.create_product(
             &effect.product_model_code,
             effect.customer_id,
@@ -72,7 +70,6 @@ pub async fn register_product(
             &effect.product_serial_number,
         ).await?;
 
-        // Save registration record locally in Zent DB
         let new_db_product = prod::ActiveModel {
             id: Set(zeus_registered.id),
             product_model_code: Set(zeus_registered.product_model_code),
@@ -89,7 +86,6 @@ pub async fn register_product(
         effect.registered_product_id
     };
 
-    // If needed, send confirmation email via RabbitMQ
     if effect.should_send_confirmation_email {
         if let Some(ref conn) = state.rabbitmq {
             let email_payload = serde_json::json!({

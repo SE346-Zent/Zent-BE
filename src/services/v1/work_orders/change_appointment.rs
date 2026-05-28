@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use sea_orm::Set;
 use uuid::Uuid;
 use std::collections::HashMap;
@@ -37,6 +37,15 @@ pub fn decide_change_appointment(
         ));
     }
 
+    // Appointment must be at least 24 hours from now
+    let now = Utc::now();
+    let min_appointment = now + Duration::hours(24);
+    if new_appointment < min_appointment {
+        return Err(AppError::BadRequest(
+            "Appointment must be at least 24 hours from now".to_string(),
+        ));
+    }
+
     // Workday Hours Validation
     let appointment_local = crate::utils::time::to_utc7_time(new_appointment);
 
@@ -64,7 +73,6 @@ pub fn decide_change_appointment(
         )));
     }
 
-    let now = Utc::now();
     let old_appointment = work_order.appointment;
 
     // Update the work order

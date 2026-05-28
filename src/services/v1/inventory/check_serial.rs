@@ -1,49 +1,73 @@
-/// Check whether a specific serial number exists within a provided list of known catalog serials.
+use crate::services::v1::inventory::ports::ZeusProduct;
+
+/// Check whether a specific serial number exists in the Zeus product catalog.
 ///
 /// This pure function performs a case-insensitive, whitespace-trimmed comparison
-/// to ensure robust validation of product serial numbers against the catalog.
+/// to ensure robust validation of a product serial number against a found product.
 ///
 /// # Arguments
 /// * `provided_serial_number` - The serial number string to be validated.
-/// * `known_catalog_serials` - A slice of valid serial number strings from the database.
+/// * `zeus_product` - An optional product found in Zeus via serial lookup.
 ///
 /// # Returns
-/// `true` if a matching serial is found in the catalog, `false` otherwise.
+/// `true` if a matching product is found with a matching serial, `false` otherwise.
 pub fn check_serial_exists(
     provided_serial_number: &str,
-    known_catalog_serials: &[String],
+    zeus_product: &Option<ZeusProduct>,
 ) -> bool {
-    let normalized_input = provided_serial_number.trim().to_lowercase();
-    known_catalog_serials.iter().any(|catalog_serial| catalog_serial.to_lowercase() == normalized_input)
+    match zeus_product {
+        Some(product) => {
+            let normalized_input = provided_serial_number.trim().to_lowercase();
+            product.serial_number.to_lowercase() == normalized_input
+        }
+        None => false,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
+
+    fn mock_product(serial: &str) -> ZeusProduct {
+        let now = chrono::Utc::now();
+        ZeusProduct {
+            id: Uuid::new_v4(),
+            product_model_code: "MOD-A".to_string(),
+            customer_id: Uuid::new_v4(),
+            product_name: "Product A".to_string(),
+            serial_number: serial.to_string(),
+            created_at: now,
+            updated_at: now,
+        }
+    }
 
     #[test]
     fn test_finds_match() {
-        assert!(check_serial_exists("SN-001", &["SN-001".into(), "SN-002".into()]));
+        let product = mock_product("SN-001");
+        assert!(check_serial_exists("SN-001", &Some(product)));
     }
 
     #[test]
     fn test_no_match() {
-        assert!(!check_serial_exists("SN-999", &["SN-001".into()]));
+        let product = mock_product("SN-001");
+        assert!(!check_serial_exists("SN-999", &Some(product)));
     }
 
     #[test]
     fn test_case_insensitive() {
-        assert!(check_serial_exists("sn-001", &["SN-001".into()]));
+        let product = mock_product("SN-001");
+        assert!(check_serial_exists("sn-001", &Some(product)));
     }
 
     #[test]
     fn test_trims_whitespace() {
-        assert!(check_serial_exists("  SN-001  ", &["SN-001".into()]));
+        let product = mock_product("SN-001");
+        assert!(check_serial_exists("  SN-001  ", &Some(product)));
     }
 
     #[test]
-    fn test_empty_list() {
-        let empty: Vec<String> = vec![];
-        assert!(!check_serial_exists("SN-001", &empty));
+    fn test_none_product() {
+        assert!(!check_serial_exists("SN-001", &None));
     }
 }

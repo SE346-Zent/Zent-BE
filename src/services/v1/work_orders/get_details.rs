@@ -35,9 +35,9 @@ pub fn map_to_details(
         city: work_order.city,
         address: work_order.address,
         building: work_order.building,
-        appointment: work_order.appointment,
-        created_at: work_order.created_at,
-        updated_at: work_order.updated_at,
+        appointment: crate::utils::time::to_utc7_string(work_order.appointment),
+        created_at: crate::utils::time::to_utc7_string(work_order.created_at),
+        updated_at: crate::utils::time::to_utc7_string(work_order.updated_at),
     }
 }
 

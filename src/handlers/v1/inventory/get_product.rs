@@ -2,7 +2,6 @@ use axum::{extract::{State, Path}, Json};
 use crate::core::state::AppState;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
-use crate::model::requests::inventory::list_parts_query::ListPartsQuery;
 use crate::model::responses::inventory::product_detail_response::ProductDetailResponse;
 use crate::model::responses::base::ApiResponse;
 use crate::services::v1::inventory::get_product::{self, ProductWithRelations};
@@ -31,11 +30,7 @@ pub async fn get_product(
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse<ProductDetailResponse>>, AppError> {
     let zeus_prod = state.zeus_client.get_product(id).await?;
-    let all_parts_list = state.zeus_client.list_parts(&ListPartsQuery {
-        page: None,
-        limit: Some(10000),
-        ..Default::default()
-    }).await?;
+    let product_parts = state.zeus_client.find_parts_by_product(zeus_prod.id).await?;
 
     let model_definition = product_models::Entity::find_by_id(zeus_prod.product_model_code.clone())
         .one(state.db.as_ref())
@@ -49,12 +44,8 @@ pub async fn get_product(
             deleted_at: None,
         });
 
-    let prod_parts: Vec<_> = all_parts_list.items.iter()
-        .filter(|p| p.product_id == Some(zeus_prod.id))
-        .collect();
-
     let mut installed_parts = Vec::new();
-    for p in prod_parts {
+    for p in product_parts {
         let catalog_definition = part_catalog::Entity::find_by_id(p.part_catalog_id)
             .one(state.db.as_ref())
             .await?
@@ -100,12 +91,12 @@ pub async fn get_product(
             }
         }
 
-        installed_parts.push(crate::services::v1::inventory::get_product::PartInProduct {
+        installed_parts.push(get_product::PartInProduct {
             part_record: parts::Model {
                 id: p.id,
                 part_catalog_id: p.part_catalog_id,
                 product_id: p.product_id,
-                serial_number: p.serial_number.clone(),
+                serial_number: p.serial_number,
                 part_condition_id: p.part_condition_id,
                 manufactured_date: p.manufactured_date,
                 installation_date: p.installation_date,
@@ -125,10 +116,10 @@ pub async fn get_product(
     let product_relation_data = ProductWithRelations {
         product_record: prod::Model {
             id: zeus_prod.id,
-            product_model_code: zeus_prod.product_model_code.clone(),
+            product_model_code: zeus_prod.product_model_code,
             customer_id: zeus_prod.customer_id,
-            product_name: zeus_prod.product_name.clone(),
-            serial_number: zeus_prod.serial_number.clone(),
+            product_name: zeus_prod.product_name,
+            serial_number: zeus_prod.serial_number,
             created_at: zeus_prod.created_at,
             updated_at: zeus_prod.updated_at,
             deleted_at: None,

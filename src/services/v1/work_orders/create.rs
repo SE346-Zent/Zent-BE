@@ -5,7 +5,7 @@ use crate::{
     model::requests::work_orders::create_work_order_request::CreateWorkOrderRequest,
 };
 use uuid::Uuid;
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use std::collections::HashMap;
 
 /// Represents the calculated results and side-effects of a successful work order creation.
@@ -44,7 +44,16 @@ pub fn decide_create_work_order(
         return Err(AppError::BadRequest("Only HCM and HN are supported at this time".to_string()));
     }
 
-    // 2. Workday Hours Validation
+    // 2. Appointment must be at least 24 hours from now
+    let now = Utc::now();
+    let min_appointment = now + Duration::hours(24);
+    if creation_payload.appointment < min_appointment {
+        return Err(AppError::BadRequest(
+            "Appointment must be at least 24 hours from now".to_string(),
+        ));
+    }
+
+    // 3. Workday Hours Validation
     let appointment_local = crate::utils::time::to_utc7_time(creation_payload.appointment);
 
     let workday_start: u32 = policies
@@ -71,8 +80,7 @@ pub fn decide_create_work_order(
         )));
     }
 
-    // 3. ID and Number Generation
-    let current_timestamp = Utc::now();
+    // 4. ID and Number Generation
     let work_order_id = Uuid::new_v4();
     let work_order_number = format!("WO-{}", &work_order_id.to_string()[..6].to_uppercase());
 
@@ -96,8 +104,8 @@ pub fn decide_create_work_order(
         building: Set(creation_payload.building),
         appointment: Set(creation_payload.appointment),
         work_order_number: Set(work_order_number),
-        created_at: Set(current_timestamp),
-        updated_at: Set(current_timestamp),
+        created_at: Set(now),
+        updated_at: Set(now),
         ..Default::default()
     };
 
@@ -107,7 +115,7 @@ pub fn decide_create_work_order(
         from_status_id: Set(None), // Initial creation — no previous status
         to_status_id: Set(initial_status_id),
         changed_by_id: Set(requesting_customer_id),
-        changed_at: Set(current_timestamp),
+        changed_at: Set(now),
     };
 
     Ok(CreateWorkOrderEffect { work_order_model: work_order_active_model, state_history_model: state_history_active_model })

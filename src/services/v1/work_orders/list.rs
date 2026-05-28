@@ -22,8 +22,8 @@ pub fn map_to_list_item(
         customer_name: format!("{} {}", work_order.first_name, work_order.last_name),
         product_name: product.map(|p| p.product_name).unwrap_or_else(|| "Unknown Product".to_string()),
         address: format!("{}, {}, {}", work_order.address, work_order.city, work_order.province),
-        appointment: Some(work_order.appointment),
-        created_at: work_order.created_at,
+        appointment: Some(crate::utils::time::to_utc7_string(work_order.appointment)),
+        created_at: crate::utils::time::to_utc7_string(work_order.created_at),
     }
 }
 

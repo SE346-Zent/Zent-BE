@@ -2,7 +2,6 @@ use axum::{extract::State, Json};
 use crate::core::state::AppState;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::model::requests::inventory::check_warranty_request::CheckWarrantyRequest;
-use crate::model::requests::inventory::list_products_query::ListProductsQuery;
 use crate::model::responses::inventory::warranty_check_response::WarrantyCheckResponse;
 use crate::model::responses::base::ApiResponse;
 use crate::services::v1::inventory::check_warranty::determine_warranty_status;
@@ -29,16 +28,9 @@ pub async fn check_warranty(
 ) -> Result<Json<ApiResponse<WarrantyCheckResponse>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-    // Verify serial number exists in Zeus product catalog
-    let query = ListProductsQuery {
-        search: Some(payload.serial_number.clone()),
-        ..Default::default()
-    };
-    let zeus_list = state.zeus_client.list_products(&query).await?;
-    let zeus_prod = zeus_list.items.into_iter().find(|p| p.serial_number == payload.serial_number)
+    let zeus_prod = state.zeus_client.find_product_by_serial(&payload.serial_number).await?
         .ok_or_else(|| AppError::BadRequest(format!("Serial number '{}' not found in product catalog", payload.serial_number)))?;
 
-    // Check local warranties table
     let existing_warranty = warranties::Entity::find()
         .filter(warranties::Column::ProductId.eq(zeus_prod.id))
         .one(state.db.as_ref())

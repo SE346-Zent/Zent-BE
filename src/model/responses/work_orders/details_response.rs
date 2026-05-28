@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 /// Detailed information about a work order.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
@@ -46,10 +45,10 @@ pub struct WorkOrderDetails {
     pub address: String,
     /// Service location: Building/Apartment info.
     pub building: Option<String>,
-    /// Scheduled appointment time.
-    pub appointment: DateTime<Utc>,
-    /// Timestamp when the work order was created.
-    pub created_at: DateTime<Utc>,
-    /// Timestamp when the work order was last updated.
-    pub updated_at: DateTime<Utc>,
+    /// Scheduled appointment time (GMT+7).
+    pub appointment: String,
+    /// Timestamp when the work order was created (GMT+7).
+    pub created_at: String,
+    /// Timestamp when the work order was last updated (GMT+7).
+    pub updated_at: String,
 }
