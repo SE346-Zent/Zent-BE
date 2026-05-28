@@ -25,4 +25,4 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Run unit tests
-        run: cargo nextest run --no-fail-fast --release
+        run: cargo nextest run --lib --no-fail-fast --release

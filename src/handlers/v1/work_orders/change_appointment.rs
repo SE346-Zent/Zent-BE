@@ -72,6 +72,7 @@ pub async fn change_appointment(
         pending_status_id,
         assigned_status_id,
         auth.user.id,
+        &luts.policies,
     )?;
 
     db.transaction::<_, (), AppError>(|txn| Box::pin(async move {

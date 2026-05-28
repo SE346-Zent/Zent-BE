@@ -12,6 +12,7 @@ pub struct WorkOrderListItem {
     pub product_name: String,
     pub address: String,
     pub appointment: Option<DateTime<Utc>>,
+    pub has_rating: bool,
     pub created_at: DateTime<Utc>,
 }
 

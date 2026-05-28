@@ -70,7 +70,15 @@ pub async fn login_handler(
     let is_password_valid = hasher::verify_password(payload.password, user_record.password_hash.clone()).await?;
     let login_effect = login::decide_login(&user_record, is_password_valid, access_token_ttl, session_ttl, &encoding_key)?;
 
+    if let Some(fcm_token) = payload.fcm_token {
+        let mut user_active: users::ActiveModel = user_record.into();
+        user_active.fcm_token = Set(Some(fcm_token));
+        user_active.updated_at = Set(Utc::now());
+        user_active.update(db.as_ref()).await?;
+    }
+
     let active_session = sessions::ActiveModel {
+
         id: Set(login_effect.session_id),
         user_id: Set(login_effect.user_id),
         refresh_token_hash: Set(login_effect.refresh_token_hash.clone()),

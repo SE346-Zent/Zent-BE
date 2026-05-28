@@ -13,6 +13,7 @@ pub struct Model {
     pub serial_number: String,
     pub description: Option<String>,
     pub work_order_id: Uuid,
+    pub work_order_number: String,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,

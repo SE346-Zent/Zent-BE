@@ -14,13 +14,14 @@ pub mod approve_refusal;
 pub mod deny_refusal;
 pub mod history;
 pub mod cancel;
-pub mod complaint;
+pub mod rate;
 pub mod change_appointment;
 pub mod reject_form_list;
 pub mod reject_form_detail;
+pub mod check_geofence;
 
 pub use change_appointment::change_appointment;
-pub use complaint::complaint;
+pub use rate::rate;
 pub use create::create;
 pub use list::list;
 pub use get_details::get_details;
@@ -35,6 +36,7 @@ pub use reassign::reassign;
 pub use cancel::cancel;
 pub use reject_form_list::reject_form_list;
 pub use reject_form_detail::reject_form_detail;
+pub use check_geofence::check_geofence;
 
 // Re-export __path_* items for utoipa OpenApi derive
 pub use create::__path_create;
@@ -49,10 +51,12 @@ pub use deny_refusal::__path_deny_refusal;
 pub use history::__path_history;
 pub use reassign::__path_reassign;
 pub use cancel::__path_cancel;
-pub use complaint::__path_complaint;
+pub use rate::__path_rate;
 pub use change_appointment::__path_change_appointment;
 pub use reject_form_list::__path_reject_form_list;
 pub use reject_form_detail::__path_reject_form_detail;
+pub use check_geofence::__path_check_geofence;
+
 
 use axum::{Router, middleware};
 use std::collections::HashMap;
@@ -85,6 +89,7 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(create))
         .route("/{id}/cancel", axum::routing::post(cancel))
+        .route("/{id}/rate", axum::routing::post(rate))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Customer]),
@@ -94,6 +99,8 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/start", axum::routing::post(start))
         .route("/{id}/refuse", axum::routing::post(refuse))
         .route("/{id}/complete", axum::routing::post(complete))
+        .route("/{id}/geofence", axum::routing::post(check_geofence))
+
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Technician]),
@@ -280,11 +287,26 @@ pub(crate) async fn fetch_paginated_work_orders(
 
     let models_with_related = query
         .order_by_desc(work_orders_ent::Column::CreatedAt)
+        .order_by_asc(work_orders_ent::Column::Id)
         .find_also_related(products::Entity).find_also_related(work_order_symptoms::Entity)
         .offset((pagination.page - 1) * pagination.limit).limit(pagination.limit)
         .all(db.as_ref()).await?;
 
-    let (data, meta) = list_svc::decide_list(models_with_related, &lookup_tables, &pagination, total_records);
+    // Fetch which work orders in this page have ratings
+    let wo_ids: Vec<Uuid> = models_with_related.iter().map(|(wo, _, _)| wo.id).collect();
+    let rated_ids: std::collections::HashSet<Uuid> = if wo_ids.is_empty() {
+        std::collections::HashSet::new()
+    } else {
+        crate::entities::work_order_ratings::Entity::find()
+            .filter(crate::entities::work_order_ratings::Column::WorkOrderId.is_in(wo_ids))
+            .all(db.as_ref())
+            .await?
+            .into_iter()
+            .map(|r| r.work_order_id)
+            .collect()
+    };
+
+    let (data, meta) = list_svc::decide_list(models_with_related, &lookup_tables, &pagination, total_records, &rated_ids);
 
     if let Some(mut conn) = conn_opt {
         if let Ok(cached_val) = serde_json::to_string(&(&data, &meta)) {

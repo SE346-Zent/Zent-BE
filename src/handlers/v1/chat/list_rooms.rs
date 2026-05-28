@@ -108,9 +108,24 @@ pub async fn list_rooms(
             .ok()
             .flatten();
 
-        let latest_message = latest_msg.as_ref()
-            .and_then(|m| m.get_str("content").ok())
-            .map(|s| s.to_string());
+        let latest_message = latest_msg.as_ref().and_then(|m| {
+            // If the message has an image_url, build a human-readable preview
+            let has_image = m.get_str("image_url").ok().map_or(false, |s| !s.is_empty());
+            if has_image {
+                let sender_name = m.get_str("sender_id").ok().and_then(|sender_id_str| {
+                    if sender_id_str == user_id.to_string() {
+                        Some("You".to_string())
+                    } else if opponent_id.map(|o| o.to_string()).as_deref() == Some(sender_id_str) {
+                        Some(opposite_name.clone())
+                    } else {
+                        Some("Someone".to_string())
+                    }
+                }).unwrap_or_else(|| "Someone".to_string());
+                Some(format!("{} has sent an image", sender_name))
+            } else {
+                m.get_str("content").ok().map(|s| s.to_string())
+            }
+        });
         let latest_message_at = latest_msg.as_ref()
             .and_then(|m| m.get_datetime("created_at").ok())
             .map(|d| d.to_string());

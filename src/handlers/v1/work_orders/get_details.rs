@@ -72,7 +72,9 @@ fn check_wo_permissions(
     match auth.role.name.as_str() {
         "SuperAdmin" => Ok(()),
         "Admin" => {
-            let admin_province = auth.user.province.as_deref().unwrap_or("");
+            let Some(ref admin_province) = auth.user.province else {
+                return Err(AppError::Forbidden("Admin profile missing province assignment".to_string()));
+            };
             if admin_province != province {
                 return Err(AppError::Forbidden(format!("You do not have permission to view work orders in province '{}'", province)));
             }

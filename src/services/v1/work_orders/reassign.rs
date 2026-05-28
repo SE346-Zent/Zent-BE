@@ -34,9 +34,7 @@ pub fn decide_reassign_work_order(
         ));
     }
 
-    // ── Same validation as assign ──────────────────────────────────
-    let tz_offset = FixedOffset::east_opt(7 * 3600).unwrap(); // GMT+7
-    let appointment_local = work_order.appointment.with_timezone(&tz_offset);
+    let appointment_local = crate::utils::time::to_utc7_time(work_order.appointment);
 
     let workday_start: u32 = policies
         .get("workday_start")
