@@ -2,7 +2,7 @@ use axum::{extract::{State, Query}, Json};
 use std::sync::Arc;
 use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, PaginatorTrait};
 use chrono::{Duration, Utc};
-use crate::core::errors::AppError;
+use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::lookup_tables::LookupTables;
 use crate::extractor::auth_user::AuthUser;
 use crate::model::requests::inventory::analytics_query::AnalyticsQuery;
