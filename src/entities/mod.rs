@@ -25,6 +25,7 @@ pub mod roles;
 pub mod sessions;
 pub mod users;
 pub mod warranties;
+pub mod warranty_statuses;
 pub mod work_order_closing_forms;
 pub mod work_order_image_links;
 pub mod work_order_reject_form_image_links;

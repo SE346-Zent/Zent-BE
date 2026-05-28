@@ -4,7 +4,7 @@ use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
 use crate::model::responses::base::ApiResponse;
 use crate::services::v1::inventory::accept_part::{self, AcceptPartEffect};
-use crate::entities::{new_part_forms, part_audit_log, part_catalog};
+use crate::entities::{new_part_forms, part_audit_log};
 use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
 use uuid::Uuid;
 use chrono::Utc;
@@ -54,11 +54,11 @@ pub async fn accept_part(
         Utc::now(),
     )?;
 
-    let catalog = part_catalog::Entity::find()
-        .filter(part_catalog::Column::PartNumber.eq(&form.part_number))
-        .one(state.db.as_ref())
+    let catalog = state
+        .zeus_client
+        .find_part_catalog_by_part_number(&form.part_number)
         .await?
-        .ok_or_else(|| AppError::NotFound(format!("Part number {} not found in catalog", form.part_number)))?;
+        .ok_or_else(|| AppError::NotFound(format!("Part number {} not found in SCM catalog", form.part_number)))?;
 
     // Condition defaults to 1 (New), mfg_date to form creation date
     let condition_id = 1;

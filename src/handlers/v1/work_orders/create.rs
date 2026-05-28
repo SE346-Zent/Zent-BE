@@ -14,7 +14,7 @@ use crate::model::requests::work_orders::create_work_order_request::CreateWorkOr
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::create_response::WorkOrderResponseData;
 use crate::services::v1::work_orders::create as create_svc;
-use crate::entities::{products, work_orders as work_orders_ent};
+use crate::entities::work_orders as work_orders_ent;
 use serde_json::json;
 use redis::AsyncCommands;
 
@@ -82,9 +82,7 @@ pub async fn create(
         conn_opt = Some(conn);
     }
 
-    if products::Entity::find_by_id(payload.product_id).one(db.as_ref()).await?.is_none() {
-        return Err(AppError::NotFound(format!("Product with ID {} not found", payload.product_id)));
-    }
+    state.zeus_client.get_product(payload.product_id).await?;
     if let Some(ref_id) = payload.reference_ticket_id {
         if work_orders_ent::Entity::find().filter(work_orders_ent::Column::Id.eq(ref_id)).filter(work_orders_ent::Column::CustomerId.eq(auth.user.id)).one(db.as_ref()).await?.is_none() {
             return Err(AppError::BadRequest(format!("Reference Work Order with ID {} not found", ref_id)));

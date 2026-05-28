@@ -32,42 +32,60 @@ pub async fn get_product(
     let zeus_prod = state.zeus_client.get_product(id).await?;
     let product_parts = state.zeus_client.find_parts_by_product(zeus_prod.id).await?;
 
-    let model_definition = product_models::Entity::find_by_id(zeus_prod.product_model_code.clone())
-        .one(state.db.as_ref())
-        .await?
-        .unwrap_or_else(|| product_models::Model {
+    let model_definition = match state
+        .zeus_client
+        .get_product_model(&zeus_prod.product_model_code)
+        .await
+    {
+        Ok(model) => product_models::Model {
+            model_code: model.model_code,
+            model_name: model.model_name,
+            description: model.description,
+            created_at: zeus_prod.created_at,
+            updated_at: zeus_prod.updated_at,
+            deleted_at: None,
+        },
+        Err(_) => product_models::Model {
             model_code: zeus_prod.product_model_code.clone(),
             model_name: format!("Model {}", zeus_prod.product_model_code),
             description: None,
             created_at: zeus_prod.created_at,
             updated_at: zeus_prod.updated_at,
             deleted_at: None,
-        });
+        },
+    };
 
     let mut installed_parts = Vec::new();
     for p in product_parts {
-        let catalog_definition = part_catalog::Entity::find_by_id(p.part_catalog_id)
-            .one(state.db.as_ref())
-            .await?
-            .unwrap_or_else(|| part_catalog::Model {
-                id: p.part_catalog_id,
-                part_number: "UNKNOWN".to_string(),
-                part_types_id: 1,
-                mfg_number: "UNKNOWN".to_string(),
-                description: None,
-                part_mfg_status: 1,
+        let catalog_definition = match state.zeus_client.get_part_catalog(p.part_catalog_id).await {
+            Ok(c) => part_catalog::Model {
+                id: c.id,
+                part_number: c.part_number,
+                part_types_id: c.part_types_id,
+                mfg_number: c.mfg_number,
+                description: c.description,
+                part_mfg_status: c.part_mfg_status,
                 created_at: p.created_at,
                 updated_at: p.updated_at,
                 deleted_at: None,
-            });
+            },
+            Err(_) => part_catalog::Model {
+                id: p.part_catalog_id,
+                part_number: "UNKNOWN".to_string(),
+                part_types_id: 0,
+                mfg_number: "UNKNOWN".to_string(),
+                description: None,
+                part_mfg_status: 0,
+                created_at: p.created_at,
+                updated_at: p.updated_at,
+                deleted_at: None,
+            },
+        };
 
-        let physical_condition = part_conditions::Entity::find_by_id(p.part_condition_id)
-            .one(state.db.as_ref())
-            .await?
-            .unwrap_or_else(|| part_conditions::Model {
-                id: p.part_condition_id,
-                name: "UNKNOWN".to_string(),
-            });
+        let physical_condition = part_conditions::Model {
+            id: p.part_condition_id,
+            name: format!("Condition {}", p.part_condition_id),
+        };
 
         let form = new_part_forms::Entity::find()
             .filter(new_part_forms::Column::SerialNumber.eq(&p.serial_number))

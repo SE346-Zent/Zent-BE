@@ -1,7 +1,7 @@
 use sea_orm::{DatabaseConnection, EntityTrait};
 use std::collections::HashMap;
 
-use crate::entities::{account_status, part_conditions, part_types, roles, work_order_statuses, policy, part_mfg_statuses};
+use crate::entities::{account_status, part_conditions, part_types, roles, work_order_statuses, policy, part_mfg_statuses, warranty_statuses};
 
 /// In-memory lookup tables (LUT) loaded once at server startup.
 ///
@@ -34,6 +34,11 @@ pub struct LookupTables {
     /// `work_order_statuses.name` → `work_order_statuses.id`
     pub work_order_statuses_by_name: HashMap<String, i32>,
 
+    /// `warranty_statuses.id` → `warranty_statuses.name`
+    pub warranty_statuses: HashMap<i32, String>,
+    /// `warranty_statuses.name` → `warranty_statuses.id`
+    pub warranty_statuses_by_name: HashMap<String, i32>,
+
     /// `part_mfg_statuses.id` → `part_mfg_statuses.name`
     pub part_mfg_statuses: HashMap<i32, String>,
     /// `part_mfg_statuses.name` → `part_mfg_statuses.id`
@@ -55,6 +60,7 @@ impl LookupTables {
         let part_conditions_list = part_conditions::Entity::find().all(db).await?;
         let work_order_statuses_list = work_order_statuses::Entity::find().all(db).await?;
         let part_mfg_statuses_list = part_mfg_statuses::Entity::find().all(db).await?;
+        let warranty_statuses_list = warranty_statuses::Entity::find().all(db).await?;
         let policies_list = policy::Entity::find().all(db).await?;
 
         let roles: HashMap<i32, String> = roles_list.iter().map(|r| (r.id, r.name.clone())).collect();
@@ -72,6 +78,9 @@ impl LookupTables {
         let work_order_statuses: HashMap<i32, String> = work_order_statuses_list.iter().map(|w| (w.id, w.name.clone())).collect();
         let work_order_statuses_by_name: HashMap<String, i32> = work_order_statuses_list.iter().map(|w| (w.name.clone(), w.id)).collect();
 
+        let warranty_statuses: HashMap<i32, String> = warranty_statuses_list.iter().map(|w| (w.id, w.name.clone())).collect();
+        let warranty_statuses_by_name: HashMap<String, i32> = warranty_statuses_list.iter().map(|w| (w.name.clone(), w.id)).collect();
+
         let part_mfg_statuses: HashMap<i32, String> = part_mfg_statuses_list.iter().map(|p| (p.id, p.name.clone())).collect();
         let part_mfg_statuses_by_name: HashMap<String, i32> = part_mfg_statuses_list.iter().map(|p| (p.name.clone(), p.id)).collect();
 
@@ -83,6 +92,7 @@ impl LookupTables {
             part_types = part_types.len(),
             part_conditions = part_conditions.len(),
             work_order_statuses = work_order_statuses.len(),
+            warranty_statuses = warranty_statuses.len(),
             part_mfg_statuses = part_mfg_statuses.len(),
             policies = policies.len(),
             "Lookup tables loaded into memory"
@@ -107,6 +117,8 @@ impl LookupTables {
             part_conditions_by_name,
             work_order_statuses,
             work_order_statuses_by_name,
+            warranty_statuses,
+            warranty_statuses_by_name,
             part_mfg_statuses,
             part_mfg_statuses_by_name,
             policies,
@@ -127,6 +139,8 @@ impl LookupTables {
             part_conditions_by_name: HashMap::new(),
             work_order_statuses: HashMap::new(),
             work_order_statuses_by_name: HashMap::new(),
+            warranty_statuses: HashMap::new(),
+            warranty_statuses_by_name: HashMap::new(),
             part_mfg_statuses: HashMap::new(),
             part_mfg_statuses_by_name: HashMap::new(),
             policies: HashMap::new(),

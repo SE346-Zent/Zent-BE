@@ -5,41 +5,60 @@ use crate::extractor::auth_user::AuthUser;
 use crate::model::responses::inventory::part_detail_response::PartDetailResponse;
 use crate::model::responses::base::ApiResponse;
 use crate::services::v1::inventory::get_part::{self, PartWithRelations};
-use crate::services::v1::inventory::ports::ZeusPart;
+use crate::services::v1::inventory::ports::{ZeusInventoryClient, ZeusPart};
 use crate::entities::{parts, part_catalog, part_conditions, products, new_part_forms, part_audit_log, work_orders};
 use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+use std::sync::Arc;
 
 async fn assemble_part_entry(
     db: &sea_orm::DatabaseConnection,
+    zeus_client: Arc<dyn ZeusInventoryClient>,
     zeus_part: ZeusPart,
 ) -> Result<PartWithRelations, AppError> {
-    let catalog_definition = part_catalog::Entity::find_by_id(zeus_part.part_catalog_id)
-        .one(db)
-        .await?
-        .unwrap_or_else(|| part_catalog::Model {
-            id: zeus_part.part_catalog_id,
-            part_number: "UNKNOWN".to_string(),
-            part_types_id: 1,
-            mfg_number: "UNKNOWN".to_string(),
-            description: None,
-            part_mfg_status: 1,
+    let catalog_definition = match zeus_client.get_part_catalog(zeus_part.part_catalog_id).await {
+        Ok(c) => part_catalog::Model {
+            id: c.id,
+            part_number: c.part_number,
+            part_types_id: c.part_types_id,
+            mfg_number: c.mfg_number,
+            description: c.description,
+            part_mfg_status: c.part_mfg_status,
             created_at: zeus_part.created_at,
             updated_at: zeus_part.updated_at,
             deleted_at: None,
-        });
+        },
+        Err(_) => part_catalog::Model {
+            id: zeus_part.part_catalog_id,
+            part_number: "UNKNOWN".to_string(),
+            part_types_id: 0,
+            mfg_number: "UNKNOWN".to_string(),
+            description: None,
+            part_mfg_status: 0,
+            created_at: zeus_part.created_at,
+            updated_at: zeus_part.updated_at,
+            deleted_at: None,
+        },
+    };
 
-    let physical_condition = part_conditions::Entity::find_by_id(zeus_part.part_condition_id)
-        .one(db)
-        .await?
-        .unwrap_or_else(|| part_conditions::Model {
-            id: zeus_part.part_condition_id,
-            name: "UNKNOWN".to_string(),
-        });
+    let physical_condition = part_conditions::Model {
+        id: zeus_part.part_condition_id,
+        name: format!("Condition {}", zeus_part.part_condition_id),
+    };
 
     let mut installed_product = None;
     let mut customer_id = None;
     if let Some(prod_id) = zeus_part.product_id {
-        if let Ok(Some(prod)) = products::Entity::find_by_id(prod_id).one(db).await {
+        if let Ok(prod) = zeus_client.get_product(prod_id).await {
+            let prod = products::Model {
+                id: prod.id,
+                product_model_code: prod.product_model_code,
+                customer_id: prod.customer_id,
+                product_name: prod.product_name,
+                serial_number: prod.serial_number,
+                created_at: prod.created_at,
+                updated_at: prod.updated_at,
+                deleted_at: None,
+            };
             customer_id = Some(prod.customer_id);
             installed_product = Some(prod);
         }
@@ -117,7 +136,7 @@ pub async fn get_part(
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<ApiResponse<PartDetailResponse>>, AppError> {
     let zeus_part = state.zeus_client.get_part(id).await?;
-    let part_relation_data = assemble_part_entry(&state.db, zeus_part).await?;
+    let part_relation_data = assemble_part_entry(&state.db, state.zeus_client.clone(), zeus_part).await?;
 
     let detail = get_part::get_part_detail(&part_relation_data, &auth.role.name, auth.user.id)?;
 

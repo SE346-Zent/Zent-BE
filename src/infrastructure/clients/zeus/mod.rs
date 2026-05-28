@@ -4,7 +4,7 @@ pub mod products;
 
 use crate::core::errors::AppError;
 use crate::services::v1::inventory::ports::{
-    ZeusInventoryClient, ZeusPart, ZeusProduct,
+    ZeusInventoryClient, ZeusPart, ZeusPartCatalog, ZeusProduct, ZeusProductModel,
 };
 use uuid::Uuid;
 use reqwest::Client;
@@ -38,6 +38,12 @@ impl ZeusClient {
     fn make_post(&self, path: &str) -> reqwest::RequestBuilder {
         self.client
             .post(format!("{}{}", self.base_url, path))
+            .header("X-API-KEY", &self.api_key)
+    }
+
+    fn make_put(&self, path: &str) -> reqwest::RequestBuilder {
+        self.client
+            .put(format!("{}{}", self.base_url, path))
             .header("X-API-KEY", &self.api_key)
     }
 
@@ -186,6 +192,38 @@ impl ZeusInventoryClient for ZeusClient {
         Ok(ProductsApi::to_domain(data))
     }
 
+    async fn update_product(
+        &self,
+        id: Uuid,
+        model_code: &str,
+        customer_id: Uuid,
+        product_name: &str,
+        serial_number: &str,
+    ) -> Result<ZeusProduct, AppError> {
+        let payload = ProductsApi::create_product_payload(model_code, customer_id, product_name, serial_number);
+        let envelope: ZeusEnvelope<models::ZeusProductDto> = self
+            .send_expect_envelope(
+                self.make_put(&format!("/inventory/products/{}", id)).json(&payload),
+            )
+            .await?;
+
+        let data = envelope.data.ok_or_else(|| {
+            AppError::Internal(anyhow::anyhow!(
+                "Failed to retrieve updated product data from Zeus"
+            ))
+        })?;
+        Ok(ProductsApi::to_domain(data))
+    }
+
+    async fn list_products(&self) -> Result<Vec<ZeusProduct>, AppError> {
+        let envelope: ZeusEnvelope<Vec<models::ZeusProductDto>> = self
+            .send_expect_envelope(self.make_get("/inventory/products"))
+            .await?;
+
+        let data = envelope.data.unwrap_or_default();
+        Ok(data.into_iter().map(ProductsApi::to_domain).collect())
+    }
+
     async fn find_parts_by_product(
         &self,
         product_id: Uuid,
@@ -199,5 +237,71 @@ impl ZeusInventoryClient for ZeusClient {
 
         let data = envelope.data.unwrap_or_default();
         Ok(data.into_iter().map(PartsApi::to_domain).collect())
+    }
+
+    async fn get_part_catalog(&self, id: Uuid) -> Result<ZeusPartCatalog, AppError> {
+        let envelope = self
+            .send_expect_envelope_or_not_found(
+                self.make_get(&format!("/inventory/part-catalog/{}", id)),
+                "Part catalog",
+                id,
+            )
+            .await?;
+
+        let data: models::ZeusPartCatalogDto = envelope.data.ok_or_else(|| {
+            AppError::NotFound(format!("Part catalog with ID {} not found in Zeus", id))
+        })?;
+
+        Ok(ZeusPartCatalog {
+            id: data.id,
+            part_number: data.part_number,
+            part_types_id: data.part_types_id,
+            mfg_number: data.mfg_number,
+            description: data.description,
+            part_mfg_status: data.part_mfg_status,
+        })
+    }
+
+    async fn find_part_catalog_by_part_number(&self, part_number: &str) -> Result<Option<ZeusPartCatalog>, AppError> {
+        let envelope: ZeusEnvelope<serde_json::Value> = self
+            .send_expect_envelope(
+                self.make_get("/inventory/part-catalog")
+                    .query(&[("q", part_number), ("limit", "10")]),
+            )
+            .await?;
+
+        let items: Vec<models::ZeusPartCatalogDto> = envelope
+            .data
+            .and_then(|d| d.get("items").cloned())
+            .map(|v| serde_json::from_value(v).unwrap_or_default())
+            .unwrap_or_default();
+        let found = items.into_iter().find(|i| i.part_number == part_number);
+
+        Ok(found.map(|data| ZeusPartCatalog {
+            id: data.id,
+            part_number: data.part_number,
+            part_types_id: data.part_types_id,
+            mfg_number: data.mfg_number,
+            description: data.description,
+            part_mfg_status: data.part_mfg_status,
+        }))
+    }
+
+    async fn get_product_model(&self, code: &str) -> Result<ZeusProductModel, AppError> {
+        let envelope: ZeusEnvelope<models::ZeusProductModelDto> = self
+            .send_expect_envelope(
+                self.make_get(&format!("/inventory/product-models/{}", code)),
+            )
+            .await?;
+
+        let data = envelope.data.ok_or_else(|| {
+            AppError::NotFound(format!("Product model with code {} not found in Zeus", code))
+        })?;
+
+        Ok(ZeusProductModel {
+            model_code: data.model_code,
+            model_name: data.model_name,
+            description: data.description,
+        })
     }
 }

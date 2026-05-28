@@ -22,6 +22,7 @@ pub use super::roles::Entity as Roles;
 pub use super::sessions::Entity as Sessions;
 pub use super::users::Entity as Users;
 pub use super::warranties::Entity as Warranties;
+pub use super::warranty_statuses::Entity as WarrantyStatuses;
 pub use super::work_order_closing_forms::Entity as WorkOrderClosingForms;
 pub use super::work_order_image_links::Entity as WorkOrderImageLinks;
 pub use super::work_order_reject_form_image_links::Entity as WorkOrderRejectFormImageLinks;

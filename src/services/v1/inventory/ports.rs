@@ -28,6 +28,23 @@ pub struct ZeusProduct {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusPartCatalog {
+    pub id: Uuid,
+    pub part_number: String,
+    pub part_types_id: i32,
+    pub mfg_number: String,
+    pub description: Option<String>,
+    pub part_mfg_status: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusProductModel {
+    pub model_code: String,
+    pub model_name: String,
+    pub description: Option<String>,
+}
+
 #[async_trait::async_trait]
 pub trait ZeusInventoryClient: Send + Sync {
     async fn get_part(&self, id: Uuid) -> Result<ZeusPart, AppError>;
@@ -35,7 +52,12 @@ pub trait ZeusInventoryClient: Send + Sync {
     async fn find_product_by_serial(&self, serial_number: &str) -> Result<Option<ZeusProduct>, AppError>;
     async fn get_product(&self, id: Uuid) -> Result<ZeusProduct, AppError>;
     async fn create_product(&self, model_code: &str, customer_id: Uuid, product_name: &str, serial_number: &str) -> Result<ZeusProduct, AppError>;
+    async fn update_product(&self, id: Uuid, model_code: &str, customer_id: Uuid, product_name: &str, serial_number: &str) -> Result<ZeusProduct, AppError>;
+    async fn list_products(&self) -> Result<Vec<ZeusProduct>, AppError>;
     async fn find_parts_by_product(&self, product_id: Uuid) -> Result<Vec<ZeusPart>, AppError>;
+    async fn get_part_catalog(&self, id: Uuid) -> Result<ZeusPartCatalog, AppError>;
+    async fn find_part_catalog_by_part_number(&self, part_number: &str) -> Result<Option<ZeusPartCatalog>, AppError>;
+    async fn get_product_model(&self, code: &str) -> Result<ZeusProductModel, AppError>;
 }
 
 #[derive(Debug, Clone, Default)]
@@ -80,7 +102,31 @@ impl ZeusInventoryClient for MockZeusClient {
             updated_at: now,
         })
     }
+    async fn update_product(&self, id: Uuid, model_code: &str, customer_id: Uuid, product_name: &str, serial_number: &str) -> Result<ZeusProduct, AppError> {
+        let now = chrono::Utc::now();
+        Ok(ZeusProduct {
+            id,
+            product_model_code: model_code.to_string(),
+            customer_id,
+            product_name: product_name.to_string(),
+            serial_number: serial_number.to_string(),
+            created_at: now,
+            updated_at: now,
+        })
+    }
+    async fn list_products(&self) -> Result<Vec<ZeusProduct>, AppError> {
+        Ok(vec![])
+    }
     async fn find_parts_by_product(&self, _product_id: Uuid) -> Result<Vec<ZeusPart>, AppError> {
         Ok(vec![])
+    }
+    async fn get_part_catalog(&self, id: Uuid) -> Result<ZeusPartCatalog, AppError> {
+        Err(AppError::NotFound(format!("Part catalog with ID {} not found", id)))
+    }
+    async fn find_part_catalog_by_part_number(&self, _part_number: &str) -> Result<Option<ZeusPartCatalog>, AppError> {
+        Ok(None)
+    }
+    async fn get_product_model(&self, code: &str) -> Result<ZeusProductModel, AppError> {
+        Err(AppError::NotFound(format!("Product model with code {} not found", code)))
     }
 }

@@ -4,22 +4,21 @@ use uuid::Uuid;
 #[derive(Debug, Deserialize)]
 pub(crate) struct ZeusEnvelope<T> {
     pub data: Option<T>,
-    #[allow(non_snake_case)]
+    #[serde(rename = "statusCode", alias = "status_code")]
     pub statusCode: u16,
     #[serde(default)]
     pub message: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
 pub(crate) struct ZeusPartDto {
-    #[serde(rename = "ID")]
+    #[serde(rename = "id", alias = "ID")]
     pub id: Uuid,
-    #[serde(rename = "PartCatalogID")]
+    #[serde(rename = "part_catalog_id", alias = "PartCatalogID")]
     pub part_catalog_id: Uuid,
-    #[serde(rename = "PartConditionID")]
+    #[serde(rename = "part_condition_id", alias = "PartConditionID")]
     pub part_condition_id: i32,
-    #[serde(rename = "ProductID")]
+    #[serde(rename = "product_id", alias = "ProductID")]
     pub product_id: Option<Uuid>,
     pub serial_number: String,
     pub manufactured_date: chrono::DateTime<chrono::Utc>,
@@ -31,15 +30,32 @@ pub(crate) struct ZeusPartDto {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
 pub(crate) struct ZeusProductDto {
-    #[serde(rename = "ID")]
+    #[serde(rename = "id", alias = "ID")]
     pub id: Uuid,
     pub product_model_code: String,
-    #[serde(rename = "CustomerID")]
+    #[serde(rename = "customer_id", alias = "CustomerID")]
     pub customer_id: Uuid,
     pub product_name: String,
     pub serial_number: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct ZeusPartCatalogDto {
+    #[serde(rename = "id", alias = "ID")]
+    pub id: Uuid,
+    pub part_number: String,
+    pub part_types_id: i32,
+    pub mfg_number: String,
+    pub description: Option<String>,
+    pub part_mfg_status: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct ZeusProductModelDto {
+    pub model_code: String,
+    pub model_name: String,
+    pub description: Option<String>,
 }

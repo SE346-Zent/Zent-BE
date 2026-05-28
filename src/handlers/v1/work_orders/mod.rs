@@ -79,9 +79,38 @@ use crate::model::responses::pagination::PaginationResponse;
 use crate::model::requests::pagination::PaginationRequest;
 use crate::services::v1::work_orders::list as list_svc;
 use crate::infrastructure::cache::ValkeyClient;
+use crate::services::v1::inventory::ports::ZeusInventoryClient;
 
 /// Sentinel value stored during the idempotency claim window.
 pub(crate) const IDEMPOTENCY_PENDING: &str = "__PENDING__";
+
+async fn load_zeus_product_model(product_id: Uuid) -> Option<products::Model> {
+    let base_url = match std::env::var("ZEUS_BASE_URL") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => return None,
+    };
+    let api_key = match std::env::var("ZEUS_API_KEY") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => return None,
+    };
+
+    let client = crate::infrastructure::clients::zeus::ZeusClient::new(base_url, api_key);
+    let zeus_prod = match client.get_product(product_id).await {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
+
+    Some(products::Model {
+        id: zeus_prod.id,
+        product_model_code: zeus_prod.product_model_code,
+        customer_id: zeus_prod.customer_id,
+        product_name: zeus_prod.product_name,
+        serial_number: zeus_prod.serial_number,
+        created_at: zeus_prod.created_at,
+        updated_at: zeus_prod.updated_at,
+        deleted_at: None,
+    })
+}
 
 /// Initialize and configure the work order sub-router with role-based access control.
 
@@ -195,13 +224,13 @@ pub(crate) async fn write_through_work_order_cache(
     if valkey_client.is_none() {
         return;
     }
-    // Re-fetch the work order with joins so we can build the full WorkOrderDetails
-    if let Ok(Some((wo, product, symptom))) = work_orders_ent::Entity::find_by_id(wo_id)
-        .find_also_related(products::Entity)
+    // Re-fetch the work order with symptom relation so we can build WorkOrderDetails.
+    if let Ok(Some((wo, symptom))) = work_orders_ent::Entity::find_by_id(wo_id)
         .find_also_related(work_order_symptoms::Entity)
         .one(db)
         .await
     {
+        let product = load_zeus_product_model(wo.product_id).await;
         let client = valkey_client.as_ref().unwrap();
         let Ok(mut conn) = client.get_connection().await else { return; };
 
@@ -287,11 +316,17 @@ pub(crate) async fn fetch_paginated_work_orders(
 
     let models_with_related = query
         .order_by_desc(work_orders_ent::Column::CreatedAt)
-        .find_also_related(products::Entity).find_also_related(work_order_symptoms::Entity)
+        .find_also_related(work_order_symptoms::Entity)
         .offset((pagination.page - 1) * pagination.limit).limit(pagination.limit)
         .all(db.as_ref()).await?;
 
-    let (data, meta) = list_svc::decide_list(models_with_related, &lookup_tables, &pagination, total_records);
+    let mut enriched_models = Vec::with_capacity(models_with_related.len());
+    for (work_order, symptom) in models_with_related {
+        let product = load_zeus_product_model(work_order.product_id).await;
+        enriched_models.push((work_order, product, symptom));
+    }
+
+    let (data, meta) = list_svc::decide_list(enriched_models, &lookup_tables, &pagination, total_records);
 
     if let Some(mut conn) = conn_opt {
         if let Ok(cached_val) = serde_json::to_string(&(&data, &meta)) {

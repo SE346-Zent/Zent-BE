@@ -1,16 +1,15 @@
 use anyhow::Result;
-use chrono::Utc;
-use sea_orm::{DatabaseConnection, Set, ActiveModelTrait};
+use sea_orm::DatabaseConnection;
 use std::collections::HashMap;
 use uuid::Uuid;
-use zent_be::entities::products;
+use zent_be::services::v1::inventory::ports::ZeusInventoryClient;
 
 /// Generates and inserts random product records into the database.
 ///
 /// `customer_ids` must contain at least one UUID (from previously seeded users).
 /// Returns the UUIDs of all inserted products for downstream seeders.
 pub async fn seed_random_products(
-    db: &DatabaseConnection,
+    _db: &DatabaseConnection,
     count: usize,
     _seed: u64,
     customer_ids: &[Uuid],
@@ -23,7 +22,11 @@ pub async fn seed_random_products(
         anyhow::bail!("Cannot seed products: no product models found.");
     }
 
-    let now = Utc::now();
+    let base_url = std::env::var("ZEUS_BASE_URL")
+        .map_err(|_| anyhow::anyhow!("ZEUS_BASE_URL is required for product seeding"))?;
+    let api_key = std::env::var("ZEUS_API_KEY")
+        .map_err(|_| anyhow::anyhow!("ZEUS_API_KEY is required for product seeding"))?;
+    let zeus_client = zent_be::infrastructure::clients::zeus::ZeusClient::new(base_url, api_key);
 
     // Sort for deterministic picking (even if using thread_rng for other things)
     let mut model_entries: Vec<(&String, &String)> = product_models.iter().collect();
@@ -41,46 +44,23 @@ pub async fn seed_random_products(
         let &customer_id = customer_ids.choose(&mut rng).unwrap();
 
         let id = Uuid::new_v4();
-        inserted_ids.push(id);
 
         use fake::Fake;
         use fake::faker::company::en::BsNoun;
         let noun: String = BsNoun().fake();
         let serial_number = format!("SN-{}-{:05}", noun.to_uppercase().replace(' ', ""), i);
-
-        products::ActiveModel {
-            id: Set(id),
-            product_model_code: Set((*model_code).to_string()),
-            customer_id: Set(customer_id),
-            product_name: Set(format!("Lenovo {}", noun)),
-            serial_number: Set(serial_number),
-            created_at: Set(now),
-            updated_at: Set(now),
-            deleted_at: Set(None),
-        }.insert(db).await?;
-
-        // Add Product Image
-        use zent_be::entities::{images, product_image_links};
-        let r: u8 = rand::random();
-        let url = if r % 2 == 0 {
-            "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=500&q=60"
-        } else {
-            "https://images.unsplash.com/photo-1544117519-31a4b719223d?auto=format&fit=crop&w=500&q=60"
-        };
-        let img_id = Uuid::new_v4();
-        images::ActiveModel {
-            id: Set(img_id),
-            object_name: Set(url.to_string()),
-            created_at: Set(now),
-            updated_at: Set(now),
-            ..Default::default()
-        }.insert(db).await?;
-        product_image_links::ActiveModel {
-            image_id: Set(img_id),
-            product_id: Set(id),
-        }.insert(db).await?;
+        let created = zeus_client
+            .create_product(
+                model_code,
+                customer_id,
+                &format!("Lenovo {}", noun),
+                &serial_number,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to create product in SCM: {}", e))?;
+        inserted_ids.push(created.id);
     }
-    println!("  Successfully seeded {} products.", count);
+    println!("  Successfully seeded {} products in SCM.", count);
 
     Ok(inserted_ids)
 }

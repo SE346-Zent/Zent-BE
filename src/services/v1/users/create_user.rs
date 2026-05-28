@@ -27,8 +27,8 @@ pub fn decide_can_create_user(current_user: users::Model, req: UserCreateRequest
 
     // Determine allowed target roles based on current role
     let allowed = match current_role {
-        2 => target_role == 1 || target_role == 4, // SA → Admin, Tech
-        1 => target_role == 4,                     // Admin → Tech
+        2 => target_role == 1 || target_role == 2 || target_role == 4, // SA → SA, Admin, Tech
+        1 => target_role == 4 || target_role == 3,                     // Admin → Tech, Customer
         _ => false,
     };
 

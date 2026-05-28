@@ -6,8 +6,6 @@ use crate::model::requests::inventory::register_product_request::RegisterProduct
 use crate::model::responses::inventory::register_product_response::RegisterProductResponse;
 use crate::model::responses::base::ApiResponse;
 use crate::services::v1::inventory::register_product::{self, decide_register_product};
-use crate::entities::{products as prod, product_models};
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait, Set};
 use chrono::Utc;
 use validator::Validate;
 
@@ -35,9 +33,7 @@ pub async fn register_product(
 
     let (product_model_code, model_name) = match &zeus_prod {
         Some(p) => {
-            let model_def = product_models::Entity::find_by_id(p.product_model_code.clone())
-                .one(state.db.as_ref())
-                .await?;
+            let model_def = state.zeus_client.get_product_model(&p.product_model_code).await.ok();
             (
                 Some(p.product_model_code.clone()),
                 Some(model_def.map(|m| m.model_name).unwrap_or(p.product_name.clone())),
@@ -46,11 +42,7 @@ pub async fn register_product(
         None => (None, None),
     };
 
-    let existing = prod::Entity::find()
-        .filter(prod::Column::SerialNumber.eq(&payload.serial_number))
-        .one(state.db.as_ref())
-        .await?;
-    let existing_id = existing.map(|p| p.id);
+    let existing_id = zeus_prod.as_ref().map(|p| p.id);
 
     let effect = decide_register_product(
         &payload,
@@ -62,28 +54,33 @@ pub async fn register_product(
         Utc::now(),
     )?;
 
-    let product_id = if existing_id.is_none() {
-        let zeus_registered = state.zeus_client.create_product(
-            &effect.product_model_code,
-            effect.customer_id,
-            &effect.product_display_name,
-            &effect.product_serial_number,
-        ).await?;
-
-        let new_db_product = prod::ActiveModel {
-            id: Set(zeus_registered.id),
-            product_model_code: Set(zeus_registered.product_model_code),
-            customer_id: Set(zeus_registered.customer_id),
-            product_name: Set(zeus_registered.product_name),
-            serial_number: Set(zeus_registered.serial_number),
-            created_at: Set(Utc::now()),
-            updated_at: Set(Utc::now()),
-            deleted_at: Set(None),
+    let product_id = if let Some(existing_prod) = zeus_prod {
+        let synced = if existing_prod.customer_id != auth.user.id {
+            state
+                .zeus_client
+                .update_product(
+                    existing_prod.id,
+                    &existing_prod.product_model_code,
+                    auth.user.id,
+                    &existing_prod.product_name,
+                    &existing_prod.serial_number,
+                )
+                .await?
+        } else {
+            existing_prod
         };
-        new_db_product.insert(state.db.as_ref()).await?;
-        zeus_registered.id
+        synced.id
     } else {
-        effect.registered_product_id
+        let zeus_registered = state
+            .zeus_client
+            .create_product(
+                &effect.product_model_code,
+                effect.customer_id,
+                &effect.product_display_name,
+                &effect.product_serial_number,
+            )
+            .await?;
+        zeus_registered.id
     };
 
     if effect.should_send_confirmation_email {

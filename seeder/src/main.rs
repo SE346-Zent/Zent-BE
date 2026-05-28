@@ -6,8 +6,8 @@ use seeder::{
     UserSeedConfig, seed_account_statuses, seed_product_models, 
     seed_random_products, seed_random_warranties, seed_random_work_orders, seed_roles,
     seed_system_user, seed_users, seed_work_order_closing_forms, seed_work_order_statuses,
-    seed_parts_and_catalogs, seed_part_statuses, seed_work_order_symptoms, seed_part_conditions,
-    seed_policies
+    seed_part_statuses, seed_work_order_symptoms, seed_part_conditions,
+    seed_policies, seed_warranty_statuses
 };
 use serde_json::to_string_pretty;
 use std::path::PathBuf;
@@ -55,6 +55,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenvy::dotenv().ok();
     let args = Args::parse();
 
     let (db_url, num_users, num_work_orders, num_products, num_warranties, num_closing_forms, rng_seed) =
@@ -96,6 +97,9 @@ async fn main() -> Result<()> {
 
     println!("\n--- Seeding Account Statuses ---");
     let statuses = seed_account_statuses(&db).await?;
+
+    println!("\n--- Seeding Warranty Statuses ---");
+    let warranty_statuses = seed_warranty_statuses(&db).await?;
 
     println!("\n--- Seeding Work Order Statuses ---");
     let _ = seed_work_order_statuses(&db).await?;
@@ -167,9 +171,8 @@ async fn main() -> Result<()> {
             &prod_models,
         )
         .await?;
-        
-        println!("\n--- Seeding Parts and Catalogs ---");
-        seed_parts_and_catalogs(&db, &part_statuses, rng_seed).await?;
+
+        println!("\n--- Skipping local parts/catalog seeding (inventory is SCM-owned) ---");
     }
 
     // -----------------------------------------------------------------------
@@ -208,7 +211,14 @@ async fn main() -> Result<()> {
     // -----------------------------------------------------------------------
     if num_warranties > 0 {
         println!("\n--- Seeding Warranties ({}) ---", num_warranties);
-        seed_random_warranties(&db, num_warranties, rng_seed, &customer_ids, &product_ids).await?;
+        seed_random_warranties(
+            &db,
+            num_warranties,
+            rng_seed,
+            &customer_ids,
+            &product_ids,
+            &warranty_statuses,
+        ).await?;
     }
 
     // -----------------------------------------------------------------------

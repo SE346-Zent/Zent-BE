@@ -11,7 +11,7 @@ use crate::model::responses::work_orders::details_response::WorkOrderDetails;
 use crate::services::v1::work_orders::get_details as get_svc;
 use redis::AsyncCommands;
 
-use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms};
+use crate::entities::{work_orders as work_orders_ent, work_order_symptoms};
 
 /// Retrieve full details for a specific work order, including product and symptom info, with permission checks.
 
@@ -46,9 +46,10 @@ pub async fn get_details(
         conn_opt = Some(conn);
     }
     let result = work_orders_ent::Entity::find_by_id(id)
-        .find_also_related(products::Entity).find_also_related(work_order_symptoms::Entity)
+        .find_also_related(work_order_symptoms::Entity)
         .one(db.as_ref()).await?;
-    let (wo, product, symptom) = result.ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+    let (wo, symptom) = result.ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+    let product = super::load_zeus_product_model(wo.product_id).await;
     
     // Check permissions
     check_wo_permissions(&auth, &wo.work_order_number, wo.technician_id, wo.customer_id, &wo.province)?;
