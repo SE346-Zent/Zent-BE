@@ -117,7 +117,6 @@ async fn load_zeus_product_model(product_id: Uuid) -> Option<products::Model> {
 pub fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(create))
-        .route("/{id}/cancel", axum::routing::post(cancel))
         .route("/{id}/rate", axum::routing::post(rate))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -153,6 +152,7 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/{id}", axum::routing::get(get_details))
         .route("/{id}/history", axum::routing::get(history))
+        .route("/cancel", axum::routing::post(cancel))
         .merge(list_route)
         .merge(customer_routes)
         .merge(tech_routes)
