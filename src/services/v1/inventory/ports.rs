@@ -43,12 +43,15 @@ pub struct ZeusProductModel {
     pub model_code: String,
     pub model_name: String,
     pub description: Option<String>,
+    pub image_url: Option<String>,
 }
 
 #[async_trait::async_trait]
 pub trait ZeusInventoryClient: Send + Sync {
     async fn get_part(&self, id: Uuid) -> Result<ZeusPart, AppError>;
     async fn create_part(&self, part_catalog_id: Uuid, condition_id: i32, serial_number: &str, mfg_date: chrono::DateTime<chrono::Utc>) -> Result<ZeusPart, AppError>;
+    async fn install_part(&self, part_id: Uuid, product_id: Uuid) -> Result<(), AppError>;
+    async fn remove_part(&self, part_id: Uuid) -> Result<(), AppError>;
     async fn find_product_by_serial(&self, serial_number: &str) -> Result<Option<ZeusProduct>, AppError>;
     async fn get_product(&self, id: Uuid) -> Result<ZeusProduct, AppError>;
     async fn create_product(&self, model_code: &str, customer_id: Uuid, product_name: &str, serial_number: &str) -> Result<ZeusProduct, AppError>;
@@ -83,6 +86,12 @@ impl ZeusInventoryClient for MockZeusClient {
             created_at: now,
             updated_at: now,
         })
+    }
+    async fn install_part(&self, _part_id: Uuid, _product_id: Uuid) -> Result<(), AppError> {
+        Ok(())
+    }
+    async fn remove_part(&self, _part_id: Uuid) -> Result<(), AppError> {
+        Ok(())
     }
     async fn find_product_by_serial(&self, _serial_number: &str) -> Result<Option<ZeusProduct>, AppError> {
         Ok(None)

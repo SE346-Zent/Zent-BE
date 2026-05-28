@@ -1,12 +1,19 @@
 use axum::{extract::{State, Path}, Json};
-use crate::core::state::AppState;
+use chrono::Utc;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
+
 use crate::core::errors::{AppError, ErrorResponse};
+use crate::core::state::AppState;
+use crate::entities::{
+    new_part_forms, part_audit_log, part_catalog, part_conditions, parts,
+    product_models, products as prod, warranties, work_orders,
+};
 use crate::extractor::auth_user::AuthUser;
-use crate::model::responses::inventory::product_detail_response::ProductDetailResponse;
 use crate::model::responses::base::ApiResponse;
+use crate::model::responses::inventory::product_detail_response::{
+    ProductDetailResponse, ProductWarrantySummary, ProductWorkOrderHistoryItem,
+};
 use crate::services::v1::inventory::get_product::{self, ProductWithRelations};
-use crate::entities::{products as prod, product_models, parts, part_catalog, part_conditions, new_part_forms, part_audit_log, work_orders};
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 
 /// Retrieve detailed information for a single product.
 #[utoipa::path(
@@ -24,7 +31,7 @@ use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
     ),
     security(("bearer_auth" = []))
 )]
-pub async fn get_product(
+pub async fn get_detail_product(
     auth: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
@@ -32,28 +39,97 @@ pub async fn get_product(
     let zeus_prod = state.zeus_client.get_product(id).await?;
     let product_parts = state.zeus_client.find_parts_by_product(zeus_prod.id).await?;
 
-    let model_definition = match state
+    let (model_definition, product_image_url) = match state
         .zeus_client
         .get_product_model(&zeus_prod.product_model_code)
         .await
     {
-        Ok(model) => product_models::Model {
-            model_code: model.model_code,
-            model_name: model.model_name,
-            description: model.description,
-            created_at: zeus_prod.created_at,
-            updated_at: zeus_prod.updated_at,
-            deleted_at: None,
-        },
-        Err(_) => product_models::Model {
-            model_code: zeus_prod.product_model_code.clone(),
-            model_name: format!("Model {}", zeus_prod.product_model_code),
-            description: None,
-            created_at: zeus_prod.created_at,
-            updated_at: zeus_prod.updated_at,
-            deleted_at: None,
-        },
+        Ok(model) => (
+            product_models::Model {
+                model_code: model.model_code,
+                model_name: model.model_name,
+                description: model.description,
+                created_at: zeus_prod.created_at,
+                updated_at: zeus_prod.updated_at,
+                deleted_at: None,
+            },
+            model.image_url,
+        ),
+        Err(_) => (
+            product_models::Model {
+                model_code: zeus_prod.product_model_code.clone(),
+                model_name: format!("Model {}", zeus_prod.product_model_code),
+                description: None,
+                created_at: zeus_prod.created_at,
+                updated_at: zeus_prod.updated_at,
+                deleted_at: None,
+            },
+            None,
+        ),
     };
+
+    let warranty = warranties::Entity::find()
+        .filter(warranties::Column::ProductId.eq(zeus_prod.id))
+        .one(state.db.as_ref())
+        .await?
+        .map(|item| {
+            let now = Utc::now();
+            let status_name = item
+                .warranty_status_id
+                .and_then(|status_id| state.lookup_tables.warranty_statuses.get(&status_id).cloned())
+                .unwrap_or_else(|| item.warranty_status.clone());
+            let is_voided = status_name.eq_ignore_ascii_case("voided");
+            let is_expired = now > item.end_date;
+            let warranty_status = if is_voided {
+                "Voided".to_string()
+            } else if is_expired {
+                "Expired".to_string()
+            } else {
+                "In Warranty".to_string()
+            };
+            let support_days_remaining = if is_voided || is_expired {
+                0
+            } else {
+                (item.end_date - now).num_days().max(0)
+            };
+
+            ProductWarrantySummary {
+                support_status: if support_days_remaining > 0 {
+                    format!("{} days remaining", support_days_remaining)
+                } else {
+                    warranty_status.clone()
+                },
+                warranty_status,
+                support_days_remaining,
+                start_date: Some(item.start_date.to_rfc3339()),
+                end_date: Some(item.end_date.to_rfc3339()),
+            }
+        });
+
+    let work_order_history = work_orders::Entity::find()
+        .filter(work_orders::Column::DeletedAt.is_null())
+        .filter(work_orders::Column::ProductId.eq(zeus_prod.id))
+        .order_by_desc(work_orders::Column::CreatedAt)
+        .limit(10)
+        .all(state.db.as_ref())
+        .await?
+        .into_iter()
+        .map(|wo| {
+            let status = state
+                .lookup_tables
+                .work_order_statuses
+                .get(&wo.work_order_status_id)
+                .cloned()
+                .unwrap_or_else(|| "Unknown".to_string());
+
+            ProductWorkOrderHistoryItem {
+                work_order_id: wo.id,
+                work_order_number: wo.work_order_number,
+                status,
+                date: crate::utils::time::to_utc7_string(wo.created_at),
+            }
+        })
+        .collect::<Vec<_>>();
 
     let mut installed_parts = Vec::new();
     for p in product_parts {
@@ -143,7 +219,10 @@ pub async fn get_product(
             deleted_at: None,
         },
         model_definition,
+        product_image_url,
         installed_parts,
+        warranty,
+        work_order_history,
     };
 
     let detail = get_product::get_product_detail(&product_relation_data, &auth.role.name, auth.user.id)?;

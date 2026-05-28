@@ -36,6 +36,10 @@ impl PartsApi {
             manufactured_date,
         }
     }
+
+    pub fn install_part_payload(product_id: Uuid) -> InstallPartPayload {
+        InstallPartPayload { product_id }
+    }
 }
 
 #[derive(Serialize)]
@@ -44,4 +48,9 @@ pub(crate) struct CreatePartPayload {
     pub part_condition_id: i32,
     pub serial_number: String,
     pub manufactured_date: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct InstallPartPayload {
+    pub product_id: Uuid,
 }

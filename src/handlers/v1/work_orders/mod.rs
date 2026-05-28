@@ -174,12 +174,14 @@ pub(crate) async fn get_cached_work_order_model(
 ) -> Result<work_orders_ent::Model, AppError> {
     let model_cache_key = format!("cache:work_order_model:{}", id);
 
-    // Cache hit — serve from RAM
+    // Cache hit — serve from RAM (but skip soft-deleted)
     if let Some(client) = valkey_client.as_ref() {
         if let Ok(mut conn) = client.get_connection().await {
             if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&model_cache_key).await {
                 if let Ok(model) = serde_json::from_str::<work_orders_ent::Model>(&cached_json) {
-                    return Ok(model);
+                    if model.deleted_at.is_none() {
+                        return Ok(model);
+                    }
                 }
             }
         }
@@ -190,6 +192,10 @@ pub(crate) async fn get_cached_work_order_model(
         .one(db)
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+
+    if model.deleted_at.is_some() {
+        return Err(AppError::NotFound("Work order not found".to_string()));
+    }
 
     // Populate cache for next time (TTL matches details cache)
     if let Some(client) = valkey_client.as_ref() {
@@ -301,7 +307,7 @@ pub(crate) async fn fetch_paginated_work_orders(
         }
     }
 
-    let mut query = work_orders_ent::Entity::find();
+    let mut query = work_orders_ent::Entity::find().filter(work_orders_ent::Column::DeletedAt.is_null());
     if let Some(tech_id) = technician_id { query = query.filter(work_orders_ent::Column::TechnicianId.eq(tech_id)); }
     if let Some(province) = province_filter { query = query.filter(work_orders_ent::Column::Province.eq(province)); }
     if let Some(cust_id) = customer_id { query = query.filter(work_orders_ent::Column::CustomerId.eq(cust_id)); }
@@ -361,6 +367,7 @@ pub async fn run_cleanup(
 
     // Find WOs that are still pending assignment and whose appointment is within the threshold window (or already past)
     let target_wos = work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::DeletedAt.is_null())
         .filter(work_orders_ent::Column::WorkOrderStatusId.eq(pending_status_id))
         .filter(work_orders_ent::Column::TechnicianId.is_null())
         .filter(work_orders_ent::Column::Appointment.lte(threshold_window))
@@ -442,7 +449,7 @@ pub(crate) async fn try_auto_assign_single(
         return false;
     }
     let tech_ids: Vec<Uuid> = technicians.iter().map(|t| t.id).collect();
-    let agendas = match work_orders_ent::Entity::find().filter(work_orders_ent::Column::TechnicianId.is_in(tech_ids)).filter(work_orders_ent::Column::WorkOrderStatusId.ne(done_status_id)).all(db.as_ref()).await {
+    let agendas = match work_orders_ent::Entity::find().filter(work_orders_ent::Column::DeletedAt.is_null()).filter(work_orders_ent::Column::TechnicianId.is_in(tech_ids)).filter(work_orders_ent::Column::WorkOrderStatusId.ne(done_status_id)).all(db.as_ref()).await {
         Ok(a) => a, Err(e) => { tracing::warn!("Failed to load agendas: {}", e); return false; }
     };
     let mut technician_agendas: HashMap<Uuid, Vec<work_orders_ent::Model>> = HashMap::new();

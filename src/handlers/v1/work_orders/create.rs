@@ -84,7 +84,7 @@ pub async fn create(
 
     state.zeus_client.get_product(payload.product_id).await?;
     if let Some(ref_id) = payload.reference_ticket_id {
-        if work_orders_ent::Entity::find().filter(work_orders_ent::Column::Id.eq(ref_id)).filter(work_orders_ent::Column::CustomerId.eq(auth.user.id)).one(db.as_ref()).await?.is_none() {
+        if work_orders_ent::Entity::find().filter(work_orders_ent::Column::Id.eq(ref_id)).filter(work_orders_ent::Column::DeletedAt.is_null()).filter(work_orders_ent::Column::CustomerId.eq(auth.user.id)).one(db.as_ref()).await?.is_none() {
             return Err(AppError::BadRequest(format!("Reference Work Order with ID {} not found", ref_id)));
         }
     }

@@ -1,7 +1,6 @@
 use crate::core::errors::AppError;
 use crate::entities::{products as prod, product_models, parts, part_catalog, part_conditions};
-use crate::model::responses::inventory::product_detail_response::ProductDetailResponse;
-use crate::model::responses::inventory::part_list_item::PartListItem;
+use crate::model::responses::inventory::product_detail_response::{ProductDetailResponse, ProductWarrantySummary, ProductWorkOrderHistoryItem};
 
 /// Represents a single product joined with its related model and installed parts data.
 pub struct ProductWithRelations {
@@ -9,8 +8,14 @@ pub struct ProductWithRelations {
     pub product_record: prod::Model,
     /// The product model definition.
     pub model_definition: product_models::Model,
+    /// The model image URL resolved from SCM.
+    pub product_image_url: Option<String>,
     /// A list of parts currently installed in this product.
     pub installed_parts: Vec<PartInProduct>,
+    /// Warranty summary for the product, if any.
+    pub warranty: Option<ProductWarrantySummary>,
+    /// Recent work orders for the product.
+    pub work_order_history: Vec<ProductWorkOrderHistoryItem>,
 }
 
 /// Represents a part associated with a product, including its catalog, condition, and status data.
@@ -68,22 +73,13 @@ pub fn get_product_detail(
     }
     Ok(ProductDetailResponse {
         product_id: product_relation_data.product_record.id,
-        product_name: product_relation_data.product_record.product_name.clone(),
+        title: product_relation_data.product_record.product_name.clone(),
         model_code: product_relation_data.product_record.product_model_code.clone(),
         model_name: product_relation_data.model_definition.model_name.clone(),
+        product_image_url: product_relation_data.product_image_url.clone(),
         serial_number: product_relation_data.product_record.serial_number.clone(),
-        customer_id: product_relation_data.product_record.customer_id,
-        customer_name: format!("Customer {}", product_relation_data.product_record.customer_id),
-        parts: product_relation_data.installed_parts.iter().map(|installed_part| PartListItem {
-            part_id: installed_part.part_record.id,
-            part_number: installed_part.catalog_definition.part_number.clone(),
-            part_type_name: installed_part.catalog_definition.part_types_id.to_string(),
-            serial_number: installed_part.part_record.serial_number.clone(),
-            condition_name: installed_part.physical_condition.name.clone(),
-            product_name: Some(product_relation_data.product_record.product_name.clone()),
-            approval_status: installed_part.approval_status.clone(),
-            created_at: installed_part.part_record.created_at.to_rfc3339(),
-        }).collect(),
+        warranty: product_relation_data.warranty.clone(),
+        work_order_history: product_relation_data.work_order_history.clone(),
         created_at: product_relation_data.product_record.created_at.to_rfc3339(),
         updated_at: product_relation_data.product_record.updated_at.to_rfc3339(),
     })

@@ -49,7 +49,7 @@ pub async fn assign(
         if p != &work_order.province { return Err(AppError::Forbidden("Admin province does not match work order province".to_string())); }
     }
 
-    let technician_work_orders = work_orders_ent::Entity::find().filter(work_orders_ent::Column::TechnicianId.eq(payload.technician_id)).all(db.as_ref()).await?;
+    let technician_work_orders = work_orders_ent::Entity::find().filter(work_orders_ent::Column::DeletedAt.is_null()).filter(work_orders_ent::Column::TechnicianId.eq(payload.technician_id)).all(db.as_ref()).await?;
     let assigned_status_id = *luts.work_order_statuses_by_name.get("Assigned").ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Assigned' status missing")))?;
     let done_status_id = *luts.work_order_statuses_by_name.get("Closed").ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
 

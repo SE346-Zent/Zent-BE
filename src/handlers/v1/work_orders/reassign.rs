@@ -51,6 +51,7 @@ pub async fn reassign(
     let old_tech_id = work_order.technician_id;
 
     let technician_work_orders = work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::DeletedAt.is_null())
         .filter(work_orders_ent::Column::TechnicianId.eq(payload.technician_id))
         .all(db.as_ref()).await?;
 

@@ -58,4 +58,6 @@ pub(crate) struct ZeusProductModelDto {
     pub model_code: String,
     pub model_name: String,
     pub description: Option<String>,
+    #[serde(rename = "image_url", alias = "imageUrl", alias = "object_name")]
+    pub image_url: Option<String>,
 }

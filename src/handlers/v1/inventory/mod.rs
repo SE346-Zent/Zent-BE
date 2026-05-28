@@ -4,13 +4,12 @@
 //! registering new parts, and overseeing the part approval workflow.
 
 pub mod add_parts;
-pub mod get_part;
-pub mod get_product;
-pub mod check_serial;
+pub mod get_detail_product;
 pub mod check_warranty;
 pub mod register_product;
 pub mod accept_part;
 pub mod deny_part;
+pub mod admin_analytics;
 
 use axum::{Router, middleware};
 use crate::core::state::AppState;
@@ -29,15 +28,14 @@ pub fn router(app_state: AppState) -> Router<AppState> {
     let administrator_only_routes = Router::new()
         .route("/parts/{id}/accept", axum::routing::post(accept_part::accept_part))
         .route("/parts/{id}/deny", axum::routing::post(deny_part::deny_part))
+        .route("/analytics", axum::routing::get(admin_analytics::admin_analytics))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             require_role::<AppState>(&[Role::Admin]),
         ));
 
     Router::new()
-        .route("/parts/{id}", axum::routing::get(get_part::get_part))
-        .route("/products/{id}", axum::routing::get(get_product::get_product))
-        .route("/products/check-serial", axum::routing::post(check_serial::check_serial))
+        .route("/products/{id}", axum::routing::get(get_detail_product::get_detail_product))
         .route("/products/check-warranty", axum::routing::post(check_warranty::check_warranty))
         .route("/products/register", axum::routing::post(register_product::register_product))
         .merge(technician_only_routes)

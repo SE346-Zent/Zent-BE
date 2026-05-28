@@ -28,6 +28,7 @@ pub async fn reject_form_list(
 
     // Base query: work orders that have a reject form
     let base_query = work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::DeletedAt.is_null())
         .filter(work_orders_ent::Column::RejectFormId.is_not_null())
         .order_by_desc(work_orders_ent::Column::CreatedAt);
 

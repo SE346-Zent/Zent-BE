@@ -49,6 +49,7 @@ pub async fn change_appointment(
         use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
         use crate::entities::work_orders as work_orders_ent;
         let conflict = work_orders_ent::Entity::find()
+            .filter(work_orders_ent::Column::DeletedAt.is_null())
             .filter(work_orders_ent::Column::TechnicianId.eq(tech_id))
             .filter(work_orders_ent::Column::Id.ne(work_order.id))
             .filter(work_orders_ent::Column::Appointment.eq(payload.new_appointment))

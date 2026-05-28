@@ -139,6 +139,25 @@ impl ZeusInventoryClient for ZeusClient {
         Ok(PartsApi::to_domain(data))
     }
 
+    async fn install_part(&self, part_id: Uuid, product_id: Uuid) -> Result<(), AppError> {
+        let payload = PartsApi::install_part_payload(product_id);
+        let _: ZeusEnvelope<serde_json::Value> = self
+            .send_expect_envelope(
+                self.make_post(&format!("/inventory/parts/{}/install", part_id)).json(&payload),
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn remove_part(&self, part_id: Uuid) -> Result<(), AppError> {
+        let _: ZeusEnvelope<serde_json::Value> = self
+            .send_expect_envelope(
+                self.make_post(&format!("/inventory/parts/{}/remove", part_id)),
+            )
+            .await?;
+        Ok(())
+    }
+
     async fn find_product_by_serial(
         &self,
         serial_number: &str,
@@ -302,6 +321,7 @@ impl ZeusInventoryClient for ZeusClient {
             model_code: data.model_code,
             model_name: data.model_name,
             description: data.description,
+            image_url: data.image_url,
         })
     }
 }
