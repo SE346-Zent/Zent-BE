@@ -134,28 +134,81 @@ async fn main() -> Result<()> {
         UserSeedConfig {
             num_users,
             seed: rng_seed,
-            roles,
-            account_statuses: statuses,
+            roles: roles.clone(),
+            account_statuses: statuses.clone(),
         },
     )
     .await?;
 
     // Collect user IDs for downstream seeders
-    let customer_ids: Vec<uuid::Uuid> = records
+    let mut customer_ids: Vec<uuid::Uuid> = records
         .iter()
         .filter(|r| r.role == "Customer")
         .map(|r| r.id)
         .collect();
-    let technician_ids: Vec<uuid::Uuid> = records
+    let mut technician_ids: Vec<uuid::Uuid> = records
         .iter()
         .filter(|r| r.role == "Technician")
         .map(|r| r.id)
         .collect();
-    let admin_ids: Vec<uuid::Uuid> = records
+    let mut admin_ids: Vec<uuid::Uuid> = records
         .iter()
         .filter(|r| r.role == "Admin" || r.role == "SuperAdmin")
         .map(|r| r.id)
         .collect();
+
+    // Query existing users if they were not seeded in this run
+    if customer_ids.is_empty() {
+        if let Some(&cust_role_id) = roles.get("Customer") {
+            use zent_be::entities::users;
+            use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+            let existing_res: Result<Vec<users::Model>, _> = users::Entity::find()
+                .filter(users::Column::RoleId.eq(cust_role_id))
+                .filter(users::Column::DeletedAt.is_null())
+                .all(&db)
+                .await;
+            if let Ok(existing) = existing_res {
+                customer_ids = existing.into_iter().map(|u| u.id).collect();
+            }
+        }
+    }
+    if technician_ids.is_empty() {
+        if let Some(&tech_role_id) = roles.get("Technician") {
+            use zent_be::entities::users;
+            use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+            let existing_res: Result<Vec<users::Model>, _> = users::Entity::find()
+                .filter(users::Column::RoleId.eq(tech_role_id))
+                .filter(users::Column::DeletedAt.is_null())
+                .all(&db)
+                .await;
+            if let Ok(existing) = existing_res {
+                technician_ids = existing.into_iter().map(|u| u.id).collect();
+            }
+        }
+    }
+    if admin_ids.is_empty() {
+        let admin_role_id = roles.get("Admin").copied();
+        let super_admin_role_id = roles.get("SuperAdmin").copied();
+        use zent_be::entities::users;
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+        let mut filters = sea_orm::Condition::any();
+        if let Some(id) = admin_role_id {
+            filters = filters.add(users::Column::RoleId.eq(id));
+        }
+        if let Some(id) = super_admin_role_id {
+            filters = filters.add(users::Column::RoleId.eq(id));
+        }
+        if admin_role_id.is_some() || super_admin_role_id.is_some() {
+            let existing_res: Result<Vec<users::Model>, _> = users::Entity::find()
+                .filter(users::Column::DeletedAt.is_null())
+                .filter(filters)
+                .all(&db)
+                .await;
+            if let Ok(existing) = existing_res {
+                admin_ids = existing.into_iter().map(|u| u.id).collect();
+            }
+        }
+    }
 
     // -----------------------------------------------------------------------
     // Step 4: seed products (needs users, product_status, product_models)

@@ -48,6 +48,10 @@ pub async fn seed_random_warranties(
         return Ok(());
     }
 
+    // Delete all existing warranties first to ensure a fresh, clean seed
+    println!("  Deleting all existing warranties from local database...");
+    warranties::Entity::delete_many().exec(db).await?;
+
     let now = Utc::now();
 
     println!("  Generating warranty map 1-to-1 for {} SCM products...", scm_products.len());
