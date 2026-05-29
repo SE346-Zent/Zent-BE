@@ -14,6 +14,7 @@ pub mod resend_otp;
 pub mod logout;
 pub mod change_password;
 pub mod google_login;
+pub mod login_history;
 
 pub use forgot_password::forgot_password_handler;
 pub use verify_forgot_password_otp::verify_forgot_password_otp_handler;
@@ -26,6 +27,7 @@ pub use resend_otp::resend_otp_handler;
 pub use logout::logout_handler;
 pub use change_password::change_password_handler;
 pub use google_login::google_login_handler;
+pub use login_history::login_history_handler;
 
 // Re-export __path_* items for utoipa OpenApi derive
 pub use forgot_password::__path_forgot_password_handler;
@@ -39,6 +41,7 @@ pub use resend_otp::__path_resend_otp_handler;
 pub use logout::__path_logout_handler;
 pub use change_password::__path_change_password_handler;
 pub use google_login::__path_google_login_handler;
+pub use login_history::__path_login_history_handler;
 
 use axum::{Router, routing::post};
 use crate::core::state::AppState;
@@ -47,6 +50,7 @@ use crate::core::state::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login_handler))
+        .route("/login-history", axum::routing::get(login_history_handler))
         .route("/logout", post(logout_handler))
         .route("/register", post(register_handler))
         .route("/verify-otp", post(verify_otp_handler))

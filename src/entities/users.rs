@@ -46,6 +46,8 @@ pub enum Relation {
     Roles,
     #[sea_orm(has_many = "super::sessions::Entity")]
     Sessions,
+    #[sea_orm(has_many = "super::login_audit_logs::Entity")]
+    LoginAuditLogs,
     #[sea_orm(has_many = "super::warranties::Entity")]
     Warranties,
     #[sea_orm(has_many = "super::work_order_reject_forms::Entity")]
@@ -75,6 +77,12 @@ impl Related<super::roles::Entity> for Entity {
 impl Related<super::sessions::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Sessions.def()
+    }
+}
+
+impl Related<super::login_audit_logs::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::LoginAuditLogs.def()
     }
 }
 

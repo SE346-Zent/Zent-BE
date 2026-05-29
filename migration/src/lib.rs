@@ -40,6 +40,7 @@ mod m20260523_100000_add_chat_room_id_to_work_orders;
 mod m20260524_100000_add_ratings_and_part_wo_number;
 mod m20260528_100000_decouple_inventory_fks;
 mod m20260528_110000_add_warranty_status_lut;
+mod m20260530_100000_add_login_audit_log;
 
 
 pub struct Migrator;
@@ -88,6 +89,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260524_100000_add_ratings_and_part_wo_number::Migration),
             Box::new(m20260528_100000_decouple_inventory_fks::Migration),
             Box::new(m20260528_110000_add_warranty_status_lut::Migration),
+            Box::new(m20260530_100000_add_login_audit_log::Migration),
         ]
     }
 }

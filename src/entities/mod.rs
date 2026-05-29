@@ -4,6 +4,7 @@ pub mod prelude;
 
 pub mod account_status;
 pub mod images;
+pub mod login_audit_logs;
 pub mod new_part_form_image_links;
 pub mod new_part_forms;
 pub mod outbox_records;

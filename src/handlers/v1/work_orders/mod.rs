@@ -71,13 +71,14 @@ use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::AppError;
 use crate::entities::roles::Role;
 use crate::entities::work_orders as work_orders_ent;
-use crate::entities::{products, work_order_symptoms, users, work_order_state_history};
+use crate::entities::{products, work_order_symptoms, users, work_order_state_history, work_order_ratings};
 use crate::extractor::role_check::require_role;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::list_response::WorkOrderListItem;
 use crate::model::responses::pagination::PaginationResponse;
 use crate::model::requests::pagination::PaginationRequest;
 use crate::services::v1::work_orders::list as list_svc;
+use crate::services::v1::work_orders::technician_stats::{TechnicianStatsInput, TechnicianStatsSnapshot};
 use crate::infrastructure::cache::ValkeyClient;
 use crate::services::v1::inventory::ports::ZeusInventoryClient;
 
@@ -341,6 +342,71 @@ pub(crate) async fn fetch_paginated_work_orders(
     }
 
     Ok(axum::Json(ApiResponse::success_with_meta(200, "Work orders retrieved successfully", data, meta)))
+}
+
+pub(crate) async fn get_cached_technician_stats(
+    db: &DatabaseConnection,
+    valkey_client: &Option<Arc<ValkeyClient>>,
+    technician_id: Uuid,
+) -> Result<TechnicianStatsSnapshot, AppError> {
+    let cache_key = format!("cache:technician_stats:{}", technician_id);
+
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&cache_key).await {
+                if let Ok(snapshot) = serde_json::from_str::<TechnicianStatsSnapshot>(&cached_json) {
+                    return Ok(snapshot);
+                }
+            }
+        }
+    }
+
+    let work_order_rows = work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::DeletedAt.is_null())
+        .filter(work_orders_ent::Column::TechnicianId.eq(technician_id))
+        .all(db)
+        .await?;
+
+    let total_work_orders = work_order_rows.len() as i64;
+    let work_order_ids: Vec<Uuid> = work_order_rows.into_iter().map(|wo| wo.id).collect();
+
+    let mut rating_sum = 0i64;
+    let mut rating_count = 0i64;
+    if !work_order_ids.is_empty() {
+        let ratings = work_order_ratings::Entity::find()
+            .filter(work_order_ratings::Column::WorkOrderId.is_in(work_order_ids))
+            .all(db)
+            .await?;
+
+        for rating in ratings {
+            rating_sum += i64::from(rating.rating);
+            rating_count += 1;
+        }
+    }
+
+    let snapshot = crate::services::v1::work_orders::technician_stats::decide_technician_stats(TechnicianStatsInput {
+        total_work_orders,
+        rating_sum,
+        rating_count,
+    });
+
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            if let Ok(cached_val) = serde_json::to_string(&snapshot) {
+                let _: () = conn.set_ex(&cache_key, cached_val, 300).await.unwrap_or_default();
+            }
+        }
+    }
+
+    Ok(snapshot)
+}
+
+pub(crate) async fn refresh_technician_stats_cache(
+    db: &DatabaseConnection,
+    valkey_client: &Option<Arc<ValkeyClient>>,
+    technician_id: Uuid,
+) {
+    let _ = get_cached_technician_stats(db, valkey_client, technician_id).await;
 }
 
 /// Periodically clean up unassigned work orders that have exceeded the allowed wait window.

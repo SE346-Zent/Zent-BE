@@ -5,11 +5,12 @@ use chrono::{Duration, Utc};
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::lookup_tables::LookupTables;
 use crate::extractor::auth_user::AuthUser;
+use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::inventory::analytics_query::AnalyticsQuery;
 use crate::model::responses::base::ApiResponse;
-use crate::model::responses::inventory::admin_analytics_response::AdminAnalyticsResponse;
+use crate::model::responses::inventory::admin_analytics_response::{AdminAnalyticsResponse, TechnicianPerformanceEntry};
 use crate::services::v1::inventory::analytics::{self, AnalyticsInput};
-use crate::entities::{work_orders as work_orders_ent, new_part_forms, part_changes};
+use crate::entities::{work_orders as work_orders_ent, new_part_forms, part_changes, users};
 
 #[utoipa::path(
     get, path = "/api/v1/inventory/analytics", params(AnalyticsQuery),
@@ -26,6 +27,7 @@ pub async fn admin_analytics(
     auth: AuthUser,
     State(db): State<Arc<DatabaseConnection>>,
     State(luts): State<Arc<LookupTables>>,
+    State(valkey_client): State<Option<Arc<ValkeyClient>>>,
     Query(query): Query<AnalyticsQuery>,
 ) -> Result<Json<ApiResponse<AdminAnalyticsResponse>>, AppError> {
     match auth.role.name.as_str() {
@@ -33,10 +35,10 @@ pub async fn admin_analytics(
         _ => return Err(AppError::Forbidden("Only admins can view analytics".to_string())),
     }
 
-    let period_days: i64 = match query.period.as_str() {
-        "7d" => 7,
-        "30d" => 30,
-        other => return Err(AppError::BadRequest(format!("Invalid period '{}'. Use '7d' or '30d'", other))),
+    let period_days: i64 = match query.mode.to_lowercase().as_str() {
+        "weekly" | "7d" => 7,
+        "monthly" | "30d" => 28,
+        other => return Err(AppError::BadRequest(format!("Invalid mode '{}'. Use 'weekly' or 'monthly'", other))),
     };
 
     let now = Utc::now();
@@ -137,6 +139,35 @@ pub async fn admin_analytics(
         part_type_counts.push((name, count));
     }
 
+    let technician_role_id = *luts.roles_by_name
+        .get("Technician")
+        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Technician role missing")))?;
+
+    let technician_models = users::Entity::find()
+        .filter(users::Column::DeletedAt.is_null())
+        .filter(users::Column::RoleId.eq(technician_role_id))
+        .all(db.as_ref())
+        .await?;
+
+    let mut technician_performance = Vec::with_capacity(technician_models.len());
+    for tech in technician_models {
+        let stats = crate::handlers::v1::work_orders::get_cached_technician_stats(
+            db.as_ref(),
+            &valkey_client,
+            tech.id,
+        ).await?;
+
+        technician_performance.push(TechnicianPerformanceEntry {
+            technician_id: tech.id,
+            technician_name: tech.full_name,
+            total_work_orders: stats.total_work_orders,
+            rating_count: stats.rating_count,
+            average_rating: stats.average_rating(),
+        });
+    }
+
+    technician_performance.sort_by(|a, b| b.total_work_orders.cmp(&a.total_work_orders).then_with(|| a.technician_name.cmp(&b.technician_name)));
+
     let input = AnalyticsInput {
         current_orders,
         previous_orders,
@@ -147,6 +178,7 @@ pub async fn admin_analytics(
         current_returned_parts,
         previous_returned_parts,
         part_type_counts,
+        technician_performance,
     };
 
     let response = analytics::decide_admin_analytics(input, period_days);

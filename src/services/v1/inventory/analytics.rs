@@ -1,5 +1,6 @@
 use crate::model::responses::inventory::admin_analytics_response::{
-    AdminAnalyticsResponse, JobCompletionTrend, PartCategoryEntry, TotalMetric,
+    AdminAnalyticsResponse, JobCompletionTrend, PartCategoryEntry, TechnicianPerformanceEntry,
+    TotalMetric,
 };
 use chrono::{DateTime, Duration, Utc};
 
@@ -13,6 +14,7 @@ pub struct AnalyticsInput {
     pub current_returned_parts: i64,
     pub previous_returned_parts: i64,
     pub part_type_counts: Vec<(String, i64)>,
+    pub technician_performance: Vec<TechnicianPerformanceEntry>,
 }
 
 pub fn decide_admin_analytics(input: AnalyticsInput, period_days: i64) -> AdminAnalyticsResponse {
@@ -54,6 +56,7 @@ pub fn decide_admin_analytics(input: AnalyticsInput, period_days: i64) -> AdminA
         total_returned_parts,
         job_completion_trend,
         part_categories,
+        technician_performance: input.technician_performance,
     }
 }
 
@@ -74,7 +77,7 @@ fn build_job_completion_trend(
     previous: &[DateTime<Utc>],
     period_days: i64,
 ) -> JobCompletionTrend {
-    let num_buckets = if period_days <= 7 { 7 } else { 30 };
+    let num_buckets = if period_days <= 7 { 7 } else { 4 };
     let now = Utc::now();
     let period_start = now - Duration::days(period_days);
     let prev_start = period_start - Duration::days(period_days);
@@ -90,7 +93,7 @@ fn build_job_completion_trend(
         let label = if period_days <= 7 {
             bucket_start.format("%a").to_string()
         } else {
-            bucket_start.format("%m/%d").to_string()
+            format!("Week {}", i + 1)
         };
         labels.push(label);
     }
@@ -205,6 +208,7 @@ mod tests {
             current_returned_parts: 3,
             previous_returned_parts: 2,
             part_type_counts: vec![("Battery".to_string(), 10)],
+            technician_performance: vec![],
         };
         let result = decide_admin_analytics(input, 7);
         assert_eq!(result.total_orders.value, 1);
