@@ -20,18 +20,32 @@ pub async fn seed_random_warranties(
     if customer_ids.is_empty() {
         anyhow::bail!("Cannot seed warranties: no customer user IDs provided.");
     }
-    let base_url = std::env::var("ZEUS_BASE_URL")
-        .map_err(|_| anyhow::anyhow!("ZEUS_BASE_URL is required for warranty seeding"))?;
-    let api_key = std::env::var("ZEUS_API_KEY")
-        .map_err(|_| anyhow::anyhow!("ZEUS_API_KEY is required for warranty seeding"))?;
+    let base_url = match std::env::var("ZEUS_BASE_URL") {
+        Ok(url) => url,
+        Err(_) => {
+            println!("  [Warning] ZEUS_BASE_URL is not set. Skipping warranty seeding.");
+            return Ok(());
+        }
+    };
+    let api_key = match std::env::var("ZEUS_API_KEY") {
+        Ok(key) => key,
+        Err(_) => {
+            println!("  [Warning] ZEUS_API_KEY is not set. Skipping warranty seeding.");
+            return Ok(());
+        }
+    };
     let zeus_client = zent_be::infrastructure::clients::zeus::ZeusClient::new(base_url, api_key);
 
-    let mut scm_products = zeus_client
-        .list_products()
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to list SCM products: {}", e))?;
+    let mut scm_products = match zeus_client.list_products().await {
+        Ok(products) => products,
+        Err(e) => {
+            println!("  [Warning] Failed to list SCM products: {}. Skipping warranty seeding.", e);
+            return Ok(());
+        }
+    };
     if scm_products.is_empty() {
-        anyhow::bail!("Cannot seed warranties: no products found in SCM.");
+        println!("  [Warning] No products found in SCM. Skipping warranty seeding.");
+        return Ok(());
     }
 
     let now = Utc::now();

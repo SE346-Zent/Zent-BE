@@ -209,11 +209,11 @@ async fn main() -> Result<()> {
     // -----------------------------------------------------------------------
     // Step 7: seed warranties (needs users + products)
     // -----------------------------------------------------------------------
-    if num_warranties > 0 {
-        println!("\n--- Seeding Warranties ({}) ---", num_warranties);
+    if !customer_ids.is_empty() {
+        println!("\n--- Seeding Warranties (1-to-1 with SCM products) ---");
         seed_random_warranties(
             &db,
-            num_warranties,
+            0,
             rng_seed,
             &customer_ids,
             &product_ids,
