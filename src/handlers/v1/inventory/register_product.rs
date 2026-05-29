@@ -13,6 +13,7 @@ use validator::Validate;
 #[utoipa::path(
     post,
     path = "/api/v1/inventory/products/register",
+    tag = "inventory",
     request_body = RegisterProductRequest,
     responses(
         (status = 200, description = "Product registered successfully", body = ApiResponse<RegisterProductResponse>),

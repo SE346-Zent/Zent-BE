@@ -14,6 +14,7 @@ use crate::entities::{work_orders as work_orders_ent, users};
 
 #[utoipa::path(
     post, path = "/api/v1/inventory/work_orders/{id}/parts", request_body = AddPartsRequest,
+    tag = "inventory",
     responses(
         (status = 200, description = "Parts added successfully", body = ApiResponse<String>),
         (status = 400, description = "Bad Request"), (status = 403, description = "Forbidden"),

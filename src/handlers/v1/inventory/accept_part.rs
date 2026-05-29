@@ -13,6 +13,7 @@ use chrono::Utc;
 #[utoipa::path(
     post,
     path = "/api/v1/inventory/parts/{id}/accept",
+    tag = "inventory",
     params(
         ("id" = Uuid, Path, description = "The unique identifier of the part registration form")
     ),

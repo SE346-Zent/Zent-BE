@@ -15,6 +15,7 @@ use validator::Validate;
 #[utoipa::path(
     post,
     path = "/api/v1/inventory/parts/{id}/deny",
+    tag = "inventory",
     request_body = DenyPartRequest,
     params(
         ("id" = Uuid, Path, description = "The unique identifier of the part registration form")

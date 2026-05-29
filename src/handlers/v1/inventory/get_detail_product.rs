@@ -19,6 +19,7 @@ use crate::services::v1::inventory::get_product::{self, ProductWithRelations};
 #[utoipa::path(
     get,
     path = "/api/v1/inventory/products/{id}",
+    tag = "inventory",
     params(
         ("id" = Uuid, Path, description = "The unique identifier of the product")
     ),

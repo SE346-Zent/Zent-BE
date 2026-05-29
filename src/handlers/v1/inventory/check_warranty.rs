@@ -14,6 +14,7 @@ use validator::Validate;
 #[utoipa::path(
     post,
     path = "/api/v1/inventory/products/check-warranty",
+    tag = "inventory",
     request_body = CheckWarrantyRequest,
     responses(
         (status = 200, description = "Warranty information retrieved successfully", body = ApiResponse<WarrantyCheckResponse>),

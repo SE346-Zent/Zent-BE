@@ -13,6 +13,7 @@ use crate::entities::{work_orders as work_orders_ent, new_part_forms, part_chang
 
 #[utoipa::path(
     get, path = "/api/v1/inventory/analytics", params(AnalyticsQuery),
+    tag = "inventory",
     responses(
         (status = 200, description = "Admin analytics data", body = ApiResponse<AdminAnalyticsResponse>),
         (status = 400, description = "Bad Request", body = ErrorResponse),
