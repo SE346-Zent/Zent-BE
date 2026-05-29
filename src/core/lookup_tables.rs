@@ -1,7 +1,9 @@
 use sea_orm::{DatabaseConnection, EntityTrait};
 use std::collections::HashMap;
 
-use crate::entities::{account_status, part_conditions, part_types, roles, work_order_statuses, policy, part_mfg_statuses, warranty_statuses};
+use crate::core::errors::AppError;
+use crate::services::v1::inventory::ports::ZeusInventoryClient;
+use crate::entities::{account_status, roles, work_order_statuses, policy, warranty_statuses};
 
 /// In-memory lookup tables (LUT) loaded once at server startup.
 ///
@@ -52,16 +54,19 @@ pub struct LookupTables {
 }
 
 impl LookupTables {
-    /// Load all lookup tables from the database.
-    pub async fn load(db: &DatabaseConnection) -> Result<Self, sea_orm::DbErr> {
+    /// Load all lookup tables. Inventory LUTs are loaded from SCM, others from database.
+    pub async fn load(
+        db: &DatabaseConnection,
+        zeus_client: &dyn ZeusInventoryClient,
+    ) -> Result<Self, AppError> {
         let roles_list = roles::Entity::find().all(db).await?;
         let account_statuses_list = account_status::Entity::find().all(db).await?;
-        let part_types_list = part_types::Entity::find().all(db).await?;
-        let part_conditions_list = part_conditions::Entity::find().all(db).await?;
         let work_order_statuses_list = work_order_statuses::Entity::find().all(db).await?;
-        let part_mfg_statuses_list = part_mfg_statuses::Entity::find().all(db).await?;
         let warranty_statuses_list = warranty_statuses::Entity::find().all(db).await?;
         let policies_list = policy::Entity::find().all(db).await?;
+
+        // Fetch LUTs from SCM
+        let zeus_luts = zeus_client.get_luts().await?;
 
         let roles: HashMap<i32, String> = roles_list.iter().map(|r| (r.id, r.name.clone())).collect();
         let roles_by_name: HashMap<String, i32> = roles_list.iter().map(|r| (r.name.clone(), r.id)).collect();
@@ -69,11 +74,11 @@ impl LookupTables {
         let account_statuses: HashMap<i32, String> = account_statuses_list.iter().map(|a| (a.id, a.name.clone())).collect();
         let account_statuses_by_name: HashMap<String, i32> = account_statuses_list.iter().map(|a| (a.name.clone(), a.id)).collect();
 
-        let part_types: HashMap<i32, String> = part_types_list.iter().map(|p| (p.id, p.part_type_name.clone())).collect();
-        let part_types_by_name: HashMap<String, i32> = part_types_list.iter().map(|p| (p.part_type_name.clone(), p.id)).collect();
+        let part_types: HashMap<i32, String> = zeus_luts.part_types.iter().map(|p| (p.id, p.part_type_name.clone())).collect();
+        let part_types_by_name: HashMap<String, i32> = zeus_luts.part_types.iter().map(|p| (p.part_type_name.clone(), p.id)).collect();
 
-        let part_conditions: HashMap<i32, String> = part_conditions_list.iter().map(|p| (p.id, p.name.clone())).collect();
-        let part_conditions_by_name: HashMap<String, i32> = part_conditions_list.iter().map(|p| (p.name.clone(), p.id)).collect();
+        let part_conditions: HashMap<i32, String> = zeus_luts.part_conditions.iter().map(|p| (p.id, p.name.clone())).collect();
+        let part_conditions_by_name: HashMap<String, i32> = zeus_luts.part_conditions.iter().map(|p| (p.name.clone(), p.id)).collect();
 
         let work_order_statuses: HashMap<i32, String> = work_order_statuses_list.iter().map(|w| (w.id, w.name.clone())).collect();
         let work_order_statuses_by_name: HashMap<String, i32> = work_order_statuses_list.iter().map(|w| (w.name.clone(), w.id)).collect();
@@ -81,8 +86,8 @@ impl LookupTables {
         let warranty_statuses: HashMap<i32, String> = warranty_statuses_list.iter().map(|w| (w.id, w.name.clone())).collect();
         let warranty_statuses_by_name: HashMap<String, i32> = warranty_statuses_list.iter().map(|w| (w.name.clone(), w.id)).collect();
 
-        let part_mfg_statuses: HashMap<i32, String> = part_mfg_statuses_list.iter().map(|p| (p.id, p.name.clone())).collect();
-        let part_mfg_statuses_by_name: HashMap<String, i32> = part_mfg_statuses_list.iter().map(|p| (p.name.clone(), p.id)).collect();
+        let part_mfg_statuses: HashMap<i32, String> = zeus_luts.part_mfg_statuses.iter().map(|p| (p.id, p.name.clone())).collect();
+        let part_mfg_statuses_by_name: HashMap<String, i32> = zeus_luts.part_mfg_statuses.iter().map(|p| (p.name.clone(), p.id)).collect();
 
         let policies: HashMap<String, String> = policies_list.iter().map(|p| (p.policy_name.clone(), p.policy_value.clone())).collect();
 

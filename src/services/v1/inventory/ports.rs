@@ -46,6 +46,42 @@ pub struct ZeusProductModel {
     pub image_url: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusLutCollection {
+    #[serde(alias = "PartTypes", alias = "part_types")]
+    pub part_types: Vec<ZeusPartType>,
+    #[serde(alias = "PartConditions", alias = "part_conditions")]
+    pub part_conditions: Vec<ZeusPartCondition>,
+    #[serde(alias = "PartMfgStatuses", alias = "part_mfg_statuses")]
+    pub part_mfg_statuses: Vec<ZeusPartMfgStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusPartType {
+    #[serde(alias = "ID", alias = "id")]
+    pub id: i32,
+    #[serde(alias = "PartTypeName", alias = "part_type_name")]
+    pub part_type_name: String,
+    #[serde(alias = "Description", alias = "description")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusPartCondition {
+    #[serde(alias = "ID", alias = "id")]
+    pub id: i32,
+    #[serde(alias = "Name", alias = "name")]
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusPartMfgStatus {
+    #[serde(alias = "ID", alias = "id")]
+    pub id: i32,
+    #[serde(alias = "Name", alias = "name")]
+    pub name: String,
+}
+
 #[async_trait::async_trait]
 pub trait ZeusInventoryClient: Send + Sync {
     async fn get_part(&self, id: Uuid) -> Result<ZeusPart, AppError>;
@@ -61,6 +97,7 @@ pub trait ZeusInventoryClient: Send + Sync {
     async fn get_part_catalog(&self, id: Uuid) -> Result<ZeusPartCatalog, AppError>;
     async fn find_part_catalog_by_part_number(&self, part_number: &str) -> Result<Option<ZeusPartCatalog>, AppError>;
     async fn get_product_model(&self, code: &str) -> Result<ZeusProductModel, AppError>;
+    async fn get_luts(&self) -> Result<ZeusLutCollection, AppError>;
 }
 
 #[derive(Debug, Clone, Default)]
@@ -137,5 +174,12 @@ impl ZeusInventoryClient for MockZeusClient {
     }
     async fn get_product_model(&self, code: &str) -> Result<ZeusProductModel, AppError> {
         Err(AppError::NotFound(format!("Product model with code {} not found", code)))
+    }
+    async fn get_luts(&self) -> Result<ZeusLutCollection, AppError> {
+        Ok(ZeusLutCollection {
+            part_types: vec![],
+            part_conditions: vec![],
+            part_mfg_statuses: vec![],
+        })
     }
 }

@@ -56,18 +56,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start background asynchronous AMQP email consumer pool globally
     consumers::email::start_email_consumer(rabbitmq.clone()).await;
 
+    let zeus_client = Arc::new(zent_be::infrastructure::clients::zeus::ZeusClient::new(
+        cfg.zeus_base_url.clone(),
+        cfg.zeus_api_key.clone(),
+    ));
+
     // Load lookup tables (roles, account_statuses, etc.) into memory
-    let lookup_tables = core::lookup_tables::LookupTables::load(&db)
+    let lookup_tables = core::lookup_tables::LookupTables::load(&db, zeus_client.as_ref())
         .await
         .expect("Failed to load lookup tables from database");
 
     // Pre-load email templates into memory cache from the configured directory
     let templates: HashMap<String, String> = infrastructure::templates::load_templates(&cfg.template_dir).await;
-
-    let zeus_client = Arc::new(zent_be::infrastructure::clients::zeus::ZeusClient::new(
-        cfg.zeus_base_url.clone(),
-        cfg.zeus_api_key.clone(),
-    ));
 
     // Initialize AppState with directly injected infrastructure
     let state = AppState::new(

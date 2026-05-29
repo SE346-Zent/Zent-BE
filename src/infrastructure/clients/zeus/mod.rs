@@ -5,6 +5,7 @@ pub mod products;
 use crate::core::errors::AppError;
 use crate::services::v1::inventory::ports::{
     ZeusInventoryClient, ZeusPart, ZeusPartCatalog, ZeusProduct, ZeusProductModel,
+    ZeusLutCollection,
 };
 use uuid::Uuid;
 use reqwest::Client;
@@ -323,5 +324,17 @@ impl ZeusInventoryClient for ZeusClient {
             description: data.description,
             image_url: data.image_url,
         })
+    }
+
+    async fn get_luts(&self) -> Result<ZeusLutCollection, AppError> {
+        let envelope: ZeusEnvelope<ZeusLutCollection> = self
+            .send_expect_envelope(self.make_get("/luts"))
+            .await?;
+
+        let data = envelope.data.ok_or_else(|| {
+            AppError::Internal(anyhow::anyhow!("Failed to retrieve LUTs from SCM"))
+        })?;
+
+        Ok(data)
     }
 }
