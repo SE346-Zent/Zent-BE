@@ -12,11 +12,7 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(RegisteredDevices::Table)
-                    .drop_foreign_key(
-                        ForeignKey::drop()
-                            .name("fk_registered_devices_product")
-                            .to_owned(),
-                    )
+                    .drop_foreign_key(Alias::new("fk_registered_devices_product"))
                     .to_owned(),
             )
             .await?;
@@ -31,7 +27,7 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(RegisteredDevices::Table)
                     .add_foreign_key(
-                        ForeignKey::create()
+                        &ForeignKey::create()
                             .name("fk_registered_devices_product")
                             .from(RegisteredDevices::Table, RegisteredDevices::ProductId)
                             .to(Products::Table, Products::Id)
