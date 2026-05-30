@@ -282,6 +282,68 @@ impl ZeusInventoryClient for ZeusClient {
         })
     }
 
+    async fn update_part_catalog_by_sku(
+        &self,
+        sku: &str,
+        description: Option<&str>,
+        part_mfg_status: Option<i32>,
+    ) -> Result<ZeusPartCatalog, AppError> {
+        let mut payload = serde_json::Map::new();
+        if let Some(description) = description {
+            payload.insert("description".to_string(), serde_json::Value::String(description.to_string()));
+        }
+        if let Some(status) = part_mfg_status {
+            payload.insert("part_mfg_status".to_string(), serde_json::Value::Number(status.into()));
+        }
+
+        let envelope: ZeusEnvelope<models::ZeusPartCatalogDto> = self
+            .send_expect_envelope(
+                self.make_put(&format!("/inventory/part-catalog/{}", sku)).json(&payload),
+            )
+            .await?;
+
+        let data = envelope.data.ok_or_else(|| {
+            AppError::NotFound(format!("Part catalog with SKU {} not found in Zeus", sku))
+        })?;
+
+        Ok(ZeusPartCatalog {
+            id: data.id,
+            part_number: data.part_number,
+            part_types_id: data.part_types_id,
+            mfg_number: data.mfg_number,
+            description: data.description,
+            part_mfg_status: data.part_mfg_status,
+        })
+    }
+
+    async fn create_part_catalog(&self, part_number: &str, part_types_id: i32, mfg_number: &str, description: Option<&str>, part_mfg_status: i32) -> Result<ZeusPartCatalog, AppError> {
+        let mut payload = serde_json::Map::new();
+        payload.insert("part_number".to_string(), serde_json::Value::String(part_number.to_string()));
+        payload.insert("part_types_id".to_string(), serde_json::Value::Number(part_types_id.into()));
+        payload.insert("mfg_number".to_string(), serde_json::Value::String(mfg_number.to_string()));
+        payload.insert("part_mfg_status".to_string(), serde_json::Value::Number(part_mfg_status.into()));
+        if let Some(desc) = description {
+            payload.insert("description".to_string(), serde_json::Value::String(desc.to_string()));
+        }
+
+        let envelope: ZeusEnvelope<models::ZeusPartCatalogDto> = self
+            .send_expect_envelope(self.make_post("/inventory/part-catalog").json(&payload))
+            .await?;
+
+        let data = envelope.data.ok_or_else(|| {
+            AppError::Internal(anyhow::anyhow!("Failed to create part catalog in Zeus"))
+        })?;
+
+        Ok(ZeusPartCatalog {
+            id: data.id,
+            part_number: data.part_number,
+            part_types_id: data.part_types_id,
+            mfg_number: data.mfg_number,
+            description: data.description,
+            part_mfg_status: data.part_mfg_status,
+        })
+    }
+
     async fn find_part_catalog_by_part_number(&self, part_number: &str) -> Result<Option<ZeusPartCatalog>, AppError> {
         let envelope: ZeusEnvelope<serde_json::Value> = self
             .send_expect_envelope(

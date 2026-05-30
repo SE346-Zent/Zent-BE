@@ -5,7 +5,7 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::state::AppState;
 use crate::entities::{
-    new_part_forms, part_audit_log, part_catalog, part_conditions, parts,
+    new_part_forms, part_catalog, part_conditions, parts,
     product_models, products as prod, warranties, work_orders,
 };
 use crate::extractor::auth_user::AuthUser;
@@ -172,15 +172,11 @@ pub async fn get_detail_product(
         let mut approval_status = "approved".to_string();
         let mut registering_technician_id = None;
         if let Some(f) = form {
-            let audit_log = part_audit_log::Entity::find()
-                .filter(part_audit_log::Column::NewPartFormId.eq(f.id))
-                .one(state.db.as_ref())
-                .await?;
-            if let Some(log) = audit_log {
-                approval_status = log.action.clone();
+            approval_status = if f.status.eq_ignore_ascii_case("denied") {
+                "rejected".to_string()
             } else {
-                approval_status = "pending".to_string();
-            }
+                f.status.clone()
+            };
             if let Ok(Some(wo)) = work_orders::Entity::find_by_id(f.work_order_id).one(state.db.as_ref()).await {
                 registering_technician_id = wo.technician_id;
             }

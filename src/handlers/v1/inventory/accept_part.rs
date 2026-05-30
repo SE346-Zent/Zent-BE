@@ -3,10 +3,9 @@ use crate::core::state::AppState;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
 use crate::model::responses::base::ApiResponse;
-use crate::services::v1::inventory::accept_part::{self, AcceptPartEffect};
-use crate::entities::{new_part_forms, part_audit_log};
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
-use uuid::Uuid;
+use crate::services::v1::inventory::accept_part;
+use crate::entities::new_part_forms;
+use sea_orm::{EntityTrait, ActiveModelTrait, TransactionTrait, Set};
 use chrono::Utc;
 
 /// Accept a pending part registration form and synchronize it with Zeus SCM.
@@ -37,42 +36,66 @@ pub async fn accept_part(
         .await?
         .ok_or_else(|| AppError::NotFound("Part form not found".to_string()))?;
 
-    let audit_log = part_audit_log::Entity::find()
-        .filter(part_audit_log::Column::NewPartFormId.eq(form.id))
-        .one(state.db.as_ref())
-        .await?;
-
-    let current_form_status = if let Some(log) = audit_log {
-        log.action.clone()
-    } else {
-        "pending".to_string()
-    };
+    let current_form_status = form.status.clone();
+    let form_id = form.id;
+    let form_description = form.description.clone();
+    let form_part_number = form.part_number.clone();
+    let form_serial_number = form.serial_number.clone();
+    let form_created_at = form.created_at;
 
     let effect = accept_part::decide_accept_part(
-        form.id,
+        form_id,
         auth.user.id,
         &current_form_status,
         Utc::now(),
     )?;
 
-    let catalog = state
+    // Ensure part catalog exists in Zeus. If not found, create it. If found, optionally update.
+    let found_catalog = state
         .zeus_client
         .find_part_catalog_by_part_number(&form.part_number)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("Part number {} not found in SCM catalog", form.part_number)))?;
+        .await?;
+
+    let catalog = if found_catalog.is_some() {
+        // Refresh/update catalog with latest description/status
+        state
+            .zeus_client
+            .update_part_catalog_by_sku(&form_part_number, form_description.as_deref(), Some(1))
+            .await?
+    } else {
+        // Create a minimal catalog entry when missing. Use model_code-derived mfg number fallback.
+        let mfg_number = form.model_code.clone().unwrap_or_else(|| format!("MFG-{}", form.part_number));
+        state
+            .zeus_client
+            .create_part_catalog(&form_part_number, form.part_types_id, &mfg_number, form_description.as_deref(), 1)
+            .await?
+    };
 
     // Condition defaults to 1 (New), mfg_date to form creation date
     let condition_id = 1;
-    let mfg_date = form.created_at;
+    let mfg_date = form_created_at;
 
     state.zeus_client.create_part(
         catalog.id,
         condition_id,
-        &form.serial_number,
+        &form_serial_number,
         mfg_date,
     ).await?;
 
-    effect.approval_audit_model.insert(state.db.as_ref()).await?;
+    state.db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
+        let form_update = new_part_forms::ActiveModel {
+            id: Set(form_id),
+            status: Set("approved".to_string()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+        form_update.update(txn).await?;
+        effect.approval_audit_model.insert(txn).await?;
+        Ok(())
+    })).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
 
     Ok(Json(ApiResponse::message_only(200, "Part registration form accepted and synchronized successfully")))
 }

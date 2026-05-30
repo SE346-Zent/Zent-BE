@@ -3,9 +3,9 @@
 pub use super::account_status::Entity as AccountStatus;
 pub use super::images::Entity as Images;
 pub use super::login_audit_logs::Entity as LoginAuditLogs;
+pub use super::new_part_audit_log::Entity as NewPartAuditLog;
 pub use super::new_part_form_image_links::Entity as NewPartFormImageLinks;
 pub use super::new_part_forms::Entity as NewPartForms;
-pub use super::part_audit_log::Entity as PartAuditLog;
 pub use super::part_catalog::Entity as PartCatalog;
 pub use super::part_catalog_image_links::Entity as PartCatalogImageLinks;
 pub use super::part_changes::Entity as PartChanges;

@@ -95,6 +95,8 @@ pub trait ZeusInventoryClient: Send + Sync {
     async fn list_products(&self) -> Result<Vec<ZeusProduct>, AppError>;
     async fn find_parts_by_product(&self, product_id: Uuid) -> Result<Vec<ZeusPart>, AppError>;
     async fn get_part_catalog(&self, id: Uuid) -> Result<ZeusPartCatalog, AppError>;
+    async fn update_part_catalog_by_sku(&self, sku: &str, description: Option<&str>, part_mfg_status: Option<i32>) -> Result<ZeusPartCatalog, AppError>;
+    async fn create_part_catalog(&self, part_number: &str, part_types_id: i32, mfg_number: &str, description: Option<&str>, part_mfg_status: i32) -> Result<ZeusPartCatalog, AppError>;
     async fn find_part_catalog_by_part_number(&self, part_number: &str) -> Result<Option<ZeusPartCatalog>, AppError>;
     async fn get_product_model(&self, code: &str) -> Result<ZeusProductModel, AppError>;
     async fn get_luts(&self) -> Result<ZeusLutCollection, AppError>;
@@ -168,6 +170,27 @@ impl ZeusInventoryClient for MockZeusClient {
     }
     async fn get_part_catalog(&self, id: Uuid) -> Result<ZeusPartCatalog, AppError> {
         Err(AppError::NotFound(format!("Part catalog with ID {} not found", id)))
+    }
+    async fn update_part_catalog_by_sku(&self, sku: &str, description: Option<&str>, part_mfg_status: Option<i32>) -> Result<ZeusPartCatalog, AppError> {
+        Ok(ZeusPartCatalog {
+            id: Uuid::new_v4(),
+            part_number: sku.to_string(),
+            part_types_id: 1,
+            mfg_number: format!("MFG-{}", sku),
+            description: description.map(|s| s.to_string()),
+            part_mfg_status: part_mfg_status.unwrap_or(1),
+        })
+    }
+
+    async fn create_part_catalog(&self, part_number: &str, part_types_id: i32, mfg_number: &str, description: Option<&str>, part_mfg_status: i32) -> Result<ZeusPartCatalog, AppError> {
+        Ok(ZeusPartCatalog {
+            id: Uuid::new_v4(),
+            part_number: part_number.to_string(),
+            part_types_id,
+            mfg_number: mfg_number.to_string(),
+            description: description.map(|s| s.to_string()),
+            part_mfg_status,
+        })
     }
     async fn find_part_catalog_by_part_number(&self, _part_number: &str) -> Result<Option<ZeusPartCatalog>, AppError> {
         Ok(None)

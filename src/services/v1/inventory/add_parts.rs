@@ -57,6 +57,7 @@ pub fn decide_add_parts(
         description: Set(add_parts_payload.description),
         work_order_id: Set(work_order_record.id),
         work_order_number: Set(add_parts_payload.work_order_number),
+        status: Set("pending".to_string()),
         created_at: Set(current_timestamp),
         updated_at: Set(current_timestamp),
         deleted_at: Set(None),

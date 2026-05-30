@@ -5,9 +5,8 @@ use crate::extractor::auth_user::AuthUser;
 use crate::model::requests::inventory::deny_part_request::DenyPartRequest;
 use crate::model::responses::base::ApiResponse;
 use crate::services::v1::inventory::deny_part;
-use crate::entities::{new_part_forms, part_audit_log};
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
-use uuid::Uuid;
+use crate::entities::new_part_forms;
+use sea_orm::{EntityTrait, ActiveModelTrait, TransactionTrait, Set};
 use chrono::Utc;
 use validator::Validate;
 
@@ -43,26 +42,31 @@ pub async fn deny_part(
         .await?
         .ok_or_else(|| AppError::NotFound("Part form not found".to_string()))?;
 
-    let audit_log = part_audit_log::Entity::find()
-        .filter(part_audit_log::Column::NewPartFormId.eq(form.id))
-        .one(state.db.as_ref())
-        .await?;
-
-    let current_form_status = if let Some(log) = audit_log {
-        log.action.clone()
-    } else {
-        "pending".to_string()
-    };
+    let current_form_status = form.status.clone();
+    let form_id = form.id;
 
     let effect = deny_part::decide_deny_part(
-        form.id,
+        form_id,
         auth.user.id,
         &current_form_status,
         &payload.reason,
         Utc::now(),
     )?;
 
-    effect.denial_audit_model.insert(state.db.as_ref()).await?;
+    state.db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
+        let form_update = new_part_forms::ActiveModel {
+            id: Set(form_id),
+            status: Set("rejected".to_string()),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+        form_update.update(txn).await?;
+        effect.denial_audit_model.insert(txn).await?;
+        Ok(())
+    })).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
 
     Ok(Json(ApiResponse::message_only(200, "Part registration form denied successfully")))
 }

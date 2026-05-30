@@ -1,5 +1,5 @@
 use crate::core::errors::AppError;
-use crate::entities::part_audit_log;
+use crate::entities::new_part_audit_log;
 use sea_orm::Set;
 
 /// Represents the calculated results and side-effects of a successful part acceptance request.
@@ -7,7 +7,7 @@ pub struct AcceptPartEffect {
     /// The unique identifier of the part registration form being accepted.
     pub target_part_form_id: uuid::Uuid,
     /// The database model for the audit log entry recording this approval.
-    pub approval_audit_model: part_audit_log::ActiveModel,
+    pub approval_audit_model: new_part_audit_log::ActiveModel,
 }
 
 /// Determine the outcome of a part acceptance attempt by validating the current form status.
@@ -34,7 +34,7 @@ pub fn decide_accept_part(
     }
     Ok(AcceptPartEffect {
         target_part_form_id,
-        approval_audit_model: part_audit_log::ActiveModel {
+        approval_audit_model: new_part_audit_log::ActiveModel {
             id: Set(uuid::Uuid::new_v4()),
             new_part_form_id: Set(target_part_form_id),
             action: Set("approved".to_string()),

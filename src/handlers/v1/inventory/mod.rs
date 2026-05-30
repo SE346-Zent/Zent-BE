@@ -10,6 +10,8 @@ pub mod register_product;
 pub mod accept_part;
 pub mod deny_part;
 pub mod admin_analytics;
+pub mod new_part_form_list;
+pub mod new_part_form_detail;
 
 use axum::{Router, middleware};
 use crate::core::state::AppState;
@@ -26,6 +28,8 @@ pub fn router(app_state: AppState) -> Router<AppState> {
         ));
 
     let administrator_only_routes = Router::new()
+        .route("/part-requests", axum::routing::get(new_part_form_list::new_part_form_list))
+        .route("/part-requests/{id}", axum::routing::get(new_part_form_detail::new_part_form_detail))
         .route("/parts/{id}/accept", axum::routing::post(accept_part::accept_part))
         .route("/parts/{id}/deny", axum::routing::post(deny_part::deny_part))
         .route("/analytics", axum::routing::get(admin_analytics::admin_analytics))

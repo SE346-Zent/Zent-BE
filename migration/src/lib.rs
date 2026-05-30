@@ -41,6 +41,8 @@ mod m20260524_100000_add_ratings_and_part_wo_number;
 mod m20260528_100000_decouple_inventory_fks;
 mod m20260528_110000_add_warranty_status_lut;
 mod m20260530_100000_add_login_audit_log;
+mod m20260530_100001_backfill_new_part_form_status;
+mod m20260530_100002_rename_part_audit_log;
 
 
 pub struct Migrator;
@@ -90,6 +92,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20260528_100000_decouple_inventory_fks::Migration),
             Box::new(m20260528_110000_add_warranty_status_lut::Migration),
             Box::new(m20260530_100000_add_login_audit_log::Migration),
+            Box::new(m20260530_100001_backfill_new_part_form_status::Migration),
+            Box::new(m20260530_100002_rename_part_audit_log::Migration),
         ]
     }
 }

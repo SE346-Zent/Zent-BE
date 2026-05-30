@@ -1,10 +1,10 @@
-//! SeaORM Entity for `part_audit_log` table.
-//! Audit trail for part approval/denial actions by admins.
+//! SeaORM Entity for `new_part_audit_log` table.
+//! Audit trail for new part approval/denial actions by admins.
 
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "part_audit_log")]
+#[sea_orm(table_name = "new_part_audit_log")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
