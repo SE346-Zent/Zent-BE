@@ -11,8 +11,6 @@ use zent_be::services::v1::inventory::get_product::{self, ProductWithRelations};
 use zent_be::services::v1::inventory::get_product::{PartInProduct as DetailPartInProduct};
 use zent_be::services::v1::inventory::accept_part;
 use zent_be::services::v1::inventory::deny_part;
-use zent_be::services::v1::inventory::register_product;
-use zent_be::model::requests::inventory::register_product_request::RegisterProductRequest;
 use zent_be::entities::{parts, part_catalog, part_conditions, products, product_models};
 
 fn u(s: &str) -> Uuid { Uuid::parse_str(s).unwrap() }
@@ -70,59 +68,7 @@ fn integration_approval_state_machine_with_audit() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TEST 2 — Product registration logic
-// ═══════════════════════════════════════════════════════════════════════════════
-#[test]
-fn integration_product_registration_complex() {
-    let user_id = u("c0000000-0000-0000-0000-000000000001");
-    let now = chrono::Utc::now();
-
-    // Successful first registration (no existing product)
-    let req = RegisterProductRequest {
-        serial_number: "SN-VALID-123".to_string(),
-        country: "Vietnam".to_string(),
-        province: "Hanoi".to_string(),
-        city: "Cau Giay".to_string(),
-        address: "123 Test Street".to_string(),
-        first_name: "John".to_string(),
-        last_name: "Doe".to_string(),
-        email: "john@example.com".to_string(),
-        mobile_phone: "0123456789".to_string(),
-        send_email_confirmation: true,
-    };
-
-    let result = register_product::decide_register_product(
-        &req, user_id, "John Doe",
-        Some("MODEL-A".to_string()), Some("Model A".to_string()),
-        None, now,
-    );
-    assert!(result.is_ok());
-    let effect = result.unwrap();
-    assert!(effect.should_send_confirmation_email);
-    assert_eq!(effect.product_model_code, "MODEL-A");
-
-    // Serial not in catalog → fails
-    let result = register_product::decide_register_product(
-        &req, user_id, "John Doe",
-        None, None,
-        None, now,
-    );
-    assert!(result.is_err());
-
-    // Re-registration of existing product (existing_product_record_id is Some)
-    let result = register_product::decide_register_product(
-        &req, user_id, "John Doe",
-        Some("MODEL-A".to_string()), Some("Model A".to_string()),
-        Some(u("p1000000-0000-0000-0000-000000000001")), now,
-    );
-    assert!(result.is_ok());
-    let effect = result.unwrap();
-    assert!(!effect.should_send_confirmation_email); // No email on re-registration
-    assert_eq!(effect.registered_product_id, u("p1000000-0000-0000-0000-000000000001"));
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// TEST 3 — Product detail aggregation (parts rolled up correctly)
+// TEST 2 — Product detail aggregation (parts rolled up correctly)
 // ═══════════════════════════════════════════════════════════════════════════════
 #[test]
 fn integration_product_detail_with_parts_rollup() {

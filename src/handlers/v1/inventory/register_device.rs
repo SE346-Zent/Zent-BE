@@ -14,7 +14,7 @@ use validator::Validate;
 use std::sync::Arc;
 use sea_orm::DatabaseConnection;
 
-/// Register a new device by a customer with warranty check and optional email confirmation.
+/// Register a new device by a customer with warranty check, Zeus sync, and optional email confirmation.
 #[utoipa::path(
     post,
     path = "/api/v1/inventory/devices/register",
@@ -38,16 +38,23 @@ pub async fn register_device(
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
     // Find product in Zeus SCM by serial number
-    let zeus_prod = state.zeus_client.find_product_by_serial(&payload.serial_number).await?
-        .ok_or_else(|| AppError::BadRequest(format!("Serial number '{}' not found in product catalog", payload.serial_number)))?;
+    let zeus_prod = state.zeus_client.find_product_by_serial(&payload.serial_number).await?;
 
-    let (product_model_code, model_name) = {
-        let model_def = state.zeus_client.get_product_model(&zeus_prod.product_model_code).await.ok();
-        (
-            zeus_prod.product_model_code.clone(),
-            model_def.map(|m| m.model_name).unwrap_or(zeus_prod.product_name.clone()),
-        )
+    let (product_model_code, model_name, existing_product_id) = match &zeus_prod {
+        Some(p) => {
+            let model_def = state.zeus_client.get_product_model(&p.product_model_code).await.ok();
+            (
+                p.product_model_code.clone(),
+                model_def.map(|m| m.model_name).unwrap_or(p.product_name.clone()),
+                Some(p.id),
+            )
+        }
+        None => {
+            return Err(AppError::BadRequest(format!("Serial number '{}' not found in product catalog", payload.serial_number)));
+        }
     };
+
+    let zeus_prod = zeus_prod.unwrap();
 
     // Check if device is already registered by this customer
     let existing_registration = registered_devices::Entity::find()
@@ -69,6 +76,17 @@ pub async fn register_device(
         model_name,
         Utc::now(),
     )?;
+
+    // Sync with Zeus - update product ownership if needed
+    if zeus_prod.customer_id != auth.user.id {
+        state.zeus_client.update_product(
+            zeus_prod.id,
+            &zeus_prod.product_model_code,
+            auth.user.id,
+            &zeus_prod.product_name,
+            &zeus_prod.serial_number,
+        ).await?;
+    }
 
     // Check warranty status
     let existing_warranty = warranties::Entity::find()
