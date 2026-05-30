@@ -351,11 +351,21 @@ impl ZeusInventoryClient for ZeusClient {
             )
             .await?;
 
-        let items: Vec<models::ZeusPartCatalogDto> = envelope
-            .data
-            .and_then(|d| d.get("items").cloned())
-            .map(|v| serde_json::from_value(v).unwrap_or_default())
-            .unwrap_or_default();
+        // SCM returns data as array directly (paginated response)
+        let items: Vec<models::ZeusPartCatalogDto> = match envelope.data {
+            Some(serde_json::Value::Array(arr)) => {
+                arr.into_iter()
+                    .filter_map(|v| serde_json::from_value(v).ok())
+                    .collect()
+            }
+            // Fallback: try data.items for backward compatibility
+            Some(val) => val
+                .get("items")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default(),
+            None => Vec::new(),
+        };
+
         let found = items.into_iter().find(|i| i.part_number == part_number);
 
         Ok(found.map(|data| ZeusPartCatalog {

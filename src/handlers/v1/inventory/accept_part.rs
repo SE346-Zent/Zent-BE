@@ -50,7 +50,7 @@ pub async fn accept_part(
         Utc::now(),
     )?;
 
-    // Ensure part catalog exists in Zeus. If not found, create it. If found, optionally update.
+    // Ensure part catalog exists in Zeus. If not found, create it. If found, use existing.
     let found_catalog = state
         .zeus_client
         .find_part_catalog_by_part_number(&form.part_number)
@@ -61,12 +61,9 @@ pub async fn accept_part(
         return Err(AppError::BadRequest("Part number cannot be empty".to_string()));
     }
 
-    let catalog = if found_catalog.is_some() {
-        // Refresh/update catalog with latest description/status
-        state
-            .zeus_client
-            .update_part_catalog_by_sku(&form_part_number, form_description.as_deref(), Some(1))
-            .await?
+    let catalog = if let Some(existing) = found_catalog {
+        // Use existing catalog - no need to update
+        existing
     } else {
         // Create a minimal catalog entry when missing. Use model_code-derived mfg number fallback.
         let mfg_number = form.model_code.clone().unwrap_or_else(|| format!("MFG-{}", form.part_number));
