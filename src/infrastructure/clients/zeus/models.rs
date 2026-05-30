@@ -58,15 +58,15 @@ pub(crate) struct ZeusProductDto {
 pub(crate) struct ZeusPartCatalogDto {
     #[serde(rename = "id", alias = "ID")]
     pub id: Uuid,
-    #[serde(alias = "PartNumber", alias = "part_number")]
+    #[serde(alias = "PartNumber", alias = "part_number", alias = "sku")]
     pub part_number: String,
-    #[serde(alias = "PartTypesID", alias = "part_types_id")]
+    #[serde(alias = "PartTypesID", alias = "part_types_id", default)]
     pub part_types_id: i32,
-    #[serde(alias = "MfgNumber", alias = "mfg_number")]
+    #[serde(alias = "MfgNumber", alias = "mfg_number", default)]
     pub mfg_number: String,
     #[serde(alias = "Description", alias = "description")]
     pub description: Option<String>,
-    #[serde(alias = "PartMfgStatus", alias = "part_mfg_status")]
+    #[serde(alias = "PartMfgStatus", alias = "part_mfg_status", default)]
     pub part_mfg_status: i32,
 }
 
