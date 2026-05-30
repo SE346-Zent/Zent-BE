@@ -36,7 +36,7 @@ pub async fn start(
 
     let target_location = crate::utils::geocoding::geocode_address(
         &wo.address,
-        &wo.city,
+        &wo.ward,
         &wo.province,
         &wo.country,
     ).await?;

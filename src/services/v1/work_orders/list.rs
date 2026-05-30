@@ -21,7 +21,7 @@ pub fn map_to_list_item(
         status: status.map(|s| s.name).unwrap_or_else(|| "Unknown".to_string()),
         customer_name: format!("{} {}", work_order.first_name, work_order.last_name),
         product_name: product.map(|p| p.product_name).unwrap_or_else(|| "Unknown Product".to_string()),
-        address: format!("{}, {}, {}", work_order.address, work_order.city, work_order.province),
+        address: format!("{}, {}, {}", work_order.address, work_order.ward, work_order.province),
         appointment: Some(crate::utils::time::to_utc7_string(work_order.appointment)),
         created_at: crate::utils::time::to_utc7_string(work_order.created_at),
     }
@@ -77,7 +77,7 @@ mod tests {
             phone_number: None,
             country: "".to_string(),
             province: "ON".to_string(),
-            city: "Toronto".to_string(),
+            ward: "Downtown".to_string(),
             address: "123 Main St".to_string(),
             building: None,
             appointment: Utc::now(),

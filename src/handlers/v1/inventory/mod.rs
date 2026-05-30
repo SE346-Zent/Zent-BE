@@ -7,6 +7,7 @@ pub mod add_parts;
 pub mod get_detail_product;
 pub mod check_warranty;
 pub mod register_product;
+pub mod register_device;
 pub mod accept_part;
 pub mod deny_part;
 pub mod admin_analytics;
@@ -42,6 +43,7 @@ pub fn router(app_state: AppState) -> Router<AppState> {
         .route("/products/{id}", axum::routing::get(get_detail_product::get_detail_product))
         .route("/products/check-warranty", axum::routing::post(check_warranty::check_warranty))
         .route("/products/register", axum::routing::post(register_product::register_product))
+        .route("/devices/register", axum::routing::post(register_device::register_device))
         .merge(technician_only_routes)
         .merge(administrator_only_routes)
 }

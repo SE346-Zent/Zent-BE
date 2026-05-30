@@ -1,6 +1,6 @@
 use axum::{extract::{State, Path}, Json};
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, EntityTrait};
+use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait};
 use uuid::Uuid;
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::{AppError, ErrorResponse};
@@ -10,8 +10,9 @@ use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::details_response::WorkOrderDetails;
 use crate::services::v1::work_orders::get_details as get_svc;
 use redis::AsyncCommands;
+use chrono::Utc;
 
-use crate::entities::{work_orders as work_orders_ent, work_order_symptoms};
+use crate::entities::{work_orders as work_orders_ent, work_order_symptoms, warranties};
 
 /// Retrieve full details for a specific work order, including product and symptom info, with permission checks.
 
@@ -54,7 +55,22 @@ pub async fn get_details(
     // Check permissions
     check_wo_permissions(&auth, &wo.work_order_number, wo.technician_id, wo.customer_id, &wo.province)?;
 
-    let details = get_svc::decide_get_details(wo, product, symptom, &lookup_tables);
+    // Fetch warranty status for the product
+    let warranty_status = warranties::Entity::find()
+        .filter(warranties::Column::ProductId.eq(wo.product_id))
+        .one(db.as_ref())
+        .await?
+        .map(|w| {
+            let now = Utc::now();
+            if now > w.end_date {
+                "expired".to_string()
+            } else {
+                w.warranty_status.clone()
+            }
+        })
+        .unwrap_or_else(|| "none".to_string());
+
+    let details = get_svc::decide_get_details(wo, product, symptom, &lookup_tables, Some(warranty_status));
     if let Some(mut conn) = conn_opt {
         if let Ok(cached_val) = serde_json::to_string(&details) { let _: () = conn.set_ex(&cache_key, cached_val, 600).await.unwrap_or_default(); }
     }

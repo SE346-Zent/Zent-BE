@@ -43,7 +43,7 @@ pub async fn complete(
 
     if wo.technician_id != Some(auth.user.id) { return Err(AppError::Forbidden("You are not assigned to this work order".to_string())); }
 
-    let target = crate::utils::geocoding::geocode_address(&wo.address, &wo.city, &wo.province, &wo.country).await?;
+    let target = crate::utils::geocoding::geocode_address(&wo.address, &wo.ward, &wo.province, &wo.country).await?;
     let radius: f64 = luts.policies.get("geofencing_radius").and_then(|v| v.parse().ok()).unwrap_or(2000.0);
     if !crate::utils::geo::is_within_geofence(payload.latitude, payload.longitude, target.lat, target.lng, radius) {
         return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));

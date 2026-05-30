@@ -13,6 +13,7 @@ pub fn map_to_details(
     product: Option<products::Model>,
     symptom: Option<work_order_symptoms::Model>,
     status: Option<work_order_statuses::Model>,
+    warranty_status: Option<String>,
 ) -> WorkOrderDetails {
     WorkOrderDetails {
         id: work_order.id,
@@ -32,12 +33,13 @@ pub fn map_to_details(
         phone_number: work_order.phone_number,
         country: work_order.country,
         province: work_order.province,
-        city: work_order.city,
+        ward: work_order.ward,
         address: work_order.address,
         building: work_order.building,
         appointment: crate::utils::time::to_utc7_string(work_order.appointment),
         created_at: crate::utils::time::to_utc7_string(work_order.created_at),
         updated_at: crate::utils::time::to_utc7_string(work_order.updated_at),
+        warranty_status,
     }
 }
 
@@ -48,19 +50,21 @@ pub fn map_to_details(
 /// * `product` - Optional database model for the associated product.
 /// * `symptom` - Optional database model for the reported symptom.
 /// * `lookup_tables` - Shared reference data for resolving status names.
+/// * `warranty_status` - Optional warranty status of the product.
 
 pub fn decide_get_details(
     work_order: work_orders::Model,
     product: Option<products::Model>,
     symptom: Option<work_order_symptoms::Model>,
     lookup_tables: &LookupTables,
+    warranty_status: Option<String>,
 ) -> WorkOrderDetails {
     let status_name = lookup_tables.work_order_statuses.get(&work_order.work_order_status_id).cloned();
     let status = status_name.map(|name| work_order_statuses::Model {
         id: work_order.work_order_status_id,
         name,
     });
-    map_to_details(work_order, product, symptom, status)
+    map_to_details(work_order, product, symptom, status, warranty_status)
 }
 
 #[cfg(test)]
@@ -84,7 +88,7 @@ mod tests {
             phone_number: None,
             country: "Canada".to_string(),
             province: "ON".to_string(),
-            city: "Toronto".to_string(),
+            ward: "Downtown".to_string(),
             address: "123 Main St".to_string(),
             building: None,
             appointment: Utc::now(),
@@ -131,22 +135,24 @@ mod tests {
         let symptom = dummy_symptom();
         let status = work_order_statuses::Model { id: 1, name: "Pending".to_string() };
 
-        let details = map_to_details(work_order, Some(product), Some(symptom), Some(status));
+        let details = map_to_details(work_order, Some(product), Some(symptom), Some(status), Some("active".to_string()));
         assert_eq!(details.work_order_number, "WO-999");
         assert_eq!(details.customer_name, "Jane Smith");
         assert_eq!(details.product_name, "Super Widget");
         assert_eq!(details.symptom_name, "Does not turn on");
         assert_eq!(details.status, "Pending");
         assert!(details.technician_id.is_none());
+        assert_eq!(details.warranty_status, Some("active".to_string()));
     }
 
     #[test]
     fn test_map_to_details_missing_relations() {
         let work_order = dummy_work_order();
-        let details = map_to_details(work_order, None, None, None);
+        let details = map_to_details(work_order, None, None, None, None);
         assert_eq!(details.product_name, "Unknown Product");
         assert_eq!(details.symptom_name, "General Service");
         assert_eq!(details.status, "Unknown");
+        assert!(details.warranty_status.is_none());
     }
 
     #[test]
@@ -155,10 +161,11 @@ mod tests {
         luts.work_order_statuses.insert(1, "Pending".to_string());
 
         let work_order = dummy_work_order();
-        let details = decide_get_details(work_order, None, None, &luts);
+        let details = decide_get_details(work_order, None, None, &luts, Some("expired".to_string()));
 
         assert_eq!(details.status, "Pending");
         assert_eq!(details.product_name, "Unknown Product");
         assert_eq!(details.symptom_name, "General Service");
+        assert_eq!(details.warranty_status, Some("expired".to_string()));
     }
 }

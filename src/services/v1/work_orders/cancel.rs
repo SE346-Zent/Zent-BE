@@ -93,7 +93,7 @@ mod tests {
             phone_number: None,
             country: "".to_string(),
             province: "".to_string(),
-            city: "".to_string(),
+            ward: "".to_string(),
             address: "".to_string(),
             building: None,
             appointment: Utc::now() + chrono::Duration::hours(48), // far future — passes 24h check

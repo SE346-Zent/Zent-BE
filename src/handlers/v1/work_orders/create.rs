@@ -14,7 +14,7 @@ use crate::model::requests::work_orders::create_work_order_request::CreateWorkOr
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::create_response::WorkOrderResponseData;
 use crate::services::v1::work_orders::create as create_svc;
-use crate::entities::work_orders as work_orders_ent;
+use crate::entities::{work_orders as work_orders_ent, registered_devices};
 use serde_json::json;
 use redis::AsyncCommands;
 
@@ -86,6 +86,25 @@ pub async fn create(
     if let Some(ref_id) = payload.reference_ticket_id {
         if work_orders_ent::Entity::find().filter(work_orders_ent::Column::Id.eq(ref_id)).filter(work_orders_ent::Column::DeletedAt.is_null()).filter(work_orders_ent::Column::CustomerId.eq(auth.user.id)).one(db.as_ref()).await?.is_none() {
             return Err(AppError::BadRequest(format!("Reference Work Order with ID {} not found", ref_id)));
+        }
+    }
+
+    // Check for registered device data to use as fallback for email and phone number
+    let mut payload = payload;
+    let registered_device = registered_devices::Entity::find()
+        .filter(registered_devices::Column::CustomerId.eq(auth.user.id))
+        .filter(registered_devices::Column::ProductId.eq(payload.product_id))
+        .one(db.as_ref())
+        .await?;
+
+    if let Some(ref device) = registered_device {
+        // Use registered device email as fallback if not provided
+        if payload.email.is_none() || payload.email.as_ref().map_or(true, |e| e.is_empty()) {
+            payload.email = Some(device.email.clone());
+        }
+        // Use registered device phone as fallback if not provided
+        if payload.phone_number.is_none() || payload.phone_number.as_ref().map_or(true, |p| p.is_empty()) {
+            payload.phone_number = Some(device.mobile_phone.clone());
         }
     }
 

@@ -101,7 +101,7 @@ pub async fn upload_closing_form_signature(
     }
 
     let site_location = geocoding::geocode_address(
-        &work_order_record.address, &work_order_record.city, &work_order_record.province, &work_order_record.country,
+        &work_order_record.address, &work_order_record.ward, &work_order_record.province, &work_order_record.country,
     ).await?;
 
     let geofence_radius_meters: f64 = lookup_tables.policies.get("geofencing_radius")

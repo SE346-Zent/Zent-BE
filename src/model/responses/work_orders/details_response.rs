@@ -39,8 +39,8 @@ pub struct WorkOrderDetails {
     pub country: String,
     /// Service location: Province/State.
     pub province: String,
-    /// Service location: City.
-    pub city: String,
+    /// Service location: Ward.
+    pub ward: String,
     /// Service location: Address line 1.
     pub address: String,
     /// Service location: Building/Apartment info.
@@ -51,4 +51,6 @@ pub struct WorkOrderDetails {
     pub created_at: String,
     /// Timestamp when the work order was last updated (GMT+7).
     pub updated_at: String,
+    /// Warranty status of the product (active, expired, none).
+    pub warranty_status: Option<String>,
 }

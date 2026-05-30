@@ -39,9 +39,9 @@ pub fn decide_create_work_order(
     initial_status_id: i32,
     policies: &HashMap<String, String>,
 ) -> Result<CreateWorkOrderEffect, AppError> {
-    // 1. Location Policy Validation
-    if creation_payload.city != "HCM" && creation_payload.city != "HN" {
-        return Err(AppError::BadRequest("Only HCM and HN are supported at this time".to_string()));
+    // 1. Location Policy Validation - Province must be HCM or HN
+    if creation_payload.province != "HCM" && creation_payload.province != "HN" {
+        return Err(AppError::BadRequest("Only HCM and HN provinces are supported at this time".to_string()));
     }
 
     // 2. Appointment must be at least 24 hours from now
@@ -103,7 +103,7 @@ pub fn decide_create_work_order(
         phone_number: Set(creation_payload.phone_number),
         country: Set(creation_payload.country),
         province: Set(creation_payload.province),
-        city: Set(creation_payload.city),
+        ward: Set(creation_payload.ward),
         address: Set(creation_payload.address),
         building: Set(creation_payload.building),
         appointment: Set(creation_payload.appointment),
@@ -155,7 +155,7 @@ mod tests {
             phone_number: None,
             country: "VN".to_string(),
             province: "HCM".to_string(),
-            city: "HCM".to_string(),
+            ward: "Ward 1".to_string(),
             address: "123 Street".to_string(),
             building: None,
         };
@@ -165,7 +165,7 @@ mod tests {
         let effect = result.unwrap();
 
         assert_eq!(effect.work_order_model.work_order_status_id, Set(pending_status_id));
-        assert_eq!(effect.work_order_model.city, Set("HCM".to_string()));
+        assert_eq!(effect.work_order_model.ward, Set("Ward 1".to_string()));
         assert_eq!(effect.state_history_model.to_status_id, Set(pending_status_id));
         assert_eq!(effect.state_history_model.from_status_id, Set(None));
     }
@@ -187,8 +187,8 @@ mod tests {
             email: None,
             phone_number: None,
             country: "VN".to_string(),
-            province: "Binh Duong".to_string(),
-            city: "Binh Duong".to_string(), // Invalid
+            province: "Binh Duong".to_string(), // Invalid
+            ward: "Ward 1".to_string(),
             address: "123 Street".to_string(),
             building: None,
         };
@@ -196,7 +196,7 @@ mod tests {
         let result = decide_create_work_order(req, customer_id, pending_status_id, &policies);
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::BadRequest(msg) => assert_eq!(msg, "Only HCM and HN are supported at this time"),
+            AppError::BadRequest(msg) => assert_eq!(msg, "Only HCM and HN provinces are supported at this time"),
             _ => panic!("Expected BadRequest"),
         }
     }
@@ -219,7 +219,7 @@ mod tests {
             phone_number: None,
             country: "VN".to_string(),
             province: "HCM".to_string(),
-            city: "HCM".to_string(),
+            ward: "Ward 1".to_string(),
             address: "123 Street".to_string(),
             building: None,
         };

@@ -42,5 +42,6 @@ pub mod chat_rooms;
 pub mod chat_room_members;
 pub mod chat_room_image_links;
 pub mod work_order_ratings;
+pub mod registered_devices;
 
 

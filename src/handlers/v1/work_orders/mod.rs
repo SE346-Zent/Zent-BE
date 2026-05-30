@@ -71,7 +71,7 @@ use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::AppError;
 use crate::entities::roles::Role;
 use crate::entities::work_orders as work_orders_ent;
-use crate::entities::{products, work_order_symptoms, users, work_order_state_history, work_order_ratings};
+use crate::entities::{products, work_order_symptoms, users, work_order_state_history, work_order_ratings, warranties};
 use crate::extractor::role_check::require_role;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::list_response::WorkOrderListItem;
@@ -254,8 +254,25 @@ pub(crate) async fn write_through_work_order_cache(
         }
 
         // 2. Cache the full WorkOrderDetails (for get_details read path)
+        // Fetch warranty status for the product
+        let warranty_status = warranties::Entity::find()
+            .filter(warranties::Column::ProductId.eq(wo.product_id))
+            .one(db)
+            .await
+            .ok()
+            .flatten()
+            .map(|w| {
+                let now = chrono::Utc::now();
+                if now > w.end_date {
+                    "expired".to_string()
+                } else {
+                    w.warranty_status.clone()
+                }
+            })
+            .unwrap_or_else(|| "none".to_string());
+
         let details = crate::services::v1::work_orders::get_details::decide_get_details(
-            wo, product, symptom, lookup_tables,
+            wo, product, symptom, lookup_tables, Some(warranty_status),
         );
         if let Ok(details_json) = serde_json::to_string(&details) {
             let _: () = conn

@@ -8,6 +8,13 @@ use crate::{
     model::requests::inventory::add_parts_request::AddPartsRequest,
 };
 
+/// Extract the filename from a path, handling both Unix and Windows path separators.
+fn extract_filename(path: &str) -> &str {
+    path.rsplit(&['/', '\\'][..])
+        .next()
+        .unwrap_or(path)
+}
+
 /// Represents the calculated results and side-effects of a successful part addition request.
 ///
 /// This structure prepares the database models for the new part form, the
@@ -56,7 +63,7 @@ pub fn decide_add_parts(
         serial_number: Set(add_parts_payload.serial_number),
         description: Set(add_parts_payload.description),
         work_order_id: Set(work_order_record.id),
-        work_order_number: Set(add_parts_payload.work_order_number),
+        work_order_number: Set(work_order_record.work_order_number),
         status: Set("pending".to_string()),
         created_at: Set(current_timestamp),
         updated_at: Set(current_timestamp),
@@ -69,9 +76,10 @@ pub fn decide_add_parts(
 
     for photo_object_name in add_parts_payload.photos {
         let image_id = Uuid::new_v4();
+        let filename = extract_filename(&photo_object_name).to_string();
         image_models.push(images::ActiveModel {
             id: Set(image_id),
-            object_name: Set(photo_object_name),
+            object_name: Set(filename),
             created_at: Set(current_timestamp),
             updated_at: Set(current_timestamp),
             ..Default::default()
@@ -109,7 +117,7 @@ mod tests {
             phone_number: None,
             country: "".to_string(),
             province: "".to_string(),
-            city: "".to_string(),
+            ward: "".to_string(),
             address: "".to_string(),
             building: None,
             appointment: Utc::now(),
@@ -129,7 +137,8 @@ mod tests {
     #[test]
     fn test_decide_add_parts_success() {
         let technician_id = Uuid::new_v4();
-        let work_order_record = dummy_work_order(technician_id);
+        let mut work_order_record = dummy_work_order(technician_id);
+        work_order_record.work_order_number = "WO-123".to_string();
 
         let payload = AddPartsRequest {
             part_number: "PN-123".to_string(),
@@ -137,7 +146,6 @@ mod tests {
             model_code: Some("MC-123".to_string()),
             serial_number: "SN-123".to_string(),
             description: Some("desc".to_string()),
-            work_order_number: "WO-123".to_string(),
             photos: vec!["img.png".to_string()],
         };
 
@@ -155,6 +163,36 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_filename() {
+        assert_eq!(extract_filename("img.png"), "img.png");
+        assert_eq!(extract_filename("/data/user/0/com.example.zent_fe/cache/camerawesome/1780076955232.jpg"), "1780076955232.jpg");
+        assert_eq!(extract_filename("C:\\Users\\test\\Documents\\photo.jpg"), "photo.jpg");
+        assert_eq!(extract_filename("/path/to/image.png"), "image.png");
+    }
+
+    #[test]
+    fn test_decide_add_parts_with_full_path() {
+        let technician_id = Uuid::new_v4();
+        let work_order_record = dummy_work_order(technician_id);
+
+        let payload = AddPartsRequest {
+            part_number: "PN-123".to_string(),
+            part_types_id: 1,
+            model_code: None,
+            serial_number: "SN-123".to_string(),
+            description: None,
+            photos: vec!["/data/user/0/com.example.zent_fe/cache/camerawesome/1780076955232.jpg".to_string()],
+        };
+
+        let result = decide_add_parts(payload, work_order_record, technician_id);
+        assert!(result.is_ok());
+        let add_parts_effect = result.unwrap();
+
+        assert_eq!(add_parts_effect.image_models.len(), 1);
+        assert_eq!(add_parts_effect.image_models[0].object_name, Set("1780076955232.jpg".to_string()));
+    }
+
+    #[test]
     fn test_decide_add_parts_forbidden() {
         let technician_id = Uuid::new_v4();
         let unauthorized_technician_id = Uuid::new_v4();
@@ -166,7 +204,6 @@ mod tests {
             model_code: None,
             serial_number: "SN-123".to_string(),
             description: None,
-            work_order_number: "WO-123".to_string(),
             photos: vec![],
         };
 

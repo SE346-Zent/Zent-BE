@@ -41,7 +41,7 @@ pub async fn check_geofence(
     // Geocode the work order address
     let target = crate::utils::geocoding::geocode_address(
         &wo.address,
-        &wo.city,
+        &wo.ward,
         &wo.province,
         &wo.country,
     ).await?;

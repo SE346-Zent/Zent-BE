@@ -128,7 +128,7 @@ mod tests {
             phone_number: None,
             country: "".to_string(),
             province: "".to_string(),
-            city: "".to_string(),
+            ward: "".to_string(),
             address: "".to_string(),
             building: None,
             appointment: Utc.with_ymd_and_hms(2026, 1, 1, 3, 0, 0).unwrap(), // 10:00 AM GMT+7
