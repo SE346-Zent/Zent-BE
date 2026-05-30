@@ -4,6 +4,35 @@ use crate::model::responses::inventory::admin_analytics_response::{
 };
 use chrono::{DateTime, Duration, Utc};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnalyticsPeriod {
+    Weekly,
+    Monthly,
+}
+
+impl AnalyticsPeriod {
+    pub fn window_days(self) -> i64 {
+        match self {
+            AnalyticsPeriod::Weekly => 7,
+            AnalyticsPeriod::Monthly => 28,
+        }
+    }
+
+    pub fn bucket_count(self) -> usize {
+        match self {
+            AnalyticsPeriod::Weekly => 7,
+            AnalyticsPeriod::Monthly => 4,
+        }
+    }
+
+    pub fn trend_label(self, bucket_start: DateTime<Utc>, index: usize) -> String {
+        match self {
+            AnalyticsPeriod::Weekly => bucket_start.format("%a").to_string(),
+            AnalyticsPeriod::Monthly => format!("Week {}", index + 1),
+        }
+    }
+}
+
 pub struct AnalyticsInput {
     pub current_orders: Vec<DateTime<Utc>>,
     pub previous_orders: Vec<DateTime<Utc>>,
@@ -17,7 +46,7 @@ pub struct AnalyticsInput {
     pub technician_performance: Vec<TechnicianPerformanceEntry>,
 }
 
-pub fn decide_admin_analytics(input: AnalyticsInput, period_days: i64) -> AdminAnalyticsResponse {
+pub fn decide_admin_analytics(input: AnalyticsInput, period: AnalyticsPeriod) -> AdminAnalyticsResponse {
     let total_orders = TotalMetric {
         value: input.current_orders.len() as i64,
         percent_change: compute_percent_change(
@@ -45,7 +74,7 @@ pub fn decide_admin_analytics(input: AnalyticsInput, period_days: i64) -> AdminA
     let job_completion_trend = build_job_completion_trend(
         &input.current_completed_orders,
         &input.previous_completed_orders,
-        period_days,
+        period,
     );
 
     let part_categories = build_part_categories(input.part_type_counts);
@@ -75,14 +104,15 @@ fn compute_percent_change(previous: i64, current: i64) -> f64 {
 fn build_job_completion_trend(
     current: &[DateTime<Utc>],
     previous: &[DateTime<Utc>],
-    period_days: i64,
+    period: AnalyticsPeriod,
 ) -> JobCompletionTrend {
-    let num_buckets = if period_days <= 7 { 7 } else { 4 };
+    let period_days = period.window_days();
+    let num_buckets = period.bucket_count();
     let now = Utc::now();
     let period_start = now - Duration::days(period_days);
     let prev_start = period_start - Duration::days(period_days);
 
-    let bucket_duration = Duration::seconds((period_days * 86400) / num_buckets);
+    let bucket_duration = Duration::seconds((period_days * 86400) / num_buckets as i64);
 
     let mut labels = Vec::with_capacity(num_buckets as usize);
     let mut current_counts = vec![0i64; num_buckets as usize];
@@ -90,12 +120,7 @@ fn build_job_completion_trend(
 
     for i in 0..num_buckets {
         let bucket_start = period_start + bucket_duration * (i as i32);
-        let label = if period_days <= 7 {
-            bucket_start.format("%a").to_string()
-        } else {
-            format!("Week {}", i + 1)
-        };
-        labels.push(label);
+        labels.push(period.trend_label(bucket_start, i));
     }
 
     for &dt in current {
@@ -210,10 +235,38 @@ mod tests {
             part_type_counts: vec![("Battery".to_string(), 10)],
             technician_performance: vec![],
         };
-        let result = decide_admin_analytics(input, 7);
+        let result = decide_admin_analytics(input, AnalyticsPeriod::Weekly);
         assert_eq!(result.total_orders.value, 1);
         assert_eq!(result.total_imported_parts.value, 15);
         assert_eq!(result.total_returned_parts.value, 3);
         assert_eq!(result.part_categories.len(), 1);
+    }
+
+    #[test]
+    fn test_weekly_trend_has_seven_buckets() {
+        let now = Utc::now();
+        let trend = build_job_completion_trend(
+            &[now - Duration::days(0), now - Duration::days(1), now - Duration::days(2)],
+            &[],
+            AnalyticsPeriod::Weekly,
+        );
+
+        assert_eq!(trend.labels.len(), 7);
+        assert_eq!(trend.current.len(), 7);
+        assert_eq!(trend.previous.len(), 7);
+    }
+
+    #[test]
+    fn test_monthly_trend_has_four_buckets() {
+        let now = Utc::now();
+        let trend = build_job_completion_trend(
+            &[now - Duration::days(0), now - Duration::days(8), now - Duration::days(15), now - Duration::days(22)],
+            &[],
+            AnalyticsPeriod::Monthly,
+        );
+
+        assert_eq!(trend.labels, vec!["Week 1", "Week 2", "Week 3", "Week 4"]);
+        assert_eq!(trend.current.len(), 4);
+        assert_eq!(trend.previous.len(), 4);
     }
 }

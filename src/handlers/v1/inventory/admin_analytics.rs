@@ -9,7 +9,7 @@ use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::inventory::analytics_query::AnalyticsQuery;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::inventory::admin_analytics_response::{AdminAnalyticsResponse, TechnicianPerformanceEntry};
-use crate::services::v1::inventory::analytics::{self, AnalyticsInput};
+use crate::services::v1::inventory::analytics::{self, AnalyticsInput, AnalyticsPeriod};
 use crate::entities::{work_orders as work_orders_ent, new_part_forms, part_changes, users};
 
 #[utoipa::path(
@@ -35,11 +35,13 @@ pub async fn admin_analytics(
         _ => return Err(AppError::Forbidden("Only admins can view analytics".to_string())),
     }
 
-    let period_days: i64 = match query.mode.to_lowercase().as_str() {
-        "weekly" | "7d" => 7,
-        "monthly" | "30d" => 28,
+    let period = match query.mode.to_lowercase().as_str() {
+        "weekly" | "7d" => AnalyticsPeriod::Weekly,
+        "monthly" | "30d" => AnalyticsPeriod::Monthly,
         other => return Err(AppError::BadRequest(format!("Invalid mode '{}'. Use 'weekly' or 'monthly'", other))),
     };
+
+    let period_days = period.window_days();
 
     let now = Utc::now();
     let current_start = now - Duration::days(period_days);
@@ -181,6 +183,6 @@ pub async fn admin_analytics(
         technician_performance,
     };
 
-    let response = analytics::decide_admin_analytics(input, period_days);
+    let response = analytics::decide_admin_analytics(input, period);
     Ok(Json(ApiResponse::success(200, "Analytics retrieved successfully", response)))
 }
