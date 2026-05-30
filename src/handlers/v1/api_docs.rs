@@ -181,7 +181,6 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
             RefuseWorkOrderMultipart,
             StartWorkOrderRequest,
             ApproveRefusalRequest,
-            crate::model::requests::inventory::add_parts_request::AddPartsRequest,
             crate::model::responses::inventory::product_detail_response::ProductDetailResponse,
             crate::model::requests::inventory::check_warranty_request::CheckWarrantyRequest,
             crate::model::responses::inventory::warranty_check_response::WarrantyCheckResponse,
