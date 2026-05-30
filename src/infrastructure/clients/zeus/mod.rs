@@ -292,9 +292,6 @@ impl ZeusInventoryClient for ZeusClient {
         if let Some(description) = description {
             payload.insert("description".to_string(), serde_json::Value::String(description.to_string()));
         }
-        if let Some(status) = part_mfg_status {
-            payload.insert("part_mfg_status".to_string(), serde_json::Value::Number(status.into()));
-        }
 
         let envelope: ZeusEnvelope<models::ZeusPartCatalogDto> = self
             .send_expect_envelope(
@@ -318,10 +315,8 @@ impl ZeusInventoryClient for ZeusClient {
 
     async fn create_part_catalog(&self, part_number: &str, part_types_id: i32, mfg_number: &str, description: Option<&str>, part_mfg_status: i32) -> Result<ZeusPartCatalog, AppError> {
         let mut payload = serde_json::Map::new();
-        payload.insert("part_number".to_string(), serde_json::Value::String(part_number.to_string()));
-        payload.insert("part_types_id".to_string(), serde_json::Value::Number(part_types_id.into()));
-        payload.insert("mfg_number".to_string(), serde_json::Value::String(mfg_number.to_string()));
-        payload.insert("part_mfg_status".to_string(), serde_json::Value::Number(part_mfg_status.into()));
+        payload.insert("sku".to_string(), serde_json::Value::String(part_number.to_string()));
+        payload.insert("price".to_string(), serde_json::Value::Number(0.into()));
         if let Some(desc) = description {
             payload.insert("description".to_string(), serde_json::Value::String(desc.to_string()));
         }
