@@ -56,6 +56,11 @@ pub async fn accept_part(
         .find_part_catalog_by_part_number(&form.part_number)
         .await?;
 
+    // Validate part_number is not empty before creating catalog
+    if form.part_number.trim().is_empty() {
+        return Err(AppError::BadRequest("Part number cannot be empty".to_string()));
+    }
+
     let catalog = if found_catalog.is_some() {
         // Refresh/update catalog with latest description/status
         state

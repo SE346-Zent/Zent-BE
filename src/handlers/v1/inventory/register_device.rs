@@ -11,8 +11,6 @@ use crate::entities::{registered_devices, warranties};
 use chrono::Utc;
 use sea_orm::{EntityTrait, ActiveModelTrait, QueryFilter, ColumnTrait, Set};
 use validator::Validate;
-use std::sync::Arc;
-use sea_orm::DatabaseConnection;
 
 /// Register a new device by a customer with warranty check, Zeus sync, and optional email confirmation.
 #[utoipa::path(
@@ -31,8 +29,6 @@ use sea_orm::DatabaseConnection;
 pub async fn register_device(
     auth: AuthUser,
     State(state): State<AppState>,
-    State(db): State<Arc<DatabaseConnection>>,
-    State(templates): State<Arc<std::collections::HashMap<String, String>>>,
     Json(payload): Json<RegisterDeviceRequest>,
 ) -> Result<Json<ApiResponse<RegisterDeviceResponse>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
@@ -60,7 +56,7 @@ pub async fn register_device(
     let existing_registration = registered_devices::Entity::find()
         .filter(registered_devices::Column::CustomerId.eq(auth.user.id))
         .filter(registered_devices::Column::ProductId.eq(zeus_prod.id))
-        .one(db.as_ref())
+        .one(state.db.as_ref())
         .await?;
 
     if existing_registration.is_some() {
@@ -91,7 +87,7 @@ pub async fn register_device(
     // Check warranty status
     let existing_warranty = warranties::Entity::find()
         .filter(warranties::Column::ProductId.eq(zeus_prod.id))
-        .one(db.as_ref())
+        .one(state.db.as_ref())
         .await?;
 
     let warranty_status = match existing_warranty {
@@ -125,7 +121,7 @@ pub async fn register_device(
         deleted_at: Set(None),
     };
 
-    registration_model.insert(db.as_ref()).await?;
+    registration_model.insert(state.db.as_ref()).await?;
 
     // Send confirmation email if requested via email service
     if effect.should_send_confirmation_email {
@@ -135,7 +131,7 @@ pub async fn register_device(
 
             let _ = email_service::send_device_registration_email(
                 conn,
-                &templates,
+                &state.templates,
                 &effect.email,
                 &effect.customer_full_name,
                 &effect.product_display_name,

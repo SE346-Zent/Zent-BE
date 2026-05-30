@@ -318,8 +318,12 @@ impl ZeusInventoryClient for ZeusClient {
         payload.insert("sku".to_string(), serde_json::Value::String(part_number.to_string()));
         payload.insert("price".to_string(), serde_json::Value::Number(0.into()));
         if let Some(desc) = description {
-            payload.insert("description".to_string(), serde_json::Value::String(desc.to_string()));
+            if !desc.is_empty() {
+                payload.insert("description".to_string(), serde_json::Value::String(desc.to_string()));
+            }
         }
+
+        tracing::info!("Creating part catalog with payload: {:?}", serde_json::to_string(&payload).unwrap_or_default());
 
         let envelope: ZeusEnvelope<models::ZeusPartCatalogDto> = self
             .send_expect_envelope(self.make_post("/inventory/part-catalog").json(&payload))
