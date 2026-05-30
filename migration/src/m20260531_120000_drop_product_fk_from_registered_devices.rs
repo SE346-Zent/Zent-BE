@@ -22,19 +22,21 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         // Re-add the foreign key constraint (for rollback)
+        let fk = TableForeignKey::new()
+            .name("fk_registered_devices_product")
+            .from_tbl(RegisteredDevices::Table)
+            .from_col(RegisteredDevices::ProductId)
+            .to_tbl(Products::Table)
+            .to_col(Products::Id)
+            .on_delete(ForeignKeyAction::Cascade)
+            .on_update(ForeignKeyAction::Cascade)
+            .to_owned();
+
         manager
             .alter_table(
                 Table::alter()
                     .table(RegisteredDevices::Table)
-                    .add_foreign_key(
-                        &ForeignKey::create()
-                            .name("fk_registered_devices_product")
-                            .from(RegisteredDevices::Table, RegisteredDevices::ProductId)
-                            .to(Products::Table, Products::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade)
-                            .to_owned(),
-                    )
+                    .add_foreign_key(&fk)
                     .to_owned(),
             )
             .await?;
