@@ -102,24 +102,40 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
 
     if is_firebase {
         if !project_id.is_empty() {
+            // Full audience + issuer validation against the configured project.
             validation.set_issuer(&[format!("https://securetoken.google.com/{}", project_id)]);
             validation.set_audience(&[project_id]);
         } else {
-            validation.validate_aud = false;
+            // project_id is required for Firebase tokens; without it we cannot
+            // validate the audience and risk accepting tokens issued for a
+            // different Firebase project.
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "FIREBASE_PROJECT_ID is not configured. \
+                 Cannot validate Firebase ID token audience."
+            )));
         }
     } else {
-        validation.set_issuer(&["https://accounts.google.com", "accounts.google.com"]);
-        validation.validate_aud = false;
+        // For standard Google OAuth2 ID tokens the audience must match the
+        // OAuth2 client ID registered in Google Cloud Console.
+        let google_client_id = std::env::var("GOOGLE_CLIENT_ID").ok();
+        match google_client_id.as_deref() {
+            Some(client_id) if !client_id.trim().is_empty() => {
+                validation.set_issuer(&["https://accounts.google.com", "accounts.google.com"]);
+                validation.set_audience(&[client_id.trim()]);
+            }
+            _ => {
+                // Refuse rather than skip audience validation — accepting any
+                // audience would allow tokens minted for other apps.
+                return Err(AppError::Internal(anyhow::anyhow!(
+                    "GOOGLE_CLIENT_ID is not configured. \
+                     Cannot validate Google ID token audience."
+                )));
+            }
+        }
     }
 
     let token_data = decode::<FirebaseClaims>(token, &decoding_key, &validation)
         .map_err(|e| AppError::Unauthorized(format!("Token validation failed: {}", e)))?;
-
-    if is_firebase && project_id.is_empty() {
-        if !token_data.claims.iss.starts_with("https://securetoken.google.com/") {
-            return Err(AppError::Unauthorized("Invalid issuer for Firebase token".to_string()));
-        }
-    }
 
     Ok(token_data.claims)
 }

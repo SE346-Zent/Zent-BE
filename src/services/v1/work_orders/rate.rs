@@ -7,7 +7,7 @@ use crate::{
     entities::{work_orders, work_order_ratings},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RateWorkOrderEffect {
     pub rating_model: work_order_ratings::ActiveModel,
 }

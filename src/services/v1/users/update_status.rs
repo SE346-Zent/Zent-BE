@@ -28,9 +28,17 @@ pub fn decide_can_update_status(
             // SuperAdmin: can update anyone
         }
         1 => {
-            // Admin: must be in the same province
-            let admin_province = current_user.province.as_deref().unwrap_or("");
-            let target_province = target_user.province.as_deref().unwrap_or("");
+            // Admin: must be in the same province (fail-closed if admin has no province)
+            let Some(ref admin_province) = current_user.province else {
+                return Err(AppError::Forbidden(
+                    "Admin profile missing province assignment".to_string(),
+                ));
+            };
+            let Some(ref target_province) = target_user.province else {
+                return Err(AppError::Forbidden(
+                    "You can only update users in your province".to_string(),
+                ));
+            };
             if admin_province != target_province {
                 return Err(AppError::Forbidden(
                     "You can only update users in your province".to_string(),
@@ -73,7 +81,7 @@ mod tests {
             phone_number: "+1234567890".to_string(),
             account_status: 1,
             role_id,
-            province: None,
+            province: Some("Ontario".to_string()),
             avatar_url: None,
             fcm_token: None,
             installation_id: None,

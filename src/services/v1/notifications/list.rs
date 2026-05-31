@@ -266,14 +266,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "attempt to subtract with overflow")]
-    fn test_page_zero_overflows() {
-        let now = Utc::now();
-        let notifs = vec![make_notif(Uuid::new_v4(), 1, now, false)];
-        let _ = list_notifications(&notifs, &make_query(Some(0), None, None));
-    }
-
-    #[test]
     fn test_limit_zero_becomes_usize_max_surprise() {
         let now = Utc::now();
         let notifs: Vec<_> = (0..5).map(|i| {

@@ -77,7 +77,7 @@ fn integration_product_detail_with_parts_rollup() {
 
     let product_with_relations = ProductWithRelations {
         product_record: products::Model {
-            id: u("p0000000-0000-0000-0000-000000000001"),
+            id: u("e0000000-0000-0000-0000-000000000001"),
             product_model_code: "MOD-Z".to_string(),
             customer_id: cust,
             product_name: "Laptop Z".to_string(),
@@ -99,7 +99,7 @@ fn integration_product_detail_with_parts_rollup() {
                 part_record: parts::Model {
                     id: u("b0000000-0000-0000-0000-000000000001"),
                     part_catalog_id: Uuid::new_v4(),
-                    product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
+                    product_id: Some(u("e0000000-0000-0000-0000-000000000001")),
                     serial_number: "SN-Z-P0".to_string(),
                     part_condition_id: 1,
                     manufactured_date: now,
@@ -120,7 +120,7 @@ fn integration_product_detail_with_parts_rollup() {
                 part_record: parts::Model {
                     id: u("b0000000-0000-0000-0000-000000000002"),
                     part_catalog_id: Uuid::new_v4(),
-                    product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
+                    product_id: Some(u("e0000000-0000-0000-0000-000000000001")),
                     serial_number: "SN-Z-P1".to_string(),
                     part_condition_id: 1,
                     manufactured_date: now,
@@ -141,7 +141,7 @@ fn integration_product_detail_with_parts_rollup() {
                 part_record: parts::Model {
                     id: u("b0000000-0000-0000-0000-000000000003"),
                     part_catalog_id: Uuid::new_v4(),
-                    product_id: Some(u("p0000000-0000-0000-0000-000000000001")),
+                    product_id: Some(u("e0000000-0000-0000-0000-000000000001")),
                     serial_number: "SN-Z-P2".to_string(),
                     part_condition_id: 1,
                     manufactured_date: now,
@@ -166,7 +166,7 @@ fn integration_product_detail_with_parts_rollup() {
     assert!(detail.is_ok());
     let d = detail.unwrap();
     assert_eq!(d.parts.len(), 3, "Should roll up all 3 parts");
-    assert_eq!(d.product_id, u("p0000000-0000-0000-0000-000000000001"));
+    assert_eq!(d.product_id, u("e0000000-0000-0000-0000-000000000001"));
     assert_eq!(d.customer_name, format!("Customer {}", cust));
 
     // Verify parts approval statuses

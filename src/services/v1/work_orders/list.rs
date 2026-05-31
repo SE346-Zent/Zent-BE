@@ -3,6 +3,7 @@ use crate::model::responses::pagination::PaginationResponse;
 use crate::model::requests::pagination::PaginationRequest;
 use crate::entities::{work_orders, products, work_order_symptoms, work_order_statuses};
 use crate::core::lookup_tables::LookupTables;
+use uuid::Uuid;
 
 /// Transform a database work order model and its related entities into a high-level summary for list displays.
 ///
@@ -43,6 +44,7 @@ pub fn decide_list(
     lookup_tables: &LookupTables,
     pagination: &PaginationRequest,
     total_records: u64,
+    rated_work_order_ids: &std::collections::HashSet<Uuid>,
 ) -> (Vec<WorkOrderListItem>, PaginationResponse) {
     let list_items = work_order_tuples
         .into_iter()
@@ -128,6 +130,7 @@ mod tests {
         assert_eq!(item.product_name, "Super Widget");
         assert_eq!(item.address, "123 Main St, Toronto, ON");
         assert_eq!(item.status, "Pending");
+        assert!(!item.has_rating);
     }
 
     #[test]
@@ -147,7 +150,8 @@ mod tests {
         let models = vec![(work_order, None, None, None, None)];
 
         let req = PaginationRequest { limit: 10, page: 2 };
-        let (items, pag) = decide_list(models, &luts, &req, 100);
+        let rated_ids = std::collections::HashSet::new();
+        let (items, pag) = decide_list(models, &luts, &req, 100, &rated_ids);
 
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].status, "Pending");

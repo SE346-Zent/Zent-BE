@@ -34,9 +34,17 @@ pub fn decide_get_user(
             // SuperAdmin: can view anyone
         }
         1 => {
-            // Admin: must be in the same province
-            let admin_province = current_user.province.as_deref().unwrap_or("");
-            let target_province = target_user.province.as_deref().unwrap_or("");
+            // Admin: must be in the same province (fail-closed if admin has no province)
+            let Some(ref admin_province) = current_user.province else {
+                return Err(AppError::Forbidden(
+                    "Admin profile missing province assignment".to_string(),
+                ));
+            };
+            let Some(ref target_province) = target_user.province else {
+                return Err(AppError::Forbidden(
+                    "You can only view users in your province".to_string(),
+                ));
+            };
             if admin_province != target_province {
                 return Err(AppError::Forbidden(
                     "You can only view users in your province".to_string(),
@@ -88,7 +96,7 @@ mod tests {
             phone_number: "+1234567890".to_string(),
             account_status: 1,
             role_id,
-            province: None,
+            province: Some("Ontario".to_string()),
             avatar_url: None,
             fcm_token: None,
             installation_id: None,
@@ -121,9 +129,7 @@ mod tests {
         let admin = mock_user(ROLE_ADMIN);
         let mut target = mock_user(ROLE_TECHNICIAN);
         target.deleted_at = Some(Utc::now());
-        // Should we allow viewing deleted users? 
-        // Logic should decide.
         let res = decide_get_user(admin, target);
-        assert!(res.is_err() || res.is_ok());
+        assert!(matches!(res, Err(AppError::NotFound(_))));
     }
 }
