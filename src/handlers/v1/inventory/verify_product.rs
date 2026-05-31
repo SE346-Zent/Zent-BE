@@ -5,14 +5,16 @@ use crate::model::requests::inventory::verify_product_request::VerifyProductRequ
 use crate::model::responses::inventory::verify_product_response::VerifyProductResponse;
 use crate::model::responses::base::ApiResponse;
 use crate::services::v1::inventory::verify_product::determine_verify_product_result;
-use crate::entities::registered_devices;
+use crate::entities::{registered_devices, warranties};
 use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+use chrono::Utc;
 use validator::Validate;
 
 /// Verify a product by serial number and check if it has been registered.
 ///
 /// This endpoint checks if a product exists in the SCM catalog by serial number,
-/// and whether it has already been registered by any customer.
+/// whether it has already been registered by any customer, and if the warranty is still valid.
+/// Products with expired or no warranty cannot be verified.
 #[utoipa::path(
     post,
     path = "/api/v1/inventory/products/verify",
@@ -20,7 +22,7 @@ use validator::Validate;
     request_body = VerifyProductRequest,
     responses(
         (status = 200, description = "Product verification completed", body = ApiResponse<VerifyProductResponse>),
-        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 400, description = "Bad Request - Product warranty is expired or not available", body = ErrorResponse),
         (status = 404, description = "Product not found", body = ErrorResponse),
         (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
@@ -44,13 +46,28 @@ pub async fn verify_product(
 
     let is_registered = existing_registration.is_some();
 
+    // Check warranty status
+    let existing_warranty = warranties::Entity::find()
+        .filter(warranties::Column::ProductId.eq(zeus_prod.id))
+        .one(state.db.as_ref())
+        .await?;
+
     let res = determine_verify_product_result(
         zeus_prod.id,
         &zeus_prod.serial_number,
         &zeus_prod.product_name,
         &zeus_prod.product_model_code,
         is_registered,
+        existing_warranty,
+        Utc::now(),
     );
+
+    // Reject if warranty is expired or not available
+    if res.warranty_status != "active" {
+        return Err(AppError::BadRequest(
+            format!("Product '{}' cannot be verified: warranty is {}", payload.serial_number, res.warranty_status)
+        ));
+    }
 
     Ok(Json(ApiResponse::success(
         200,

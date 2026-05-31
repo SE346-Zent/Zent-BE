@@ -171,6 +171,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     app_scheduler.register_job(relay_job)
         .await
         .expect("Failed to register outbox relay job");
+
+    let expire_warranties_job = infrastructure::cron_tasks::expire_warranties::build_expire_warranties_job(
+        db.clone(),
+        state.lookup_tables.clone(),
+    ).expect("Failed to build warranty expiration job");
+
+    app_scheduler.register_job(expire_warranties_job)
+        .await
+        .expect("Failed to register warranty expiration job");
         
     app_scheduler.start()
         .await
