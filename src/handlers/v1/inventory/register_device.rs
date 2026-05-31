@@ -129,7 +129,7 @@ pub async fn register_device(
             let full_address = format!("{}, {}, {}", effect.address, effect.ward, effect.province);
             let registration_date = Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
 
-            let _ = email_service::send_device_registration_email(
+            if let Err(e) = email_service::send_device_registration_email(
                 conn,
                 &state.templates,
                 &effect.email,
@@ -141,7 +141,11 @@ pub async fn register_device(
                 &full_address,
                 &warranty_status,
                 &registration_date,
-            ).await;
+            ).await {
+                tracing::warn!("Failed to send device registration email to {}: {:?}", effect.email, e);
+            }
+        } else {
+            tracing::warn!("RabbitMQ not configured — skipping device registration email to {}", effect.email);
         }
     }
 

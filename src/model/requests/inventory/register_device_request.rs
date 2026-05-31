@@ -31,6 +31,8 @@ pub struct RegisterDeviceRequest {
     #[validate(length(min = 8, max = 20))]
     pub mobile_phone: String,
     /// Whether to send a confirmation email on successful registration.
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub send_email_confirmation: bool,
 }
+
+fn default_true() -> bool { true }

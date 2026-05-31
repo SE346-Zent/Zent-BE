@@ -50,11 +50,14 @@ pub async fn cancel(
         closed_status_id,
         auth.user.id,
         cancel_window_hours,
+        payload.reason,
+        payload.additional_comments,
     )?;
 
     db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
         effect.work_order_model.update(txn).await?;
         effect.state_history_model.insert(txn).await?;
+        effect.cancel_reason_model.insert(txn).await?;
         Ok(())
     }))
     .await.map_err(|e| match e {
