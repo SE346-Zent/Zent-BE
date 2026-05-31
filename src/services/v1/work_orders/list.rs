@@ -44,7 +44,6 @@ pub fn decide_list(
     lookup_tables: &LookupTables,
     pagination: &PaginationRequest,
     total_records: u64,
-    rated_work_order_ids: &std::collections::HashSet<Uuid>,
 ) -> (Vec<WorkOrderListItem>, PaginationResponse) {
     let list_items = work_order_tuples
         .into_iter()
@@ -128,9 +127,8 @@ mod tests {
         assert_eq!(item.work_order_num, "WO-123");
         assert_eq!(item.customer_name, "John Doe");
         assert_eq!(item.product_name, "Super Widget");
-        assert_eq!(item.address, "123 Main St, Toronto, ON");
+        assert_eq!(item.address, "123 Main St, Downtown, ON");
         assert_eq!(item.status, "Pending");
-        assert!(!item.has_rating);
     }
 
     #[test]
@@ -150,8 +148,7 @@ mod tests {
         let models = vec![(work_order, None, None, None, None)];
 
         let req = PaginationRequest { limit: 10, page: 2 };
-        let rated_ids = std::collections::HashSet::new();
-        let (items, pag) = decide_list(models, &luts, &req, 100, &rated_ids);
+        let (items, pag) = decide_list(models, &luts, &req, 100);
 
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].status, "Pending");

@@ -132,24 +132,29 @@ pub async fn google_login_handler(
                     user_active.update(txn).await?;
                 }
             }
-
+            Ok(())
+        })
+    }).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
 
     // 7. Save active session
     let active_session = sessions::ActiveModel {
-        id: Set(login_effect.session_id),
-        user_id: Set(login_effect.user_id),
-        refresh_token_hash: Set(login_effect.refresh_token_hash.clone()),
-        ip_address: Set(client_ip_address.clone()),
-        device_fingerprint: Set(payload.device_name.clone().unwrap_or_else(|| login_effect.user_id.to_string())),
+        id: Set(session_id),
+        user_id: Set(user_id),
+        refresh_token_hash: Set(refresh_token_hash_for_txn.clone()),
+        ip_address: Set(client_ip_clone),
+        device_fingerprint: Set(payload.device_name.clone().unwrap_or_else(|| user_id.to_string())),
         created_at: Set(Utc::now()),
-        expires_at: Set(login_effect.session_expires_at),
+        expires_at: Set(session_expires),
         ..Default::default()
     };
 
     let login_audit = login_audit_logs::ActiveModel {
         id: Set(Uuid::new_v4()),
-        user_id: Set(login_effect.user_id),
-        session_id: Set(login_effect.session_id),
+        user_id: Set(user_id),
+        session_id: Set(session_id),
         device_name: Set(payload.device_name.clone().unwrap_or_else(|| "Unknown device".to_string())),
         location: Set(payload.location.clone()),
         ip_address: Set(client_ip_address),
