@@ -95,6 +95,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
         users::get_user::get_user_handler,
         users::create_user::create_user_handler,
         users::update_user_status::update_user_status_handler,
+        users::change_avatar::change_avatar,
         auth::login_handler,
         auth::login_history_handler,
         auth::logout_handler,
@@ -217,6 +218,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
             UserResponseData,
             UserListResponseData,
             MeResponseData,
+            users::change_avatar::ChangeAvatarResponse,
             GeofenceCheckRequest,
             GeofenceCheckResponse,
         )

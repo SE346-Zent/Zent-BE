@@ -34,6 +34,8 @@ pub struct NotificationRecord {
     pub is_read: bool,
     pub os_notification_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
+    /// Avatar object name of the user who triggered the notification.
+    pub sender_avatar_name: Option<String>,
 }
 
 // ── Shared Helper Functions ───────────────────────────────────────────

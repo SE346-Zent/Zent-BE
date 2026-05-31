@@ -2,6 +2,7 @@ use axum::extract::{State, Query};
 use axum::Json;
 use futures::TryStreamExt;
 use mongodb::bson::doc;
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 use crate::core::errors::AppError;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::notifications::notification_list_response::NotificationListItem;
@@ -9,6 +10,7 @@ use crate::model::requests::notifications::list_query::NotificationListQuery;
 use crate::core::state::AppState;
 use crate::extractor::auth_user::AuthUser;
 use crate::services::v1::notifications::NotificationRecord;
+use crate::entities::users;
 
 #[utoipa::path(
     get, path = "/api/v1/notifications",
@@ -110,6 +112,10 @@ pub async fn list(
                                         .unwrap_or_default()
                                 })?;
 
+                            // Try to extract sender_id from data for avatar lookup
+                            // Will be resolved in a separate pass after batch-fetching user records
+                            let sender_avatar_name = None;
+
                             Some(NotificationRecord {
                                 notification_id,
                                 user_id,
@@ -120,6 +126,7 @@ pub async fn list(
                                 is_read,
                                 os_notification_id,
                                 created_at,
+                                sender_avatar_name,
                             })
                         })
                         .collect::<Vec<_>>()
@@ -130,9 +137,36 @@ pub async fn list(
         })
         .collect();
 
-    // 2. Pass to pure service logic (no preference filtering — all notifications shown)
+    // 2. Resolve sender avatars by batch-fetching sender user records
+    let sender_ids: Vec<uuid::Uuid> = notification_records.iter()
+        .filter_map(|r| r.data.get("senderId").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()))
+        .collect();
+
+    let sender_avatars: std::collections::HashMap<uuid::Uuid, String> = if sender_ids.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        users::Entity::find()
+            .filter(users::Column::Id.is_in(sender_ids))
+            .all(app_state.db.as_ref())
+            .await
+            .ok()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|u| u.avatar_url.map(|avatar| (u.id, avatar)))
+            .collect()
+    };
+
+    // Enrich notification records with sender avatars
+    let mut enriched_records = notification_records;
+    for record in &mut enriched_records {
+        if let Some(sender_id) = record.data.get("senderId").and_then(|v| v.as_str()).and_then(|s| s.parse::<uuid::Uuid>().ok()) {
+            record.sender_avatar_name = sender_avatars.get(&sender_id).cloned();
+        }
+    }
+
+    // 3. Pass to pure service logic (no preference filtering — all notifications shown)
     let (notification_items, pagination_meta) = crate::services::v1::notifications::list::list_notifications(
-        &notification_records,
+        &enriched_records,
         &list_query,
     );
 

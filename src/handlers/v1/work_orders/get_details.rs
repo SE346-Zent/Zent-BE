@@ -12,7 +12,7 @@ use crate::services::v1::work_orders::get_details as get_svc;
 use redis::AsyncCommands;
 use chrono::Utc;
 
-use crate::entities::{work_orders as work_orders_ent, work_order_symptoms, warranties};
+use crate::entities::{work_orders as work_orders_ent, work_order_symptoms, warranties, users};
 
 /// Retrieve full details for a specific work order, including product and symptom info, with permission checks.
 
@@ -70,7 +70,24 @@ pub async fn get_details(
         })
         .unwrap_or_else(|| "none".to_string());
 
-    let details = get_svc::decide_get_details(wo, product, symptom, &lookup_tables, Some(warranty_status));
+    // Fetch technician info for avatar
+    let (technician_name, technician_avatar_name) = if let Some(tech_id) = wo.technician_id {
+        users::Entity::find_by_id(tech_id)
+            .one(db.as_ref())
+            .await?
+            .map(|t| (Some(t.full_name.clone()), t.avatar_url))
+            .unwrap_or((None, None))
+    } else {
+        (None, None)
+    };
+
+    // Fetch customer avatar
+    let customer_avatar_name = users::Entity::find_by_id(wo.customer_id)
+        .one(db.as_ref())
+        .await?
+        .and_then(|c| c.avatar_url);
+
+    let details = get_svc::decide_get_details(wo, product, symptom, &lookup_tables, Some(warranty_status), technician_name, technician_avatar_name, customer_avatar_name);
     if let Some(mut conn) = conn_opt {
         if let Ok(cached_val) = serde_json::to_string(&details) { let _: () = conn.set_ex(&cache_key, cached_val, 600).await.unwrap_or_default(); }
     }

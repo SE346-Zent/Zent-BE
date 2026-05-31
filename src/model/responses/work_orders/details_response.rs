@@ -11,12 +11,18 @@ pub struct WorkOrderDetails {
     pub work_order_number: String,
     /// The technician assigned to this work order.
     pub technician_id: Option<Uuid>,
+    /// Technician's full name.
+    pub technician_name: Option<String>,
+    /// Technician's avatar object name for PAR read.
+    pub technician_avatar_name: Option<String>,
     /// Current status (e.g., 'New', 'Assigned', 'In Progress', 'Completed').
     pub status: String,
     /// The customer who requested the service.
     pub customer_id: Uuid,
     /// Customer's full name.
     pub customer_name: String,
+    /// Customer's avatar object name for PAR read.
+    pub customer_avatar_name: Option<String>,
     /// The product being serviced.
     pub product_id: Uuid,
     /// The product's model name.

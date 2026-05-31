@@ -271,8 +271,29 @@ pub(crate) async fn write_through_work_order_cache(
             })
             .unwrap_or_else(|| "none".to_string());
 
+        // Fetch technician info for avatar
+        let (technician_name, technician_avatar_name) = if let Some(tech_id) = wo.technician_id {
+            users::Entity::find_by_id(tech_id)
+                .one(db)
+                .await
+                .ok()
+                .flatten()
+                .map(|t| (Some(t.full_name.clone()), t.avatar_url))
+                .unwrap_or((None, None))
+        } else {
+            (None, None)
+        };
+
+        // Fetch customer avatar
+        let customer_avatar_name = users::Entity::find_by_id(wo.customer_id)
+            .one(db)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|c| c.avatar_url);
+
         let details = crate::services::v1::work_orders::get_details::decide_get_details(
-            wo, product, symptom, lookup_tables, Some(warranty_status),
+            wo, product, symptom, lookup_tables, Some(warranty_status), technician_name, technician_avatar_name, customer_avatar_name,
         );
         if let Ok(details_json) = serde_json::to_string(&details) {
             let _: () = conn
@@ -347,7 +368,26 @@ pub(crate) async fn fetch_paginated_work_orders(
     let mut enriched_models = Vec::with_capacity(models_with_related.len());
     for (work_order, symptom) in models_with_related {
         let product = load_zeus_product_model(work_order.product_id).await;
-        enriched_models.push((work_order, product, symptom));
+
+        // Fetch customer user record for avatar
+        let customer_user = users::Entity::find_by_id(work_order.customer_id)
+            .one(db.as_ref())
+            .await
+            .ok()
+            .flatten();
+
+        // Fetch technician user record for avatar
+        let technician_user = if let Some(tech_id) = work_order.technician_id {
+            users::Entity::find_by_id(tech_id)
+                .one(db.as_ref())
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
+
+        enriched_models.push((work_order, product, symptom, customer_user, technician_user));
     }
 
     let (data, meta) = list_svc::decide_list(enriched_models, &lookup_tables, &pagination, total_records);

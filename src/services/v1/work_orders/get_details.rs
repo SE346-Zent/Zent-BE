@@ -14,14 +14,20 @@ pub fn map_to_details(
     symptom: Option<work_order_symptoms::Model>,
     status: Option<work_order_statuses::Model>,
     warranty_status: Option<String>,
+    technician_name: Option<String>,
+    technician_avatar_name: Option<String>,
+    customer_avatar_name: Option<String>,
 ) -> WorkOrderDetails {
     WorkOrderDetails {
         id: work_order.id,
         work_order_number: work_order.work_order_number,
         technician_id: work_order.technician_id,
+        technician_name,
+        technician_avatar_name,
         status: status.map(|s| s.name).unwrap_or_else(|| "Unknown".to_string()),
         customer_id: work_order.customer_id,
         customer_name: format!("{} {}", work_order.first_name, work_order.last_name),
+        customer_avatar_name,
         product_id: work_order.product_id,
         product_name: product.map(|p| p.product_name).unwrap_or_else(|| "Unknown Product".to_string()),
         reference_ticket_id: work_order.reference_ticket_id,
@@ -58,13 +64,16 @@ pub fn decide_get_details(
     symptom: Option<work_order_symptoms::Model>,
     lookup_tables: &LookupTables,
     warranty_status: Option<String>,
+    technician_name: Option<String>,
+    technician_avatar_name: Option<String>,
+    customer_avatar_name: Option<String>,
 ) -> WorkOrderDetails {
     let status_name = lookup_tables.work_order_statuses.get(&work_order.work_order_status_id).cloned();
     let status = status_name.map(|name| work_order_statuses::Model {
         id: work_order.work_order_status_id,
         name,
     });
-    map_to_details(work_order, product, symptom, status, warranty_status)
+    map_to_details(work_order, product, symptom, status, warranty_status, technician_name, technician_avatar_name, customer_avatar_name)
 }
 
 #[cfg(test)]
@@ -135,7 +144,7 @@ mod tests {
         let symptom = dummy_symptom();
         let status = work_order_statuses::Model { id: 1, name: "Pending".to_string() };
 
-        let details = map_to_details(work_order, Some(product), Some(symptom), Some(status), Some("active".to_string()));
+        let details = map_to_details(work_order, Some(product), Some(symptom), Some(status), Some("active".to_string()), None, None, None);
         assert_eq!(details.work_order_number, "WO-999");
         assert_eq!(details.customer_name, "Jane Smith");
         assert_eq!(details.product_name, "Super Widget");
@@ -148,7 +157,7 @@ mod tests {
     #[test]
     fn test_map_to_details_missing_relations() {
         let work_order = dummy_work_order();
-        let details = map_to_details(work_order, None, None, None, None);
+        let details = map_to_details(work_order, None, None, None, None, None, None, None);
         assert_eq!(details.product_name, "Unknown Product");
         assert_eq!(details.symptom_name, "General Service");
         assert_eq!(details.status, "Unknown");
@@ -161,7 +170,7 @@ mod tests {
         luts.work_order_statuses.insert(1, "Pending".to_string());
 
         let work_order = dummy_work_order();
-        let details = decide_get_details(work_order, None, None, &luts, Some("expired".to_string()));
+        let details = decide_get_details(work_order, None, None, &luts, Some("expired".to_string()), None, None, None);
 
         assert_eq!(details.status, "Pending");
         assert_eq!(details.product_name, "Unknown Product");
