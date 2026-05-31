@@ -6,6 +6,7 @@
 pub mod add_parts;
 pub mod get_product;
 pub mod register_device;
+pub mod verify_product;
 pub mod accept_part;
 pub mod deny_part;
 pub mod ports;
