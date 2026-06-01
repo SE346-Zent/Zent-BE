@@ -66,7 +66,7 @@ pub async fn login_handler(
     let user_record = users::Entity::find()
         .filter(users::Column::Email.eq(&payload.email))
         .one(db.as_ref()).await?
-        .ok_or_else(|| AppError::Unauthorized("Invalid credentials".to_string()))?;
+        .ok_or_else(|| AppError::Unauthorized("Invalid email or password".to_string()))?;
 
     let is_password_valid = hasher::verify_password(payload.password, user_record.password_hash.clone()).await?;
     let login_effect = login::decide_login(&user_record, is_password_valid, access_token_ttl, session_ttl, &encoding_key)?;

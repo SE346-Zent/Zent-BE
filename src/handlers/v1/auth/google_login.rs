@@ -59,7 +59,7 @@ pub async fn google_login_handler(
     let project_id = google_login::get_firebase_project_id().unwrap_or_default();
     let claims = google_login::verify_google_or_firebase_token(&payload.id_token, &project_id).await?;
 
-    let email = claims.email.ok_or_else(|| AppError::BadRequest("ID token does not contain email".to_string()))?;
+    let email = claims.email.ok_or_else(|| AppError::BadRequest("ID token does not include an email address".to_string()))?;
 
     // 2. Load required lookup constants
     let active_status_id = *lookup_tables.account_statuses_by_name.get("Active")

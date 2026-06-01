@@ -50,29 +50,29 @@ pub fn get_firebase_project_id() -> Option<String> {
 /// Decode and verify Google/Firebase ID tokens.
 pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> Result<FirebaseClaims, AppError> {
     let header = decode_header(token)
-        .map_err(|e| AppError::Unauthorized(format!("Invalid token header: {}", e)))?;
-    let kid = header.kid.ok_or_else(|| AppError::Unauthorized("Missing kid in token header".to_string()))?;
+        .map_err(|_| AppError::Unauthorized("Invalid ID token".to_string()))?;
+    let kid = header.kid.ok_or_else(|| AppError::Unauthorized("ID token is missing key ID".to_string()))?;
 
     let parts: Vec<&str> = token.split('.').collect();
     if parts.len() != 3 {
-        return Err(AppError::Unauthorized("Invalid JWT format".to_string()));
+        return Err(AppError::Unauthorized("Invalid ID token format".to_string()));
     }
     
     let payload_decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[1])
-        .map_err(|_| AppError::Unauthorized("Invalid token payload base64".to_string()))?;
+        .map_err(|_| AppError::Unauthorized("Invalid ID token payload".to_string()))?;
     
     #[derive(Deserialize)]
     struct TempClaims {
         iss: String,
     }
     let temp: TempClaims = serde_json::from_slice(&payload_decoded)
-        .map_err(|_| AppError::Unauthorized("Invalid claims JSON".to_string()))?;
+        .map_err(|_| AppError::Unauthorized("Invalid ID token claims".to_string()))?;
 
     let is_firebase = temp.iss.starts_with("https://securetoken.google.com/");
     let is_google = temp.iss == "https://accounts.google.com" || temp.iss == "accounts.google.com";
 
     if !is_firebase && !is_google {
-        return Err(AppError::Unauthorized("Unsupported issuer".to_string()));
+        return Err(AppError::Unauthorized("Unsupported token issuer".to_string()));
     }
 
     let certs_url = if is_firebase {
@@ -92,7 +92,7 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
 
     let cert_pem = certs.get(&kid)
         .and_then(|v| v.as_str())
-        .ok_or_else(|| AppError::Unauthorized("Public key certificate not found for kid".to_string()))?;
+        .ok_or_else(|| AppError::Unauthorized("Public key not found for token".to_string()))?;
 
     let decoding_key = DecodingKey::from_rsa_pem(cert_pem.as_bytes())
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse public key PEM: {}", e)))?;
@@ -135,7 +135,7 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
     }
 
     let token_data = decode::<FirebaseClaims>(token, &decoding_key, &validation)
-        .map_err(|e| AppError::Unauthorized(format!("Token validation failed: {}", e)))?;
+        .map_err(|_| AppError::Unauthorized("Invalid or expired ID token".to_string()))?;
 
     Ok(token_data.claims)
 }
@@ -189,12 +189,12 @@ pub fn decide_google_login(
     if let Some(user_record) = existing_user {
         // 1. Check if user is deleted
         if user_record.deleted_at.is_some() {
-            return Err(AppError::Unauthorized("Account is deactivated".to_string()));
+            return Err(AppError::Unauthorized("Account is inactive".to_string()));
         }
 
         // 2. Google login is restricted only to Customer accounts
         if user_record.role_id != customer_role_id {
-            return Err(AppError::Forbidden("Only customer accounts are allowed to authenticate via Google".to_string()));
+            return Err(AppError::Forbidden("Only customer accounts can sign in with Google".to_string()));
         }
 
         // 3. Verify account status
@@ -213,7 +213,7 @@ pub fn decide_google_login(
                 final_status = AccountStatusEnum::Active;
             }
             _ => {
-                return Err(AppError::Forbidden(format!("Account is {:?}", account_status)));
+                return Err(AppError::Forbidden("Account is not active".to_string()));
             }
         }
 

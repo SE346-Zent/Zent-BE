@@ -41,7 +41,7 @@ pub fn decide_create_work_order(
 ) -> Result<CreateWorkOrderEffect, AppError> {
     // 1. Location Policy Validation - Province must be HCM or HN
     if creation_payload.province != "HCM" && creation_payload.province != "HN" {
-        return Err(AppError::BadRequest("Only HCM and HN provinces are supported at this time".to_string()));
+        return Err(AppError::BadRequest("Only HCM and HN provinces are supported".to_string()));
     }
 
     // 2. Appointment must be at least 24 hours from now
@@ -76,7 +76,7 @@ pub fn decide_create_work_order(
     let hour = appointment_local.hour();
     if hour < workday_start || hour >= workday_end {
         return Err(AppError::BadRequest(format!(
-            "Appointment hour {:02}:{:02} is outside workday limits ({:02}:00 - {:02}:00)",
+            "Appointment time {:02}:{:02} is outside working hours ({:02}:00 - {:02}:00)",
             hour,
             appointment_local.minute(),
             workday_start,
@@ -196,7 +196,7 @@ mod tests {
         let result = decide_create_work_order(req, customer_id, pending_status_id, &policies);
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::BadRequest(msg) => assert_eq!(msg, "Only HCM and HN provinces are supported at this time"),
+            AppError::BadRequest(msg) => assert_eq!(msg, "Only HCM and HN provinces are supported"),
             _ => panic!("Expected BadRequest"),
         }
     }
@@ -227,7 +227,7 @@ mod tests {
         let result = decide_create_work_order(req, customer_id, pending_status_id, &policies);
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::BadRequest(msg) => assert!(msg.contains("outside workday limits")),
+            AppError::BadRequest(msg) => assert!(msg.contains("outside working hours")),
             _ => panic!("Expected BadRequest"),
         }
     }

@@ -45,8 +45,8 @@ pub async fn assign(
     let admin_role_id = *luts.roles_by_name.get("Admin")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Admin role missing from lookup tables")))?;
     if auth.user.role_id == admin_role_id {
-        let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Admin has no province assigned".to_string()))?;
-        if p != &work_order.province { return Err(AppError::Forbidden("Admin province does not match work order province".to_string())); }
+        let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Your admin profile does not have a province assigned".to_string()))?;
+        if p != &work_order.province { return Err(AppError::Forbidden("You do not have permission to manage work orders in this province".to_string())); }
     }
 
     let technician_work_orders = work_orders_ent::Entity::find().filter(work_orders_ent::Column::DeletedAt.is_null()).filter(work_orders_ent::Column::TechnicianId.eq(payload.technician_id)).all(db.as_ref()).await?;

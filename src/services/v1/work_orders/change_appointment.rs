@@ -33,7 +33,7 @@ pub fn decide_change_appointment(
         && work_order.work_order_status_id != assigned_status_id
     {
         return Err(AppError::BadRequest(
-            "Appointment can only be changed when the work order is Pending or Assigned".into(),
+            "Appointment can only be changed when the work order is pending or assigned".into(),
         ));
     }
 
@@ -69,7 +69,7 @@ pub fn decide_change_appointment(
     let hour = appointment_local.hour();
     if hour < workday_start || hour >= workday_end {
         return Err(AppError::BadRequest(format!(
-            "Appointment hour {:02}:{:02} is outside workday limits ({:02}:00 - {:02}:00)",
+            "Appointment time {:02}:{:02} is outside working hours ({:02}:00 - {:02}:00)",
             hour,
             appointment_local.minute(),
             workday_start,
@@ -176,7 +176,7 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::BadRequest(msg) => {
-                assert!(msg.contains("outside workday limits"));
+                assert!(msg.contains("outside working hours"));
             }
             _ => panic!("Expected BadRequest"),
         }
@@ -191,7 +191,7 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::BadRequest(msg) => {
-                assert!(msg.contains("Pending or Assigned"));
+                assert!(msg.contains("pending or assigned"));
             }
             _ => panic!("Expected BadRequest"),
         }

@@ -34,7 +34,7 @@ pub fn decide_approve_refusal(
     target_refused_status_id: i32,
 ) -> Result<ApproveRefusalEffect, AppError> {
     if work_order.reject_form_id != Some(reject_form.id) {
-        return Err(AppError::BadRequest("Work order does not match this rejection form".to_string()));
+        return Err(AppError::BadRequest("Rejection form does not match this work order".to_string()));
     }
 
     let current_timestamp = Utc::now();
@@ -144,7 +144,7 @@ mod tests {
         let result = decide_approve_refusal(work_order, reject_form, admin_id, target_refused_status_id);
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::BadRequest(msg) => assert_eq!(msg, "Work order does not match this rejection form"),
+            AppError::BadRequest(msg) => assert_eq!(msg, "Rejection form does not match this work order"),
             _ => panic!("Expected BadRequest"),
         }
     }

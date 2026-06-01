@@ -72,12 +72,12 @@ pub async fn create(
                         return Ok(Json(ApiResponse::success(201, "Work order created successfully", response)));
                     }
                     return Err(AppError::Conflict(format!(
-                        "Idempotency key '{}' was already used with a different request body", key
+                        "This idempotency key was already used with a different request"
                     )));
                 }
             }
         }
-        if !claimed { return Err(AppError::Conflict("A concurrent request with this idempotency key is still in progress".to_string())); }
+        if !claimed { return Err(AppError::Conflict("Another request with this idempotency key is still in progress".to_string())); }
         cache_key_opt = Some(cache_key);
         conn_opt = Some(conn);
     }
@@ -85,7 +85,7 @@ pub async fn create(
     state.zeus_client.get_product(payload.product_id).await?;
     if let Some(ref_id) = payload.reference_ticket_id {
         if work_orders_ent::Entity::find().filter(work_orders_ent::Column::Id.eq(ref_id)).filter(work_orders_ent::Column::DeletedAt.is_null()).filter(work_orders_ent::Column::CustomerId.eq(auth.user.id)).one(db.as_ref()).await?.is_none() {
-            return Err(AppError::BadRequest(format!("Reference Work Order with ID {} not found", ref_id)));
+            return Err(AppError::BadRequest("Reference work order not found".to_string()));
         }
     }
 

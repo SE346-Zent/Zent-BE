@@ -46,7 +46,7 @@ pub async fn complete(
     let target = crate::utils::geocoding::geocode_address(&wo.address, &wo.ward, &wo.province, &wo.country).await?;
     let radius: f64 = luts.policies.get("geofencing_radius").and_then(|v| v.parse().ok()).unwrap_or(2000.0);
     if !crate::utils::geo::is_within_geofence(payload.latitude, payload.longitude, target.lat, target.lng, radius) {
-        return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
+        return Err(AppError::Forbidden("You are too far from the work site to complete this work order".to_string()));
     }
 
     let completed_id = *luts.work_order_statuses_by_name.get("Closed").ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;

@@ -23,12 +23,12 @@ pub fn decide_change_password(
 ) -> Result<ChangePasswordEffect, AppError> {
     // Reject deleted accounts
     if user.deleted_at.is_some() {
-        return Err(AppError::Unauthorized("Account is deactivated".to_string()));
+        return Err(AppError::Unauthorized("Account is inactive".to_string()));
     }
 
     // Old password must match
     if !is_old_password_valid {
-        return Err(AppError::Unauthorized("Old password is incorrect".to_string()));
+        return Err(AppError::Unauthorized("Current password is incorrect".to_string()));
     }
 
     // Basic check: new password should differ from old

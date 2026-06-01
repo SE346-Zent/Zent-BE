@@ -54,9 +54,9 @@ pub async fn refresh_token_handler(
     let session_record = sessions::Entity::find()
         .filter(sessions::Column::RefreshTokenHash.eq(&refresh_token_hash))
         .one(db_connection.as_ref()).await?
-        .ok_or_else(|| AppError::Unauthorized("Invalid token".to_string()))?;
+        .ok_or_else(|| AppError::Unauthorized("Invalid refresh token".to_string()))?;
 
-    let client = valkey_client.ok_or_else(|| AppError::ServiceUnavailable("Session service temporarily unavailable. Please try again later.".to_string()))?;
+    let client = valkey_client.ok_or_else(|| AppError::ServiceUnavailable("Session service is temporarily unavailable. Please try again later.".to_string()))?;
     let mut valkey_conn = client.get_connection().await?;
     let whitelist_key = format!("whitelist:session:{}", session_record.id);
     let whitelisted_token_hash: Option<String> = valkey_conn.get(&whitelist_key).await?;
@@ -76,7 +76,7 @@ pub async fn refresh_token_handler(
                 .exec(db_connection.as_ref()).await?;
 
             if rotation_result.rows_affected == 0 {
-                return Err(AppError::Unauthorized("Rotation failed".to_string()));
+                return Err(AppError::Unauthorized("Refresh token is no longer valid".to_string()));
             }
             let _: () = valkey_conn.set_ex(&whitelist_key, &token_bundle.refresh_token_hash, remaining_session_ttl).await?;
             Ok(Json(ApiResponse::success(200, "Refreshed", LoginResponseData {
@@ -88,7 +88,7 @@ pub async fn refresh_token_handler(
                 .col_expr(sessions::Column::RevokedAt, Expr::value(chrono::Utc::now()))
                 .filter(sessions::Column::Id.eq(session_id))
                 .exec(db_connection.as_ref()).await?;
-            Err(AppError::Unauthorized("Suspected reuse attack".to_string()))
+            Err(AppError::Unauthorized("Refresh token reuse detected. Please sign in again".to_string()))
         }
     }
 }

@@ -107,25 +107,25 @@ fn check_wo_permissions(
         "SuperAdmin" => Ok(()),
         "Admin" => {
             let Some(ref admin_province) = auth.user.province else {
-                return Err(AppError::Forbidden("Admin profile missing province assignment".to_string()));
+                return Err(AppError::Forbidden("Your admin profile does not have a province assigned".to_string()));
             };
             if admin_province != province {
-                return Err(AppError::Forbidden(format!("You do not have permission to view work orders in province '{}'", province)));
+                return Err(AppError::Forbidden("You do not have permission to view work orders in this province".to_string()));
             }
             Ok(())
         }
         "Technician" => {
             if tech_id != Some(auth.user.id) {
-                return Err(AppError::Forbidden(format!("Work order {} is not assigned to you", wo_number)));
+                return Err(AppError::Forbidden(format!("You are not assigned to work order {}", wo_number)));
             }
             Ok(())
         }
         "Customer" => {
             if customer_id != auth.user.id {
-                return Err(AppError::Forbidden(format!("Work order {} does not belong to you", wo_number)));
+                return Err(AppError::Forbidden(format!("You do not have access to work order {}", wo_number)));
             }
             Ok(())
         }
-        _ => Err(AppError::Forbidden("Role not recognized".to_string())),
+        _ => Err(AppError::Forbidden("Your role is not permitted to access this resource".to_string())),
     }
 }

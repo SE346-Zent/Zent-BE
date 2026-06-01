@@ -30,7 +30,7 @@ pub async fn list(
 ) -> Result<Json<ApiResponse<Vec<WorkOrderListItem>>>, AppError> {
     if let Some(requested_role) = &query.role {
         if requested_role != &auth.role.name {
-            return Err(AppError::Forbidden(format!("Requested context '{}' does not match your assigned role '{}'", requested_role, auth.role.name)));
+            return Err(AppError::Forbidden("Requested role does not match your account role".to_string()));
         }
     }
     let mut resolved_province = None;
@@ -43,7 +43,7 @@ pub async fn list(
             format!("superadmin:p:{:?}", resolved_province)
         }
         "Admin" => {
-            let p = auth.user.province.clone().ok_or_else(|| AppError::Forbidden("Admin profile missing province".to_string()))?;
+            let p = auth.user.province.clone().ok_or_else(|| AppError::Forbidden("Your admin profile does not have a province assigned".to_string()))?;
             resolved_province = Some(p.clone());
             format!("admin_geo:{}", p)
         }
@@ -55,7 +55,7 @@ pub async fn list(
             resolved_customer_id = Some(auth.user.id);
             format!("customer:{}", auth.user.id)
         }
-        _ => return Err(AppError::Forbidden("Role not recognized".to_string())),
+        _ => return Err(AppError::Forbidden("Your role is not permitted to access this resource".to_string())),
     };
     fetch_paginated_work_orders(db, valkey_client, lookup_tables, query.pagination, &cache_key_prefix, resolved_tech_id, resolved_province, resolved_customer_id, query.date).await
 }
