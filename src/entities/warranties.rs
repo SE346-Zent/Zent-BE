@@ -12,6 +12,7 @@ pub struct Model {
     pub start_date: DateTimeUtc,
     pub end_date: DateTimeUtc,
     pub warranty_status: String,
+    pub warranty_status_id: Option<i32>,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
@@ -35,6 +36,14 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     Users,
+    #[sea_orm(
+        belongs_to = "super::warranty_statuses::Entity",
+        from = "Column::WarrantyStatusId",
+        to = "super::warranty_statuses::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Restrict"
+    )]
+    WarrantyStatuses,
 }
 
 impl Related<super::products::Entity> for Entity {
@@ -46,6 +55,12 @@ impl Related<super::products::Entity> for Entity {
 impl Related<super::users::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Users.def()
+    }
+}
+
+impl Related<super::warranty_statuses::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WarrantyStatuses.def()
     }
 }
 

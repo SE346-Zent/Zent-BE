@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 /// Detailed information about a work order.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
@@ -12,12 +11,18 @@ pub struct WorkOrderDetails {
     pub work_order_number: String,
     /// The technician assigned to this work order.
     pub technician_id: Option<Uuid>,
+    /// Technician's full name.
+    pub technician_name: Option<String>,
+    /// Technician's avatar object name for PAR read.
+    pub technician_avatar_name: Option<String>,
     /// Current status (e.g., 'New', 'Assigned', 'In Progress', 'Completed').
     pub status: String,
     /// The customer who requested the service.
     pub customer_id: Uuid,
     /// Customer's full name.
     pub customer_name: String,
+    /// Customer's avatar object name for PAR read.
+    pub customer_avatar_name: Option<String>,
     /// The product being serviced.
     pub product_id: Uuid,
     /// The product's model name.
@@ -40,16 +45,18 @@ pub struct WorkOrderDetails {
     pub country: String,
     /// Service location: Province/State.
     pub province: String,
-    /// Service location: City.
-    pub city: String,
+    /// Service location: Ward.
+    pub ward: String,
     /// Service location: Address line 1.
     pub address: String,
     /// Service location: Building/Apartment info.
     pub building: Option<String>,
-    /// Scheduled appointment time.
-    pub appointment: DateTime<Utc>,
-    /// Timestamp when the work order was created.
-    pub created_at: DateTime<Utc>,
-    /// Timestamp when the work order was last updated.
-    pub updated_at: DateTime<Utc>,
+    /// Scheduled appointment time (GMT+7).
+    pub appointment: String,
+    /// Timestamp when the work order was created (GMT+7).
+    pub created_at: String,
+    /// Timestamp when the work order was last updated (GMT+7).
+    pub updated_at: String,
+    /// Warranty status of the product (active, expired, none).
+    pub warranty_status: Option<String>,
 }

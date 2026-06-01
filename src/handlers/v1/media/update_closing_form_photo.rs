@@ -91,7 +91,7 @@ pub async fn update_closing_form_photo(
         .ok_or_else(|| AppError::NotFound("Image link not found".to_string()))?;
 
     let site_location = geocoding::geocode_address(
-        &work_order_record.address, &work_order_record.city, &work_order_record.province, &work_order_record.country,
+        &work_order_record.address, &work_order_record.ward, &work_order_record.province, &work_order_record.country,
     ).await?;
 
     let file_extension = original_file_name.split('.').next_back().unwrap_or("jpg");

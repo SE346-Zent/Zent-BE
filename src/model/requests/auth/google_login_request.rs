@@ -10,5 +10,9 @@ pub struct GoogleLoginRequest {
     pub id_token: String,
     /// Optional FCM token for push notifications.
     pub fcm_token: Option<String>,
+    /// Optional device name shown in login history.
+    pub device_name: Option<String>,
+    /// Optional location label shown in login history.
+    pub location: Option<String>,
 }
 

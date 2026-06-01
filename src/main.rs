@@ -56,8 +56,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start background asynchronous AMQP email consumer pool globally
     consumers::email::start_email_consumer(rabbitmq.clone()).await;
 
+    let zeus_client = Arc::new(zent_be::infrastructure::clients::zeus::ZeusClient::new(
+        cfg.zeus_base_url.clone(),
+        cfg.zeus_api_key.clone(),
+    ));
+
     // Load lookup tables (roles, account_statuses, etc.) into memory
-    let lookup_tables = core::lookup_tables::LookupTables::load(&db)
+    let lookup_tables = core::lookup_tables::LookupTables::load(&db, zeus_client.as_ref())
         .await
         .expect("Failed to load lookup tables from database");
 
@@ -75,6 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         templates.clone(),
         core::state::AccessTokenDefaultTTLSeconds(cfg.access_token_ttl_seconds),
         core::state::SessionDefaultTTLSeconds(cfg.session_ttl_seconds),
+        zeus_client,
     );
 
     // Start background asynchronous AMQP work order consumer pool
@@ -165,6 +171,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     app_scheduler.register_job(relay_job)
         .await
         .expect("Failed to register outbox relay job");
+
+    let expire_warranties_job = infrastructure::cron_tasks::expire_warranties::build_expire_warranties_job(
+        db.clone(),
+        state.lookup_tables.clone(),
+    ).expect("Failed to build warranty expiration job");
+
+    app_scheduler.register_job(expire_warranties_job)
+        .await
+        .expect("Failed to register warranty expiration job");
         
     app_scheduler.start()
         .await

@@ -48,7 +48,7 @@ pub async fn verify_otp_handler(
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     verify_payload.validate().map_err(|err| AppError::BadRequest(err.to_string()))?;
 
-    let client = valkey_client.ok_or_else(|| AppError::ServiceUnavailable("Verification service temporarily unavailable. Please try again later.".to_string()))?;
+    let client = valkey_client.ok_or_else(|| AppError::ServiceUnavailable("Verification service is temporarily unavailable. Please try again later.".to_string()))?;
     let mut valkey_conn = client.get_connection().await?;
     let script_hashes = client.get_script_hashes();
     let verify_otp_script_hash = script_hashes.get("verify_otp")

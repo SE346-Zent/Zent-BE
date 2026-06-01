@@ -15,18 +15,22 @@ pub fn map_to_list_item(
     product: Option<products::Model>,
     _symptom: Option<work_order_symptoms::Model>,
     status: Option<work_order_statuses::Model>,
-    has_rating: bool,
+    customer_avatar_name: Option<String>,
+    technician_name: Option<String>,
+    technician_avatar_name: Option<String>,
 ) -> WorkOrderListItem {
     WorkOrderListItem {
         id: work_order.id,
         work_order_num: work_order.work_order_number,
         status: status.map(|s| s.name).unwrap_or_else(|| "Unknown".to_string()),
         customer_name: format!("{} {}", work_order.first_name, work_order.last_name),
+        customer_avatar_name,
+        technician_name,
+        technician_avatar_name,
         product_name: product.map(|p| p.product_name).unwrap_or_else(|| "Unknown Product".to_string()),
-        address: format!("{}, {}, {}", work_order.address, work_order.city, work_order.province),
-        appointment: Some(work_order.appointment),
-        has_rating,
-        created_at: work_order.created_at,
+        address: format!("{}, {}, {}", work_order.address, work_order.ward, work_order.province),
+        appointment: Some(crate::utils::time::to_utc7_string(work_order.appointment)),
+        created_at: crate::utils::time::to_utc7_string(work_order.created_at),
     }
 }
 
@@ -36,22 +40,23 @@ pub fn map_to_list_item(
 /// into a paginated response containing human-readable `WorkOrderListItem` objects.
 
 pub fn decide_list(
-    work_order_tuples: Vec<(work_orders::Model, Option<products::Model>, Option<work_order_symptoms::Model>)>,
+    work_order_tuples: Vec<(work_orders::Model, Option<products::Model>, Option<work_order_symptoms::Model>, Option<crate::entities::users::Model>, Option<crate::entities::users::Model>)>,
     lookup_tables: &LookupTables,
     pagination: &PaginationRequest,
     total_records: u64,
-    rated_work_order_ids: &std::collections::HashSet<Uuid>,
 ) -> (Vec<WorkOrderListItem>, PaginationResponse) {
     let list_items = work_order_tuples
         .into_iter()
-        .map(|(work_order, product, symptom)| {
+        .map(|(work_order, product, symptom, customer, technician)| {
             let status_name = lookup_tables.work_order_statuses.get(&work_order.work_order_status_id).cloned();
             let status = status_name.map(|name| work_order_statuses::Model {
                 id: work_order.work_order_status_id,
                 name,
             });
-            let has_rating = rated_work_order_ids.contains(&work_order.id);
-            map_to_list_item(work_order, product, symptom, status, has_rating)
+            let customer_avatar_name = customer.and_then(|c| c.avatar_url);
+            let technician_name = technician.as_ref().map(|t| t.full_name.clone());
+            let technician_avatar_name = technician.and_then(|t| t.avatar_url);
+            map_to_list_item(work_order, product, symptom, status, customer_avatar_name, technician_name, technician_avatar_name)
         })
         .collect();
 
@@ -82,7 +87,7 @@ mod tests {
             phone_number: None,
             country: "".to_string(),
             province: "ON".to_string(),
-            city: "Toronto".to_string(),
+            ward: "Downtown".to_string(),
             address: "123 Main St".to_string(),
             building: None,
             appointment: Utc::now(),
@@ -118,19 +123,18 @@ mod tests {
         let product = dummy_product();
         let status = work_order_statuses::Model { id: 1, name: "Pending".to_string() };
 
-        let item = map_to_list_item(work_order, Some(product), None, Some(status), false);
+        let item = map_to_list_item(work_order, Some(product), None, Some(status), None, None, None);
         assert_eq!(item.work_order_num, "WO-123");
         assert_eq!(item.customer_name, "John Doe");
         assert_eq!(item.product_name, "Super Widget");
-        assert_eq!(item.address, "123 Main St, Toronto, ON");
+        assert_eq!(item.address, "123 Main St, Downtown, ON");
         assert_eq!(item.status, "Pending");
-        assert!(!item.has_rating);
     }
 
     #[test]
     fn test_map_to_list_item_missing_relations() {
         let work_order = dummy_work_order();
-        let item = map_to_list_item(work_order, None, None, None, false);
+        let item = map_to_list_item(work_order, None, None, None, None, None, None);
         assert_eq!(item.product_name, "Unknown Product");
         assert_eq!(item.status, "Unknown");
     }
@@ -141,11 +145,10 @@ mod tests {
         luts.work_order_statuses.insert(1, "Pending".to_string());
 
         let work_order = dummy_work_order();
-        let models = vec![(work_order, None, None)];
+        let models = vec![(work_order, None, None, None, None)];
 
         let req = PaginationRequest { limit: 10, page: 2 };
-        let rated_ids = std::collections::HashSet::new();
-        let (items, pag) = decide_list(models, &luts, &req, 100, &rated_ids);
+        let (items, pag) = decide_list(models, &luts, &req, 100);
 
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].status, "Pending");

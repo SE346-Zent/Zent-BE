@@ -25,7 +25,7 @@ where
                 .await
                 .map_err(|e| {
                     error!("Auth extract error: {}", e);
-                    AppError::Unauthorized("Authorization header not found".to_string())
+                    AppError::Unauthorized("Authorization token is required".to_string())
                 })?;
 
         let decoding_key = DecodingKey::from_ref(state);
@@ -38,7 +38,7 @@ where
                 error!("Token decode error: {}", e);
                 match e.kind() {
                     jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
-                        AppError::Unauthorized("Token has expired".to_string())
+                        AppError::Unauthorized("Token expired. Please sign in again".to_string())
                     }
                     _ => AppError::Unauthorized("Invalid token".to_string()),
                 }

@@ -32,8 +32,8 @@ pub struct CreateWorkOrderRequest {
     pub country: String,
     /// Service location: Province/State.
     pub province: String,
-    /// Service location: City.
-    pub city: String,
+    /// Service location: Ward.
+    pub ward: String,
     /// Service location: Address line 1.
     pub address: String,
     /// Service location: Building/Apartment info.

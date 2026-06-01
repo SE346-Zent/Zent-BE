@@ -136,6 +136,7 @@ async fn setup_app_with_db(db: DatabaseConnection, mock_users: Vec<users::Model>
         std::collections::HashMap::new(),
         zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
         zent_be::core::state::SessionDefaultTTLSeconds(3600),
+        std::sync::Arc::new(zent_be::services::v1::inventory::ports::MockZeusClient),
     );
 
     // Provide the application endpoints explicitly for tests
@@ -386,6 +387,7 @@ async fn test_cat2_unknown_status_legacy_data() {
         std::collections::HashMap::new(),
         zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
         zent_be::core::state::SessionDefaultTTLSeconds(3600),
+        std::sync::Arc::new(zent_be::services::v1::inventory::ports::MockZeusClient),
     );
     let app = Router::new()
         .route("/login", post(login_handler))
@@ -730,6 +732,7 @@ async fn test_dind_login_ttl_boundaries(
         std::collections::HashMap::new(),
         AccessTokenDefaultTTLSeconds(access_ttl),
         SessionDefaultTTLSeconds(session_ttl),
+        std::sync::Arc::new(zent_be::services::v1::inventory::ports::MockZeusClient),
     );
 
     let app = Router::new()

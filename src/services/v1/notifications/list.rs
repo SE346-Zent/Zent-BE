@@ -51,6 +51,7 @@ pub fn list_notifications(
             data: Some(notification.data.clone()),
             is_read: notification.is_read,
             created_at: notification.created_at.to_string(),
+            sender_avatar_name: notification.sender_avatar_name.clone(),
         })
         .collect();
 
@@ -88,6 +89,7 @@ mod tests {
             is_read: read,
             os_notification_id: None,
             created_at: created,
+            sender_avatar_name: None,
         }
     }
 

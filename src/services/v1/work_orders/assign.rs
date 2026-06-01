@@ -68,7 +68,7 @@ pub fn decide_assign_work_order(
     let hour = appointment_local.hour();
     if hour < workday_start || hour >= workday_end {
         return Err(AppError::BadRequest(format!(
-            "Appointment hour {:02}:{:02} is outside workday limits ({:02}:00 - {:02}:00)",
+            "Appointment time {:02}:{:02} is outside working hours ({:02}:00 - {:02}:00)",
             hour,
             appointment_local.minute(),
             workday_start,
@@ -79,14 +79,14 @@ pub fn decide_assign_work_order(
     // Ensure the work order doesn't already have a technician (use reassign instead)
     if work_order.technician_id.is_some() {
         return Err(AppError::BadRequest(
-            "Work order already has a technician — use reassign instead".into(),
+            "Work order already has a technician. Use reassignment instead".into(),
         ));
     }
 
     // Ensure we don't assign a completed or rejected work order
     if work_order.work_order_status_id == completed_status_id {
         return Err(AppError::BadRequest(
-            "Cannot assign a completed work order".into(),
+            "Completed work orders cannot be assigned".into(),
         ));
     }
 
@@ -101,7 +101,7 @@ pub fn decide_assign_work_order(
 
         if other_wo.appointment == work_order.appointment {
             return Err(AppError::Conflict(
-                "Technician already has an appointment at this exact time".into(),
+                "Technician already has an appointment at that time".into(),
             ));
         }
     }
@@ -146,7 +146,7 @@ mod tests {
             phone_number: None,
             country: "".to_string(),
             province: "".to_string(),
-            city: "".to_string(),
+            ward: "".to_string(),
             address: "".to_string(),
             building: None,
             appointment: Utc.with_ymd_and_hms(2026, 1, 1, 3, 0, 0).unwrap(), // 10:00 AM GMT+7
@@ -225,7 +225,7 @@ mod tests {
         let result = decide_assign_work_order(req, wo, vec![], &policies, 2, 4, admin_id);
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::BadRequest(msg) => assert!(msg.contains("outside workday limits")),
+            AppError::BadRequest(msg) => assert!(msg.contains("outside working hours")),
             _ => panic!("Expected BadRequest"),
         }
     }
@@ -249,7 +249,7 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::BadRequest(msg) => {
-                assert_eq!(msg, "Cannot assign a completed work order")
+                assert_eq!(msg, "Completed work orders cannot be assigned")
             }
             _ => panic!("Expected BadRequest for completed work order"),
         }

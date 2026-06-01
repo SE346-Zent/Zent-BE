@@ -15,4 +15,5 @@ pub mod reset_password;
 pub mod logout;
 pub mod change_password;
 pub mod google_login;
+pub mod login_history;
 

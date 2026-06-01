@@ -58,7 +58,7 @@ pub async fn get_unread_noti_count(
                     )));
                 }
                 Ok(_) => {
-                    // Key doesn't exist or has unexpected value → fallback to MongoDB
+                    // Key missing or malformed → fallback to MongoDB
                 }
                 Err(err) => {
                     tracing::warn!("Valkey GET failed for {}: {:?}. Falling back to MongoDB.", cache_key_name, err);

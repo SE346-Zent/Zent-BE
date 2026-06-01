@@ -80,6 +80,7 @@ async fn run_escalation_check(
     }
 
     let active_wos = work_orders::Entity::find()
+        .filter(work_orders::Column::DeletedAt.is_null())
         .filter(status_cond)
         .all(db)
         .await?;

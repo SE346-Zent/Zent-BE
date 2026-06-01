@@ -66,11 +66,9 @@ where
                 .map(|(name, _)| name.as_str())
                 .unwrap_or("Unknown");
 
-            Err(AppError::Forbidden(format!(
-                "Role mismatch: you are '{user_role_name}' (role_id {}), but this endpoint requires one of: [{}]",
-                auth_user.user.role_id,
-                roles.iter().map(|r| r.as_str()).collect::<Vec<_>>().join(", ")
-            )))
+            Err(AppError::Forbidden(
+                "You do not have permission to access this resource".to_string(),
+            ))
         })
     }
 }

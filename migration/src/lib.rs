@@ -38,6 +38,15 @@ mod m20260521_100000_add_wo_id_to_chat_rooms;
 mod m20260522_100000_add_performance_indexes;
 mod m20260523_100000_add_chat_room_id_to_work_orders;
 mod m20260524_100000_add_ratings_and_part_wo_number;
+mod m20260528_100000_decouple_inventory_fks;
+mod m20260528_110000_add_warranty_status_lut;
+mod m20260530_100000_add_login_audit_log;
+mod m20260530_100001_backfill_new_part_form_status;
+mod m20260530_100002_rename_part_audit_log;
+mod m20260531_100000_add_registered_devices;
+mod m20260531_110000_rename_city_to_ward;
+mod m20260531_120000_drop_product_fk_from_registered_devices;
+mod m20260601_100000_add_cancel_reason;
 
 
 pub struct Migrator;
@@ -84,6 +93,15 @@ impl MigratorTrait for Migrator {
             Box::new(m20260522_100000_add_performance_indexes::Migration),
             Box::new(m20260523_100000_add_chat_room_id_to_work_orders::Migration),
             Box::new(m20260524_100000_add_ratings_and_part_wo_number::Migration),
+            Box::new(m20260528_100000_decouple_inventory_fks::Migration),
+            Box::new(m20260528_110000_add_warranty_status_lut::Migration),
+            Box::new(m20260530_100000_add_login_audit_log::Migration),
+            Box::new(m20260530_100001_backfill_new_part_form_status::Migration),
+            Box::new(m20260530_100002_rename_part_audit_log::Migration),
+            Box::new(m20260531_100000_add_registered_devices::Migration),
+            Box::new(m20260531_110000_rename_city_to_ward::Migration),
+            Box::new(m20260531_120000_drop_product_fk_from_registered_devices::Migration),
+            Box::new(m20260601_100000_add_cancel_reason::Migration),
         ]
     }
 }

@@ -45,7 +45,7 @@ where
         
         let user_id = Uuid::parse_str(&claims.sub).map_err(|_| {
             error!("Invalid UUID subject");
-            AppError::Unauthorized("Invalid token subject".to_string())
+            AppError::Unauthorized("Invalid authentication token".to_string())
         })?;
         
         // Try to get from Valkey cache first
@@ -71,12 +71,12 @@ where
             })?;
     
         if user_with_role.is_empty() {
-            return Err(AppError::Unauthorized("User not found".to_string()));
+            return Err(AppError::Unauthorized("User account not found".to_string()));
         }
         
         let (user, user_roles) = user_with_role.into_iter().next().unwrap();
         let role = user_roles.into_iter().next().ok_or_else(|| {
-            AppError::Forbidden("User profile is missing role information".to_string())
+            AppError::Forbidden("User role is missing".to_string())
         })?;
         
         let auth_user = AuthUser { user, role };

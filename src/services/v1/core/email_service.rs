@@ -276,6 +276,57 @@ pub async fn send_work_order_reassigned_email(
     publish_email_task(rabbitmq, email_payload, "work order reassigned email").await
 }
 
+/// Dispatch a device registration confirmation email with registration details and warranty status.
+
+pub async fn send_device_registration_email(
+    rabbitmq_connection: &Arc<Connection>,
+    templates: &HashMap<String, String>,
+    recipient_email: &str,
+    recipient_name: &str,
+    product_name: &str,
+    serial_number: &str,
+    country: &str,
+    province: &str,
+    address: &str,
+    warranty_status: &str,
+    registration_date: &str,
+) -> Result<(), AppError> {
+    let escaped_name = v_htmlescape::escape(recipient_name).to_string();
+    let escaped_product = v_htmlescape::escape(product_name).to_string();
+    let escaped_serial = v_htmlescape::escape(serial_number).to_string();
+    let escaped_country = v_htmlescape::escape(country).to_string();
+    let escaped_province = v_htmlescape::escape(province).to_string();
+    let escaped_address = v_htmlescape::escape(address).to_string();
+    let escaped_warranty = v_htmlescape::escape(warranty_status).to_string();
+    let escaped_date = v_htmlescape::escape(registration_date).to_string();
+
+    let email_body = if let Some(template_content) = templates.get("device_registration_email.html") {
+        template_content
+            .replace("{{name}}", &escaped_name)
+            .replace("{{product_name}}", &escaped_product)
+            .replace("{{serial_number}}", &escaped_serial)
+            .replace("{{country}}", &escaped_country)
+            .replace("{{province}}", &escaped_province)
+            .replace("{{address}}", &escaped_address)
+            .replace("{{warranty_status}}", &escaped_warranty)
+            .replace("{{registration_date}}", &escaped_date)
+    } else {
+        tracing::warn!("Template 'device_registration_email.html' not found in cache! Using minimal HTML fallback.");
+        format!(
+            "<html><body><h2>Device Registration Successful!</h2><p>Dear {}, your device {} (Serial: {}) has been successfully registered.</p><p>Country: {}</p><p>Province: {}</p><p>Address: {}</p><p>Warranty Status: {}</p><p>Registration Date: {}</p></body></html>",
+            escaped_name, escaped_product, escaped_serial, escaped_country, escaped_province, escaped_address, escaped_warranty, escaped_date
+        )
+    };
+
+    let email_payload = serde_json::json!({
+        "to": recipient_email,
+        "subject": "Zent Device Registration Confirmation",
+        "body": email_body
+    });
+
+    publish_email_task(rabbitmq_connection, email_payload, "device registration email").await
+}
+
 /// Generic send_email helper — publishes arbitrary email content via RabbitMQ.
 /// Used by cleanup/cancel flows that don't need templated emails.
 pub async fn send_email(

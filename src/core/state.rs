@@ -38,6 +38,8 @@ pub struct AppState {
     pub encoding_key: EncodingKey,
     /// In-memory cache of frequently used lookup tables.
     pub lookup_tables: Arc<LookupTables>,
+    /// Client for third-party Zeus API
+    pub zeus_client: Arc<dyn crate::services::v1::inventory::ports::ZeusInventoryClient>,
 }
 
 impl AppState {
@@ -51,6 +53,7 @@ impl AppState {
         templates: HashMap<String, String>,
         access_token_ttl: AccessTokenDefaultTTLSeconds,
         session_ttl: SessionDefaultTTLSeconds,
+        zeus_client: Arc<dyn crate::services::v1::inventory::ports::ZeusInventoryClient>,
     ) -> Self {
         Self {
             db: Arc::new(db),
@@ -63,6 +66,7 @@ impl AppState {
             decoding_key: DecodingKey::from_secret(secret),
             encoding_key: EncodingKey::from_secret(secret),
             lookup_tables: Arc::new(lookup_tables),
+            zeus_client,
         }
     }
 }

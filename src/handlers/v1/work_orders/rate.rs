@@ -86,19 +86,9 @@ pub async fn rate(
     // Write-through cache update for work order itself if needed (though work order did not change, let's keep consistency)
     super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), id).await;
 
-    // Cache increment logic in Valkey for the technician
+    // Refresh cached technician analytics so average rating and work order totals stay current.
     if let Some(tech_id) = work_order.technician_id {
-        if let Some(client) = valkey_client.as_ref() {
-            if let Ok(mut conn) = client.get_connection().await {
-                let cache_key = format!("ratings:tech:{}", tech_id);
-                let exists: bool = conn.exists(&cache_key).await.unwrap_or(false);
-                if exists {
-                    // Cache exists, increment this specific rating
-                    let field = payload.rating.to_string();
-                    let _: Result<(), redis::RedisError> = conn.hincr(&cache_key, &field, 1).await;
-                }
-            }
-        }
+        super::refresh_technician_stats_cache(db.as_ref(), &valkey_client, tech_id).await;
     }
 
     Ok(Json(ApiResponse::message_only(200, "Rating submitted successfully")))

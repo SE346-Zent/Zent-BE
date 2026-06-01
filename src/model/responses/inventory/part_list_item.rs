@@ -13,7 +13,7 @@ pub struct PartListItem {
     pub condition_name: String,
     /// Name of the product this part is installed in (if any)
     pub product_name: Option<String>,
-    /// Approval status: "pending", "approved", or "denied"
+    /// Approval status: "pending", "approved", or "rejected"
     pub approval_status: String,
     pub created_at: String,
 }

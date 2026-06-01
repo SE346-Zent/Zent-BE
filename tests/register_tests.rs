@@ -63,6 +63,7 @@ async fn setup_app_with_db(db: DatabaseConnection) -> Router {
         templates,
         zent_be::core::state::AccessTokenDefaultTTLSeconds(900),
         zent_be::core::state::SessionDefaultTTLSeconds(3600),
+        std::sync::Arc::new(zent_be::services::v1::inventory::ports::MockZeusClient),
     );
 
     Router::new()

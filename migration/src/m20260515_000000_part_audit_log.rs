@@ -23,19 +23,7 @@ impl MigrationTrait for Migration {
                 .await?;
         }
 
-        // 2. Add `denial_reason` column to new_part_forms (nullable)
-        if !manager.has_column("new_part_forms", "denial_reason").await? {
-            manager
-                .alter_table(
-                    Table::alter()
-                        .table(NewPartForms::Table)
-                        .add_column(ColumnDef::new(NewPartForms::DenialReason).text().null())
-                        .to_owned(),
-                )
-                .await?;
-        }
-
-        // 3. Create `part_audit_log` table
+        // 2. Create `part_audit_log` table
         manager
             .create_table(
                 Table::create()
@@ -67,7 +55,7 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // 4. Index on new_part_form_id for quick audit lookups
+        // 3. Index on new_part_form_id for quick audit lookups
         manager
             .create_index(
                 Index::create()
@@ -82,21 +70,6 @@ impl MigrationTrait for Migration {
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table(PartAuditLog::Table).to_owned())
-            .await?;
-
-        if manager.has_column("new_part_forms", "denial_reason").await? {
-            manager
-                .alter_table(
-                    Table::alter()
-                        .table(NewPartForms::Table)
-                        .drop_column(NewPartForms::DenialReason)
-                        .to_owned(),
-                )
-                .await?;
-        }
-
         if manager.has_column("new_part_forms", "status").await? {
             manager
                 .alter_table(
@@ -117,7 +90,6 @@ enum NewPartForms {
     Table,
     Id,
     Status,
-    DenialReason,
 }
 
 #[derive(DeriveIden)]

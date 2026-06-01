@@ -21,3 +21,4 @@ pub mod approve_refusal;
 pub mod deny_refusal;
 pub mod change_appointment;
 pub mod reject_forms;
+pub mod technician_stats;

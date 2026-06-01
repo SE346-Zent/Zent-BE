@@ -9,3 +9,4 @@ pub mod ws_heartbeat;
 pub mod ws_expiry;
 pub mod cleanup_chat_rooms;
 pub mod cleanup_ws;
+pub mod expire_warranties;

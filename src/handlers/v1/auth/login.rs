@@ -8,10 +8,11 @@ use std::sync::Arc;
 use sea_orm::{DatabaseConnection, *};
 use jsonwebtoken::EncodingKey;
 use validator::Validate;
+use uuid::Uuid;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
 use crate::infrastructure::cache::ValkeyClient;
-use crate::entities::{users, sessions};
+use crate::entities::{login_audit_logs, sessions, users};
 use chrono::Utc;
 use crate::utils::hasher;
 use crate::services::v1::auth::login;
@@ -65,7 +66,7 @@ pub async fn login_handler(
     let user_record = users::Entity::find()
         .filter(users::Column::Email.eq(&payload.email))
         .one(db.as_ref()).await?
-        .ok_or_else(|| AppError::Unauthorized("Invalid credentials".to_string()))?;
+        .ok_or_else(|| AppError::Unauthorized("Invalid email or password".to_string()))?;
 
     let is_password_valid = hasher::verify_password(payload.password, user_record.password_hash.clone()).await?;
     let login_effect = login::decide_login(&user_record, is_password_valid, access_token_ttl, session_ttl, &encoding_key)?;
@@ -78,17 +79,34 @@ pub async fn login_handler(
     }
 
     let active_session = sessions::ActiveModel {
-
         id: Set(login_effect.session_id),
         user_id: Set(login_effect.user_id),
         refresh_token_hash: Set(login_effect.refresh_token_hash.clone()),
-        ip_address: Set(client_ip_address),
-        device_fingerprint: Set(login_effect.user_id.to_string()),
+        ip_address: Set(client_ip_address.clone()),
+        device_fingerprint: Set(payload.device_name.clone().unwrap_or_else(|| login_effect.user_id.to_string())),
         created_at: Set(Utc::now()),
         expires_at: Set(login_effect.session_expires_at),
         ..Default::default()
     };
-    active_session.insert(db.as_ref()).await?;
+
+    let login_audit = login_audit_logs::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        user_id: Set(login_effect.user_id),
+        session_id: Set(login_effect.session_id),
+        device_name: Set(payload.device_name.clone().unwrap_or_else(|| "Unknown device".to_string())),
+        location: Set(payload.location.clone()),
+        ip_address: Set(client_ip_address),
+        created_at: Set(Utc::now()),
+    };
+
+    db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
+        active_session.insert(txn).await?;
+        login_audit.insert(txn).await?;
+        Ok(())
+    })).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
 
     if let Some(client) = valkey_client {
         if let Ok(mut conn) = client.get_connection().await {
