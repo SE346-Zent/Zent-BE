@@ -25,7 +25,7 @@ pub fn decide_logout(
     // 1. Verify session belongs to user
     if session_record.user_id != requesting_user_id {
         return Err(AppError::Unauthorized(
-            "Session does not belong to user".to_string(),
+            "Invalid session".to_string(),
         ));
     }
 

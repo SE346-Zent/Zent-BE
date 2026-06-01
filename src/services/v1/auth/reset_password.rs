@@ -33,7 +33,7 @@ pub fn decide_reset_password(
     reset_token_cache_key: String,
 ) -> Result<ResetPasswordEffect, AppError> {
     if is_new_password_same_as_current {
-        return Err(AppError::BadRequest("New password cannot be the same as current".to_string()));
+        return Err(AppError::BadRequest("New password must be different from current password".to_string()));
     }
 
     Ok(ResetPasswordEffect {

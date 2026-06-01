@@ -54,12 +54,12 @@ pub fn decide_login(
 ) -> Result<LoginEffect, AppError> {
     // 1. Check if user is deleted
     if user_record.deleted_at.is_some() {
-        return Err(AppError::Unauthorized("Invalid credentials".to_string()));
+        return Err(AppError::Unauthorized("Invalid email or password".to_string()));
     }
 
     // 2. Verify password (passed in)
     if !is_password_valid {
-        return Err(AppError::Unauthorized("Invalid credentials".to_string()));
+        return Err(AppError::Unauthorized("Invalid email or password".to_string()));
     }
 
     // 3. Verify account status
@@ -72,7 +72,7 @@ pub fn decide_login(
             ));
         }
         _ => {
-            return Err(AppError::Forbidden(format!("Account is {:?}", account_status)));
+            return Err(AppError::Forbidden("Account is not active".to_string()));
         }
     }
 

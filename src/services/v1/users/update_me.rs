@@ -24,7 +24,7 @@ pub struct UpdateMeEffect {
 pub fn decide_update_me(user: users::Model, req: ProfileUpdateRequest) -> Result<UpdateMeEffect, AppError> {
     // Reject deleted accounts
     if user.deleted_at.is_some() {
-        return Err(AppError::Unauthorized("Account is deactivated".to_string()));
+        return Err(AppError::Unauthorized("Account is inactive".to_string()));
     }
 
     let new_name = req.full_name.unwrap_or_else(|| user.full_name.clone());

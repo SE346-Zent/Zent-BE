@@ -74,10 +74,10 @@ pub async fn upload_closing_form_signature(
         }
     }
 
-    let file_bytes = uploaded_file_data.ok_or_else(|| AppError::BadRequest("File is missing".to_string()))?;
-    let latitude = device_latitude.ok_or_else(|| AppError::BadRequest("Latitude is missing".to_string()))?;
-    let longitude = device_longitude.ok_or_else(|| AppError::BadRequest("Longitude is missing".to_string()))?;
-    let internet_time = device_internet_time.ok_or_else(|| AppError::BadRequest("internet_time is missing".to_string()))?;
+    let file_bytes = uploaded_file_data.ok_or_else(|| AppError::BadRequest("Please select a file to upload".to_string()))?;
+    let latitude = device_latitude.ok_or_else(|| AppError::BadRequest("Location latitude is required".to_string()))?;
+    let longitude = device_longitude.ok_or_else(|| AppError::BadRequest("Location longitude is required".to_string()))?;
+    let internet_time = device_internet_time.ok_or_else(|| AppError::BadRequest("Device internet time is required".to_string()))?;
 
     // Internet time drift check
     let allowed_drift_minutes: i64 = lookup_tables.policies
@@ -86,10 +86,9 @@ pub async fn upload_closing_form_signature(
         .unwrap_or(30);
     let drift_seconds = (chrono::Utc::now().timestamp() - internet_time).abs();
     if drift_seconds > allowed_drift_minutes * 60 {
-        return Err(AppError::BadRequest(format!(
-            "Device time is too far from server time ({} seconds drift, max {} minutes allowed). Please sync your device clock and try again.",
-            drift_seconds, allowed_drift_minutes
-        )));
+        return Err(AppError::BadRequest(
+            "Device time is out of sync with server. Please check your device clock and try again".to_string()
+        ));
     }
 
     let work_order_record = work_orders::Entity::find_by_id(work_order_id)
@@ -112,7 +111,7 @@ pub async fn upload_closing_form_signature(
     );
 
     if !is_within_site {
-        return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
+        return Err(AppError::Forbidden("You are outside the allowed work area".to_string()));
     }
 
     let file_extension = original_file_name.split('.').next_back().unwrap_or("png");

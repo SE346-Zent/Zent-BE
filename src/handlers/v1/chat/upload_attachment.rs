@@ -50,17 +50,17 @@ pub async fn upload_attachment(
             }
             "room_id" => {
                 let val = field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
-                room_id = Some(Uuid::parse_str(&val).map_err(|_| AppError::BadRequest("Invalid room_id".to_string()))?);
+                room_id = Some(Uuid::parse_str(&val).map_err(|_| AppError::BadRequest("Invalid room ID".to_string()))?);
             }
             _ => {}
         }
     }
 
     let file_data = file_data
-        .ok_or_else(|| AppError::BadRequest("File is missing".to_string()))?;
+        .ok_or_else(|| AppError::BadRequest("Please select a file to upload".to_string()))?;
 
     let room_id = room_id
-        .ok_or_else(|| AppError::BadRequest("room_id is required".to_string()))?;
+        .ok_or_else(|| AppError::BadRequest("Room ID is required".to_string()))?;
 
     let extension = file_name.split('.').last().unwrap_or("jpg");
     let object_name = format!(

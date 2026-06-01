@@ -46,7 +46,7 @@ pub async fn decide_start(
     );
 
     if !is_verified {
-        return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
+        return Err(AppError::Forbidden("You are outside the allowed work area".to_string()));
     }
 
     let current_timestamp = Utc::now();

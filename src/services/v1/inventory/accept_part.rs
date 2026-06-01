@@ -30,7 +30,7 @@ pub fn decide_accept_part(
     current_timestamp: chrono::DateTime<chrono::Utc>,
 ) -> Result<AcceptPartEffect, AppError> {
     if current_form_status.to_lowercase() != "pending" {
-        return Err(AppError::BadRequest(format!("Cannot accept part with status '{}'; must be 'pending'", current_form_status)));
+        return Err(AppError::BadRequest("Only pending parts can be accepted".to_string()));
     }
     Ok(AcceptPartEffect {
         target_part_form_id,

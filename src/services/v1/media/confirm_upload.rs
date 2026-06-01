@@ -54,10 +54,9 @@ pub fn decide_confirm_upload(
     let current_server_time = Utc::now();
     let drift_seconds = (current_server_time.timestamp() - confirmation_payload.internet_time).abs();
     if drift_seconds > allowed_drift_minutes * 60 {
-        return Err(AppError::BadRequest(format!(
-            "Device time is too far from server time ({} seconds drift, max {} minutes allowed). Please sync your device clock and try again.",
-            drift_seconds, allowed_drift_minutes
-        )));
+        return Err(AppError::BadRequest(
+            "Device time is out of sync with server. Please check your device clock and try again".to_string()
+        ));
     }
 
     // 3. Geofencing Check
@@ -74,7 +73,7 @@ pub fn decide_confirm_upload(
     );
 
     if !is_within_site {
-        return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
+        return Err(AppError::Forbidden("You are outside the allowed work area".to_string()));
     }
 
     // 4. Prepare Side-Effects

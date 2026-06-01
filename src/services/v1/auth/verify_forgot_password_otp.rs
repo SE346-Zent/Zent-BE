@@ -38,9 +38,9 @@ pub fn decide_verify_forgot_password_otp(
                 token_ttl_seconds: 900,
             })
         }
-        -1 => Err(AppError::BadRequest("OTP expired or invalid".to_string())),
-        -2 => Err(AppError::BadRequest("Invalid OTP".to_string())),
-        -3 => Err(AppError::Forbidden("Too many attempts".to_string())),
+        -1 => Err(AppError::BadRequest("OTP has expired".to_string())),
+        -2 => Err(AppError::BadRequest("Invalid OTP code".to_string())),
+        -3 => Err(AppError::Forbidden("Too many attempts. Please request a new OTP".to_string())),
         _ => Err(AppError::Internal(anyhow::anyhow!("Unexpected result: {}", lua_verification_result))),
     }
 }

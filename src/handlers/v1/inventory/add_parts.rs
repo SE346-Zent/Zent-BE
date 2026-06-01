@@ -86,15 +86,15 @@ pub async fn add_parts(
     }
 
     // Validate required fields
-    let part_number = part_number.ok_or_else(|| AppError::BadRequest("partNumber is required".to_string()))?;
-    let part_types_id = part_types_id.ok_or_else(|| AppError::BadRequest("partTypesId is required".to_string()))?;
-    let serial_number = serial_number.ok_or_else(|| AppError::BadRequest("serialNumber is required".to_string()))?;
+    let part_number = part_number.ok_or_else(|| AppError::BadRequest("Part number is required".to_string()))?;
+    let part_types_id = part_types_id.ok_or_else(|| AppError::BadRequest("Part type is required".to_string()))?;
+    let serial_number = serial_number.ok_or_else(|| AppError::BadRequest("Serial number is required".to_string()))?;
 
     if part_number.is_empty() {
-        return Err(AppError::BadRequest("partNumber cannot be empty".to_string()));
+        return Err(AppError::BadRequest("Part number cannot be empty".to_string()));
     }
     if serial_number.is_empty() {
-        return Err(AppError::BadRequest("serialNumber cannot be empty".to_string()));
+        return Err(AppError::BadRequest("Serial number cannot be empty".to_string()));
     }
     if photo_files.len() > 5 {
         return Err(AppError::BadRequest("Maximum 5 photos allowed".to_string()));

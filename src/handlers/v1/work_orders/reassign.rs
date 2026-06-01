@@ -43,8 +43,8 @@ pub async fn reassign(
     let admin_role_id = *luts.roles_by_name.get("Admin")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Admin role missing from lookup tables")))?;
     if auth.user.role_id == admin_role_id {
-        let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Admin has no province assigned".to_string()))?;
-        if p != &work_order.province { return Err(AppError::Forbidden("Admin province does not match work order province".to_string())); }
+        let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Admin profile is missing province assignment".to_string()))?;
+        if p != &work_order.province { return Err(AppError::Forbidden("You can only reassign work orders in your province".to_string())); }
     }
 
     // Remember the old technician for notifications

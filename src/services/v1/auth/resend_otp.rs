@@ -38,7 +38,7 @@ pub fn decide_resend_otp(
     };
 
     if user.account_status != pending_status_id {
-        return Err(AppError::BadRequest("Account is not pending".to_string()));
+        return Err(AppError::BadRequest("Account is not pending verification".to_string()));
     }
 
     let verification_code = otp::generate_6digit_otp();

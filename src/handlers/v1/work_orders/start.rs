@@ -32,7 +32,7 @@ pub async fn start(
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
     // Write-through: use the cache for individual work order instead of querying DB
     let wo = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
-    let in_prog_id = *luts.work_order_statuses_by_name.get("InProg").ok_or_else(|| AppError::Internal(anyhow::anyhow!("In Progress status not found")))?;
+    let in_prog_id = *luts.work_order_statuses_by_name.get("InProg").ok_or_else(|| AppError::Internal(anyhow::anyhow!("In Progress status missing from lookup tables")))?;
 
     let target_location = crate::utils::geocoding::geocode_address(
         &wo.address,

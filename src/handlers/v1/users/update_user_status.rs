@@ -32,7 +32,7 @@ pub async fn update_user_status_handler(
     let target_user = users::Entity::find_by_id(id)
         .one(db.as_ref())
         .await?
-        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+        .ok_or_else(|| AppError::NotFound("User account not found".to_string()))?;
 
     let effect = update_status::decide_can_update_status(current_user, target_user, payload)?;
 

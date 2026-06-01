@@ -53,20 +53,16 @@ pub async fn change_avatar(
     }
 
     let file_data = file_data
-        .ok_or_else(|| AppError::BadRequest("File is missing".to_string()))?;
+        .ok_or_else(|| AppError::BadRequest("Please select a file to upload".to_string()))?;
 
     // Validate content type
     if !ALLOWED_TYPES.contains(&content_type.as_str()) {
-        return Err(AppError::BadRequest(format!(
-            "Invalid file type '{}'. Allowed types: jpeg, png, webp", content_type
-        )));
+        return Err(AppError::BadRequest("Invalid file type. Allowed formats: JPEG, PNG, WebP".to_string()));
     }
 
     // Validate file size
     if file_data.len() > MAX_AVATAR_SIZE {
-        return Err(AppError::BadRequest(format!(
-            "File too large ({} bytes). Maximum allowed size is 5MB", file_data.len()
-        )));
+        return Err(AppError::BadRequest("File size exceeds the 5MB limit".to_string()));
     }
 
     // Generate object name: avatars/{user_id}/{timestamp}.{ext}

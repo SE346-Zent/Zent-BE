@@ -30,7 +30,7 @@ pub fn decide_reassign_work_order(
     // ── Precondition: must have an existing technician ─────────────
     if work_order.technician_id.is_none() {
         return Err(AppError::BadRequest(
-            "Work order has no technician assigned — use assign instead".into(),
+            "Work order has no technician assigned. Please assign a technician first".into(),
         ));
     }
 
@@ -51,9 +51,7 @@ pub fn decide_reassign_work_order(
     let hour = appointment_local.hour();
     if hour < workday_start || hour >= workday_end {
         return Err(AppError::BadRequest(format!(
-            "Appointment hour {:02}:{:02} is outside workday limits ({:02}:00 - {:02}:00)",
-            hour,
-            appointment_local.minute(),
+            "Appointment time is outside working hours ({:02}:00 - {:02}:00)",
             workday_start,
             workday_end
         )));
@@ -62,14 +60,14 @@ pub fn decide_reassign_work_order(
     // Ensure we don't reassign a completed work order
     if work_order.work_order_status_id == done_status_id {
         return Err(AppError::BadRequest(
-            "Cannot reassign a completed work order".into(),
+            "Cannot reassign a completed work order".to_string(),
         ));
     }
 
     // Don't reassign to the same technician
     if work_order.technician_id == Some(req.technician_id) {
         return Err(AppError::BadRequest(
-            "Work order is already assigned to this technician".into(),
+            "This work order is already assigned to the selected technician".into(),
         ));
     }
 
@@ -82,7 +80,7 @@ pub fn decide_reassign_work_order(
         }
         if other_wo.appointment == work_order.appointment {
             return Err(AppError::Conflict(
-                "Technician already has an appointment at this exact time".into(),
+                "Technician already has an appointment at this time".to_string(),
             ));
         }
     }

@@ -47,8 +47,8 @@ pub async fn refuse(
         }
     }
 
-    if reason.is_empty() { return Err(AppError::BadRequest("reason is required".to_string())); }
-    if photos_data.len() > 5 { return Err(AppError::BadRequest("A maximum of 5 photos are allowed".to_string())); }
+    if reason.is_empty() { return Err(AppError::BadRequest("Reason is required".to_string())); }
+    if photos_data.len() > 5 { return Err(AppError::BadRequest("Maximum 5 photos allowed".to_string())); }
 
     // Write-through: use the cache for individual work order instead of querying DB
     let wo = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;

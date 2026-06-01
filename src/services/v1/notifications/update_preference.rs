@@ -22,7 +22,7 @@ pub fn update_preference(
     permitted_category_ids: &[i32],
 ) -> Result<(), AppError> {
     if !permitted_category_ids.contains(&target_category_id) {
-        return Err(AppError::BadRequest(format!("Invalid notification category ID for your role: {}", target_category_id)));
+        return Err(AppError::BadRequest("This notification category is not available for your role".to_string()));
     }
 
     current_user_preferences.insert(target_category_id, is_os_delivery_enabled);

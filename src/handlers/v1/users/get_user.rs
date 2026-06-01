@@ -34,7 +34,7 @@ pub async fn get_user_handler(
     let target_user = users::Entity::find_by_id(id)
         .one(db.as_ref())
         .await?
-        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+        .ok_or_else(|| AppError::NotFound("User account not found".to_string()))?;
 
     let effect = get_user::decide_get_user(current_user, target_user.clone())?;
     let mut response_data = effect.response_data;
