@@ -19,6 +19,7 @@ pub mod change_appointment;
 pub mod reject_form_list;
 pub mod reject_form_detail;
 pub mod check_geofence;
+pub mod edit;
 
 pub use change_appointment::change_appointment;
 pub use rate::rate;
@@ -37,6 +38,7 @@ pub use cancel::cancel;
 pub use reject_form_list::reject_form_list;
 pub use reject_form_detail::reject_form_detail;
 pub use check_geofence::check_geofence;
+pub use edit::edit;
 
 // Re-export __path_* items for utoipa OpenApi derive
 pub use create::__path_create;
@@ -56,6 +58,7 @@ pub use change_appointment::__path_change_appointment;
 pub use reject_form_list::__path_reject_form_list;
 pub use reject_form_detail::__path_reject_form_detail;
 pub use check_geofence::__path_check_geofence;
+pub use edit::__path_edit;
 
 
 use axum::{Router, middleware};
@@ -212,6 +215,29 @@ pub(crate) async fn get_cached_work_order_model(
         }
     }
 
+    Ok(model)
+}
+
+/// Load a work order by its business-friendly `work_order_number` (e.g. `WO-AB12CD`).
+///
+/// `work_order_number` has a unique index in MySQL, so the DB lookup is O(log n) and
+/// we intentionally skip the cache here: customers typically reference a work order by
+/// its number a small number of times, and keeping the cache key aligned with the
+/// primary identifier (`id`) avoids a second cache-invalidation path.
+pub(crate) async fn get_work_order_by_number(
+    db: &DatabaseConnection,
+    work_order_number: &str,
+) -> Result<work_orders_ent::Model, AppError> {
+    let trimmed = work_order_number.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::BadRequest("Work order number is required".to_string()));
+    }
+    let model = work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::WorkOrderNumber.eq(trimmed))
+        .filter(work_orders_ent::Column::DeletedAt.is_null())
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
     Ok(model)
 }
 

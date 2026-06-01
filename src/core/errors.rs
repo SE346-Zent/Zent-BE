@@ -19,6 +19,10 @@ pub enum AppError {
     Conflict(String),
     /// 422 Unprocessable Entity: Request validation failed.
     ValidationError(String),
+    /// 422 Unprocessable Entity: The requested change is not allowed by a business rule
+    /// (e.g., the new product is not covered by an active warranty). The error message
+    /// is phrased so the front-end can surface it to the end user.
+    WarrantyError(String),
     /// 503 Service Unavailable: A required dependency (e.g., DB, MQ) is unavailable.
     ServiceUnavailable(String),
     /// 500 Internal Server Error: An unexpected error occurred.
@@ -34,6 +38,7 @@ impl IntoResponse for AppError {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             AppError::ValidationError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
+            AppError::WarrantyError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
             AppError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg),
             AppError::Internal(err) => {
                 tracing::error!(
@@ -68,6 +73,7 @@ impl std::fmt::Display for AppError {
             AppError::NotFound(msg) => write!(f, "Not Found: {}", msg),
             AppError::Conflict(msg) => write!(f, "Conflict: {}", msg),
             AppError::ValidationError(msg) => write!(f, "Validation Error: {}", msg),
+            AppError::WarrantyError(msg) => write!(f, "Warranty Error: {}", msg),
             AppError::ServiceUnavailable(msg) => write!(f, "Service Unavailable: {}", msg),
             AppError::Internal(err) => write!(f, "Internal Error: {:?}", err),
         }
