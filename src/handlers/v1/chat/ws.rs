@@ -32,6 +32,11 @@ pub async fn ws_handler(
 }
 
 async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
+    // Local connection ID used for tracing the whole connection lifetime.
+    // Distinct from `user_conn_id` (assigned by the manager) so we can also
+    // trace pre-auth activity.
+    let trace_id = Uuid::new_v4();
+
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<ConnectionCommand>();
 
@@ -42,11 +47,28 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
             msg = ws_receiver.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
+                        if text.len() > MAX_WS_FRAME_BYTES {
+                            tracing::warn!(
+                                "[trace {}] WebSocket auth FAILED from {} — first frame is {} bytes, exceeds limit of {} bytes (code 4013)",
+                                trace_id, addr, text.len(), MAX_WS_FRAME_BYTES
+                            );
+                            let _ = ws_sender.send(Message::Text(
+                                serde_json::to_string(&WsOutgoing::Error {
+                                    code: 4013,
+                                    message: "Frame too large".to_string(),
+                                }).unwrap_or_default().into(),
+                            )).await;
+                            return;
+                        }
                         match serde_json::from_str::<WsIncoming>(&text) {
                             Ok(WsIncoming::Auth { token }) => {
                                 match validate_ws_token(&token, &state.decoding_key) {
                                     Ok(uid) => break uid,
-                                    Err(_) => {
+                                    Err(reason) => {
+                                        tracing::warn!(
+                                            "[trace {}] WebSocket auth FAILED from {} — reason: {} (code 4001)",
+                                            trace_id, addr, reason
+                                        );
                                         let _ = ws_sender.send(Message::Text(
                                             serde_json::to_string(&WsOutgoing::Error {
                                                 code: 4001,
@@ -57,7 +79,11 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                                     }
                                 }
                             }
-                            _ => {
+                            Ok(other) => {
+                                tracing::warn!(
+                                    "[trace {}] WebSocket auth FAILED from {} — first frame was not AUTH, got: {:?} (code 4000)",
+                                    trace_id, addr, other
+                                );
                                 let _ = ws_sender.send(Message::Text(
                                     serde_json::to_string(&WsOutgoing::Error {
                                         code: 4000,
@@ -66,14 +92,60 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                                 )).await;
                                 return;
                             }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "[trace {}] WebSocket auth FAILED from {} — first frame is not valid JSON: {} (code 4002)",
+                                    trace_id, addr, e
+                                );
+                                let _ = ws_sender.send(Message::Text(
+                                    serde_json::to_string(&WsOutgoing::Error {
+                                        code: 4002,
+                                        message: "Invalid JSON in first frame".to_string(),
+                                    }).unwrap_or_default().into(),
+                                )).await;
+                                return;
+                            }
                         }
                     }
-                    Some(Ok(_)) => continue,
-                    _ => return,
+                    Some(Ok(Message::Close(close_frame))) => {
+                        tracing::info!(
+                            "[trace {}] WebSocket client at {} closed connection before AUTH (close frame: {:?})",
+                            trace_id, addr, close_frame
+                        );
+                        return;
+                    }
+                    Some(Ok(other)) => {
+                        // Non-text, non-Close frames (Binary, Ping, Pong) before AUTH —
+                        // log at debug level since clients may probe with Pings early.
+                        tracing::debug!(
+                            "[trace {}] WebSocket from {} received non-AUTH frame during auth (frame: {:?}), waiting for AUTH",
+                            trace_id, addr, other
+                        );
+                        continue;
+                    }
+                    Some(Err(e)) => {
+                        tracing::warn!(
+                            "[trace {}] WebSocket transport ERROR during auth from {}: {} — connection will be closed",
+                            trace_id, addr, e
+                        );
+                        return;
+                    }
+                    None => {
+                        tracing::warn!(
+                            "[trace {}] WebSocket client at {} DISCONNECTED before sending AUTH frame (stream ended) — possible client bug, network drop, or proxy timeout",
+                            trace_id, addr
+                        );
+                        return;
+                    }
                 }
             }
             _ = tokio::time::sleep_until(auth_deadline) => {
-                tracing::warn!("WebSocket auth timed out from {}", addr);
+                tracing::warn!(
+                    "[trace {}] WebSocket auth TIMEOUT from {} — client connected but never sent AUTH within 30s. \
+                     This usually means: (1) client bug, (2) proxy/NAT keeping the TCP socket open, \
+                     or (3) client did not receive the WebSocket upgrade response. Closing with code 4008.",
+                    trace_id, addr
+                );
                 let _ = ws_sender.send(Message::Text(
                     serde_json::to_string(&WsOutgoing::Error {
                         code: 4008,
@@ -117,21 +189,35 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     tokio::spawn(async move { ws_expiry::run_expiry_enforcer(ex_user, ex_mgr, ex_tx, ttl, deadline_rx, user_conn_id, ex_shutdown).await });
 
     // Writer task
+    let writer_user_id = user_id;
+    let writer_conn_id = user_conn_id;
     let mut writer_sender = ws_sender;
     tokio::spawn(async move {
         while let Some(cmd) = cmd_rx.recv().await {
             match cmd {
                 ConnectionCommand::Send(text) => {
                     if writer_sender.send(Message::Text(text.into())).await.is_err() {
+                        tracing::warn!(
+                            "[conn {}] Writer task: failed to send text message to user {} — client socket is broken, exiting writer loop",
+                            writer_conn_id, writer_user_id
+                        );
                         break;
                     }
                 }
                 ConnectionCommand::Ping(data) => {
                     if writer_sender.send(Message::Ping(data.into())).await.is_err() {
+                        tracing::info!(
+                            "[conn {}] Writer task: failed to send Ping to user {} — socket broken, exiting writer loop",
+                            writer_conn_id, writer_user_id
+                        );
                         break;
                     }
                 }
                 ConnectionCommand::Close { code, reason } => {
+                    tracing::info!(
+                        "[conn {}] Writer task: sending Close frame (code={}, reason={:?}) to user {}",
+                        writer_conn_id, code, reason, writer_user_id
+                    );
                     let _ = writer_sender.send(Message::Close(Some(axum::extract::ws::CloseFrame {
                         code,
                         reason: reason.into(),
@@ -140,9 +226,14 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                 }
             }
         }
+        tracing::debug!("[conn {}] Writer task exited for user {}", writer_conn_id, writer_user_id);
     });
 
-    // Main read loop
+    // Main read loop. `had_explicit_break` distinguishes between
+    // a loop that exited via `break` (Close frame or transport error)
+    // versus a loop that ended because `next()` returned `None`
+    // (client disconnected without sending a Close frame).
+    let mut had_explicit_break = false;
     while let Some(msg) = ws_receiver.next().await {
         match msg {
             Ok(Message::Text(text)) => {
@@ -189,13 +280,37 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                 // Protocol-level Pong from client — increment heartbeat counter
                 pong_counter.fetch_add(1, Ordering::Release);
             }
-            Ok(Message::Close(_)) => break,
+            Ok(Message::Close(close_frame)) => {
+                tracing::info!(
+                    "[conn {}] WebSocket closed by client for user {} — close frame: {:?}",
+                    user_conn_id, user_id, close_frame
+                );
+                had_explicit_break = true;
+                break;
+            }
             Err(e) => {
-                tracing::warn!("WebSocket error for user {}: {}", user_id, e);
+                tracing::warn!(
+                    "[conn {}] WebSocket TRANSPORT ERROR for user {}: {} — dropping connection",
+                    user_conn_id, user_id, e
+                );
+                had_explicit_break = true;
                 break;
             }
             _ => {}
         }
+    }
+
+    // Detect whether the read loop exited because the client sent a Close frame,
+    // a transport error happened, or the client just disappeared (no Close frame).
+    // We infer "no Close frame" by checking the last entry into the loop after
+    // the explicit `break`s above — if we get here, the stream ended.
+    if !had_explicit_break {
+        tracing::warn!(
+            "[conn {}] WebSocket stream ended WITHOUT a Close frame for user {} — \
+             client likely disconnected abruptly (network drop, app killed, NAT timeout, \
+             or proxy closed the connection). No graceful close handshake received.",
+            user_conn_id, user_id
+        );
     }
 
     // Cleanup — stop spawned tasks and conditionally unregister.
@@ -207,12 +322,30 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
         handle_leaving(&state, user_id).await;
     }
     ws_manager.unregister(&user_id, user_conn_id).await;
-    tracing::info!("WebSocket disconnected for user {} (conn {})", user_id, user_conn_id);
+    tracing::info!(
+        "[conn {}] WebSocket disconnected for user {} (cleanup complete, viewing_state_cleared={})",
+        user_conn_id, user_id, still_us
+    );
 }
 
-fn validate_ws_token(token: &str, decoding_key: &DecodingKey) -> Result<Uuid, ()> {
-    let data = decode::<Claims>(token, decoding_key, &Validation::default()).map_err(|_| ())?;
-    Uuid::parse_str(&data.claims.sub).map_err(|_| ())
+fn validate_ws_token(token: &str, decoding_key: &DecodingKey) -> Result<Uuid, &'static str> {
+    use jsonwebtoken::errors::ErrorKind;
+    let data = decode::<Claims>(token, decoding_key, &Validation::default())
+        .map_err(|e| match e.kind() {
+            ErrorKind::ExpiredSignature => "token expired",
+            ErrorKind::InvalidSignature => "invalid signature",
+            ErrorKind::InvalidToken => "malformed token",
+            ErrorKind::InvalidSubject => "invalid 'sub' claim",
+            ErrorKind::InvalidIssuer => "invalid 'iss' claim",
+            ErrorKind::InvalidAudience => "invalid 'aud' claim",
+            ErrorKind::ImmatureSignature => "token not yet valid (nbf)",
+            ErrorKind::MissingRequiredClaim(_) => "missing required claim",
+            ErrorKind::Base64(_) => "base64 decode error in token",
+            ErrorKind::Json(_) => "JSON error in token payload",
+            ErrorKind::Utf8(_) => "UTF-8 error in token payload",
+            _ => "invalid token",
+        })?;
+    Uuid::parse_str(&data.claims.sub).map_err(|_| "subject 'sub' is not a valid UUID")
 }
 
 /// Mark user as viewing a room: set chat:viewing:{uid} and reset unread.

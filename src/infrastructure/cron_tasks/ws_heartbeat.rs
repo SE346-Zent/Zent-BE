@@ -38,6 +38,10 @@ pub async fn run_heartbeat(
 
         // Send protocol-level Ping (Postman auto-responds with Pong)
         if tx.send(ConnectionCommand::Ping(vec![])).is_err() {
+            tracing::info!(
+                "[conn {}] Heartbeat: write channel closed for user {} — connection already gone, stopping heartbeat",
+                conn_id, user_id
+            );
             break;
         }
 

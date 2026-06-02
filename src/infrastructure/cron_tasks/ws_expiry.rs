@@ -48,12 +48,20 @@ pub async fn run_expiry_enforcer(
         tokio::select! {
             _ = tokio::time::sleep_until(deadline) => {
                 if manager.is_connected(&user_id).await {
-                    tracing::info!("Token expired for user {}, closing WebSocket", user_id);
+                    tracing::info!(
+                        "[conn {}] Token EXPIRED for user {} (TTL {}s reached without RefreshToken) — closing WebSocket with code 4001",
+                        conn_id, user_id, ttl_seconds
+                    );
                     manager.unregister(&user_id, conn_id).await;
                     let _ = tx.send(ConnectionCommand::Close {
                         code: 4001,
                         reason: "Token expired".to_string(),
                     });
+                } else {
+                    tracing::debug!(
+                        "[conn {}] Token expiry fired for user {} but user already disconnected — nothing to do",
+                        conn_id, user_id
+                    );
                 }
                 break;
             }

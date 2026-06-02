@@ -127,6 +127,10 @@ impl ConnectionManager {
         let conn_id = self.next_conn_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let mut conns = self.connections.write().await;
         if let Some(old_entry) = conns.remove(&user_id) {
+            tracing::info!(
+                "[user {}] WebSocket REPLACING old connection (conn {}) with new connection (conn {}) — closing old socket with code 4002",
+                user_id, old_entry.conn_id, conn_id
+            );
             let _ = old_entry.tx.send(ConnectionCommand::Close {
                 code: 4002,
                 reason: "New connection opened".to_string(),
