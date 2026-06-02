@@ -15,6 +15,10 @@ pub struct EditWorkOrderRequest {
     /// customer and be covered by an active warranty.
     pub product_id: Option<Uuid>,
 
+    /// New service location: Province (e.g. "HCM", "HN").
+    #[validate(length(min = 1, max = 100))]
+    pub province: Option<String>,
+
     /// New service location: Ward.
     #[validate(length(min = 1, max = 255))]
     pub ward: Option<String>,

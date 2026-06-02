@@ -122,6 +122,9 @@ pub fn decide_edit_work_order(
     if let Some(new_product) = ctx.new_product_id {
         active_wo.product_id = Set(new_product);
     }
+    if let Some(new_province) = payload.province {
+        active_wo.province = Set(new_province);
+    }
     if let Some(new_ward) = payload.ward {
         active_wo.ward = Set(new_ward);
     }
@@ -213,6 +216,7 @@ mod tests {
         let ctx = empty_ctx(&wo, None, None);
         let payload = EditWorkOrderRequest {
             product_id: None,
+            province: None,
             ward: Some("Ward 5".to_string()),
             address: None,
             building: None,
@@ -234,6 +238,7 @@ mod tests {
         let ctx = empty_ctx(&wo, None, None);
         let payload = EditWorkOrderRequest {
             product_id: None,
+            province: None,
             ward: Some("Ward 2".to_string()),
             address: None,
             building: None,
@@ -253,6 +258,7 @@ mod tests {
         let ctx = empty_ctx(&wo, None, None);
         let payload = EditWorkOrderRequest {
             product_id: None,
+            province: None,
             ward: Some("Ward 2".to_string()),
             address: None,
             building: None,
@@ -273,6 +279,7 @@ mod tests {
         let ctx = empty_ctx(&wo, None, None);
         let payload = EditWorkOrderRequest {
             product_id: None,
+            province: None,
             ward: Some("Ward 2".to_string()),
             address: None,
             building: None,
@@ -293,6 +300,7 @@ mod tests {
         let ctx = empty_ctx(&wo, Some(new_product), None);
         let payload = EditWorkOrderRequest {
             product_id: Some(new_product),
+            province: None,
             ward: None,
             address: None,
             building: None,
@@ -315,6 +323,7 @@ mod tests {
         let ctx = empty_ctx(&wo, Some(new_product), Some(w));
         let payload = EditWorkOrderRequest {
             product_id: Some(new_product),
+            province: None,
             ward: None,
             address: None,
             building: None,
@@ -337,6 +346,7 @@ mod tests {
         let ctx = empty_ctx(&wo, Some(new_product), Some(w));
         let payload = EditWorkOrderRequest {
             product_id: Some(new_product),
+            province: None,
             ward: None,
             address: None,
             building: None,
@@ -358,6 +368,7 @@ mod tests {
         let ctx = empty_ctx(&wo, Some(new_product), Some(w));
         let payload = EditWorkOrderRequest {
             product_id: Some(new_product),
+            province: None,
             ward: Some("Ward 9".to_string()),
             address: Some("999 New Street".to_string()),
             building: Some("Tower B".to_string()),
@@ -380,6 +391,7 @@ mod tests {
         let ctx = empty_ctx(&wo, Some(wo.product_id), None);
         let payload = EditWorkOrderRequest {
             product_id: Some(wo.product_id),
+            province: None,
             ward: Some("Ward 3".to_string()),
             address: None,
             building: None,
@@ -396,6 +408,7 @@ mod tests {
         let ctx = empty_ctx(&wo, None, None);
         let payload = EditWorkOrderRequest {
             product_id: None,
+            province: None,
             ward: None,
             address: None,
             building: None,
@@ -415,6 +428,7 @@ mod tests {
         let ctx = empty_ctx(&wo, None, None);
         let payload = EditWorkOrderRequest {
             product_id: None,
+            province: None,
             ward: None,
             address: None,
             building: None,
@@ -435,6 +449,7 @@ mod tests {
         let future = (Utc::now() + Duration::days(30)).format("%Y-%m-%dT%H:%M:%SZ").to_string();
         let payload = EditWorkOrderRequest {
             product_id: None,
+            province: None,
             ward: None,
             address: None,
             building: None,
@@ -453,6 +468,7 @@ mod tests {
         let ctx = empty_ctx(&wo, None, None);
         let payload = EditWorkOrderRequest {
             product_id: None,
+            province: None,
             ward: Some("Ward 10".to_string()),
             address: None,
             building: None,
