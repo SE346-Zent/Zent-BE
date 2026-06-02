@@ -30,7 +30,8 @@ pub async fn decide_start(
 ) -> Result<StartWorkOrderEffect, AppError> {
     if work_order.technician_id != Some(technician_id) {
         tracing::warn!(
-            reason = "NotAssignedTechnician",
+            error.message = "NotAssignedTechnician",
+            error.details = "",
             work_order_id = %work_order.id,
             technician_id = %technician_id,
             assigned_technician_id = ?work_order.technician_id,
@@ -54,7 +55,8 @@ pub async fn decide_start(
 
     if !is_verified {
         tracing::warn!(
-            reason = "GeofencingViolation",
+            error.message = "GeofencingViolation",
+            error.details = "",
             work_order_id = %work_order.id,
             technician_id = %technician_id,
             technician_lat = %start_payload.latitude,

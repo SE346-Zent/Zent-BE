@@ -54,7 +54,8 @@ pub fn decide_confirm_update(
     // 1. Security Check
     if work_order_record.technician_id != Some(requesting_technician_id) {
         tracing::warn!(
-            reason = "TechnicianNotAssignedToWorkOrder",
+            error.message = "TechnicianNotAssignedToWorkOrder",
+            error.details = "",
             work_order_id = %work_order_record.id,
             assigned_technician_id = ?work_order_record.technician_id,
             requesting_technician_id = %requesting_technician_id,
@@ -72,7 +73,8 @@ pub fn decide_confirm_update(
     let drift_seconds = (current_server_time.timestamp() - update_payload.internet_time).abs();
     if drift_seconds > allowed_drift_minutes * 60 {
         tracing::warn!(
-            reason = "DeviceTimeDriftTooLarge",
+            error.message = "DeviceTimeDriftTooLarge",
+            error.details = "",
             work_order_id = %work_order_record.id,
             requesting_technician_id = %requesting_technician_id,
             drift_seconds = %drift_seconds,
@@ -100,7 +102,8 @@ pub fn decide_confirm_update(
 
     if !is_within_site {
         tracing::warn!(
-            reason = "GeofencingViolation",
+            error.message = "GeofencingViolation",
+            error.details = "",
             work_order_id = %work_order_record.id,
             requesting_technician_id = %requesting_technician_id,
             latitude = %update_payload.latitude,

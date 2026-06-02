@@ -24,7 +24,8 @@ pub fn update_preference(
     if !permitted_category_ids.contains(&target_category_id) {
         tracing::warn!(
             target_category_id = %target_category_id,
-            reason = "CategoryNotPermitted",
+            error.message = "CategoryNotPermitted",
+            error.details = "",
             message = "Invalid notification category ID for your role"
         );
         return Err(AppError::BadRequest(format!("Invalid notification category ID for your role: {}", target_category_id)));

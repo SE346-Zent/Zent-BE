@@ -51,7 +51,7 @@ pub fn decide_verify_otp(
                 }
                 None => {
                     tracing::warn!(
-                        reason = "UserNotFound",
+                        error.message = "UserNotFound", error.details = "",
                         "Registration OTP verification failed: user not found even though OTP script returned success"
                     );
                     Err(AppError::NotFound("User not found".to_string()))
@@ -61,14 +61,14 @@ pub fn decide_verify_otp(
         -1 => {
             if let Some(user) = user_record {
                 tracing::warn!(
-                    reason = "OtpExpiredOrInvalid",
+                    error.message = "OtpExpiredOrInvalid", error.details = "",
                     user_id = %user.id,
                     email = %user.email,
                     "Registration OTP verification failed: OTP expired or invalid"
                 );
             } else {
                 tracing::warn!(
-                    reason = "OtpExpiredOrInvalid",
+                    error.message = "OtpExpiredOrInvalid", error.details = "",
                     "Registration OTP verification failed: OTP expired or invalid"
                 );
             }
@@ -77,14 +77,14 @@ pub fn decide_verify_otp(
         -2 => {
             if let Some(user) = user_record {
                 tracing::warn!(
-                    reason = "InvalidOtp",
+                    error.message = "InvalidOtp", error.details = "",
                     user_id = %user.id,
                     email = %user.email,
                     "Registration OTP verification failed: invalid OTP"
                 );
             } else {
                 tracing::warn!(
-                    reason = "InvalidOtp",
+                    error.message = "InvalidOtp", error.details = "",
                     "Registration OTP verification failed: invalid OTP"
                 );
             }
@@ -93,14 +93,14 @@ pub fn decide_verify_otp(
         -3 => {
             if let Some(user) = user_record {
                 tracing::warn!(
-                    reason = "TooManyOtpAttempts",
+                    error.message = "TooManyOtpAttempts", error.details = "",
                     user_id = %user.id,
                     email = %user.email,
                     "Registration OTP verification failed: too many attempts"
                 );
             } else {
                 tracing::warn!(
-                    reason = "TooManyOtpAttempts",
+                    error.message = "TooManyOtpAttempts", error.details = "",
                     "Registration OTP verification failed: too many attempts"
                 );
             }
@@ -109,7 +109,7 @@ pub fn decide_verify_otp(
         _ => {
             if let Some(user) = user_record {
                 tracing::error!(
-                    reason = "UnexpectedOtpVerificationResult",
+                    error.message = "UnexpectedOtpVerificationResult", error.details = "",
                     user_id = %user.id,
                     email = %user.email,
                     result = lua_verification_result,
@@ -117,7 +117,7 @@ pub fn decide_verify_otp(
                 );
             } else {
                 tracing::error!(
-                    reason = "UnexpectedOtpVerificationResult",
+                    error.message = "UnexpectedOtpVerificationResult", error.details = "",
                     result = lua_verification_result,
                     "Registration OTP verification failed: unexpected Lua verification result"
                 );

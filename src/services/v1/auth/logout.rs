@@ -25,7 +25,7 @@ pub fn decide_logout(
     // 1. Verify session belongs to user
     if session_record.user_id != requesting_user_id {
         tracing::warn!(
-            reason = "SessionOwnershipMismatch",
+            error.message = "SessionOwnershipMismatch", error.details = "",
             session_id = %session_record.id,
             session_owner_id = %session_record.user_id,
             requesting_user_id = %requesting_user_id,
@@ -39,7 +39,7 @@ pub fn decide_logout(
     // 2. Check if already revoked
     if session_record.revoked_at.is_some() {
         tracing::warn!(
-            reason = "SessionAlreadyRevoked",
+            error.message = "SessionAlreadyRevoked", error.details = "",
             session_id = %session_record.id,
             user_id = %requesting_user_id,
             "Logout failed: session is already revoked"

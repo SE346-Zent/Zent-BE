@@ -35,7 +35,7 @@ pub fn decide_deny_part(
     let trimmed_reason = denial_reason.trim();
     if trimmed_reason.len() < 10 {
         tracing::warn!(
-            reason = "DenialReasonTooShort",
+            error.message = "DenialReasonTooShort", error.details = "",
             target_part_form_id = %target_part_form_id,
             denying_admin_id = %denying_admin_id,
             reason_length = trimmed_reason.len(),
@@ -45,7 +45,7 @@ pub fn decide_deny_part(
     }
     if trimmed_reason.len() > 2000 {
         tracing::warn!(
-            reason = "DenialReasonTooLong",
+            error.message = "DenialReasonTooLong", error.details = "",
             target_part_form_id = %target_part_form_id,
             denying_admin_id = %denying_admin_id,
             reason_length = trimmed_reason.len(),
@@ -55,7 +55,7 @@ pub fn decide_deny_part(
     }
     if current_form_status.to_lowercase() != "pending" {
         tracing::warn!(
-            reason = "InvalidPartFormStatus",
+            error.message = "InvalidPartFormStatus", error.details = "",
             target_part_form_id = %target_part_form_id,
             denying_admin_id = %denying_admin_id,
             current_form_status = %current_form_status,

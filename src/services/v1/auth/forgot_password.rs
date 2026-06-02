@@ -44,7 +44,8 @@ pub fn decide_forgot_password(
         }
         None => {
             tracing::warn!(
-                reason = "UserNotFound",
+                error.message = "UserNotFound",
+                error.details = "",
                 email = %forgot_password_payload.email,
                 "Forgot password requested for non-existent email"
             );

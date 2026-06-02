@@ -33,7 +33,8 @@ pub fn decide_change_appointment(
         && work_order.work_order_status_id != assigned_status_id
     {
         tracing::warn!(
-            reason = "InvalidWorkOrderStatusForAppointmentChange",
+            error.message = "InvalidWorkOrderStatusForAppointmentChange",
+            error.details = "",
             work_order_id = %work_order.id,
             status_id = %work_order.work_order_status_id,
             message = "Appointment can only be changed when the work order is Pending or Assigned"
@@ -49,7 +50,8 @@ pub fn decide_change_appointment(
     let workday_start: u32 = match policies.get("workday_start") {
         None => {
             tracing::error!(
-                reason = "MissingWorkdayStartPolicy",
+                error.message = "MissingWorkdayStartPolicy",
+                error.details = "",
                 work_order_id = %work_order.id,
                 message = "Missing workday_start policy"
             );
@@ -58,7 +60,8 @@ pub fn decide_change_appointment(
         Some(val) => match val.parse() {
             Err(_) => {
                 tracing::error!(
-                    reason = "InvalidWorkdayStartPolicy",
+                    error.message = "InvalidWorkdayStartPolicy",
+                    error.details = "",
                     work_order_id = %work_order.id,
                     message = "Invalid workday_start policy"
                 );
@@ -71,7 +74,8 @@ pub fn decide_change_appointment(
     let workday_end: u32 = match policies.get("workday_end") {
         None => {
             tracing::error!(
-                reason = "MissingWorkdayEndPolicy",
+                error.message = "MissingWorkdayEndPolicy",
+                error.details = "",
                 work_order_id = %work_order.id,
                 message = "Missing workday_end policy"
             );
@@ -80,7 +84,8 @@ pub fn decide_change_appointment(
         Some(val) => match val.parse() {
             Err(_) => {
                 tracing::error!(
-                    reason = "InvalidWorkdayEndPolicy",
+                    error.message = "InvalidWorkdayEndPolicy",
+                    error.details = "",
                     work_order_id = %work_order.id,
                     message = "Invalid workday_end policy"
                 );
@@ -94,7 +99,8 @@ pub fn decide_change_appointment(
     let hour = appointment_local.hour();
     if hour < workday_start || hour >= workday_end {
         tracing::warn!(
-            reason = "AppointmentOutsideWorkdayLimits",
+            error.message = "AppointmentOutsideWorkdayLimits",
+            error.details = "",
             work_order_id = %work_order.id,
             appointment = %new_appointment,
             hour = %hour,

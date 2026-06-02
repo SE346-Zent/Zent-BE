@@ -64,7 +64,7 @@ pub fn get_part_detail(
 ) -> Result<PartDetailResponse, AppError> {
     if !can_user_see_part_detail(requesting_role_name, requesting_user_id, part_relation_data) {
         tracing::warn!(
-            reason = "NotAuthorized",
+            error.message = "NotAuthorized", error.details = "",
             part_id = %part_relation_data.part_record.id,
             requesting_role_name = %requesting_role_name,
             requesting_user_id = %requesting_user_id,

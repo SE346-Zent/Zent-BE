@@ -33,7 +33,8 @@ pub fn decide_list_users(
             tracing::warn!(
                 current_user_id = %current_user_id,
                 role_id = %role_id,
-                reason = "NotAuthorized",
+                error.message = "NotAuthorized",
+                error.details = "",
                 message = "Only administrators can list users"
             );
             return Err(AppError::Forbidden("Only administrators can list users".to_string()));

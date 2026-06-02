@@ -50,7 +50,7 @@ pub fn decide_register_product(
     let identified_model_code = catalog_model_code
         .ok_or_else(|| {
             tracing::warn!(
-                reason = "SerialNumberNotFound",
+                error.message = "SerialNumberNotFound", error.details = "",
                 serial_number = %registration_payload.serial_number,
                 customer_id = %requesting_user_id,
                 message = "Serial number not found in the product catalog"
@@ -60,7 +60,8 @@ pub fn decide_register_product(
     let identified_model_name = catalog_model_name
         .ok_or_else(|| {
             tracing::warn!(
-                reason = "ModelNameNotFound",
+                error.message = "ModelNameNotFound",
+                error.details = "",
                 serial_number = %registration_payload.serial_number,
                 customer_id = %requesting_user_id,
                 message = "Model name not found for serial number"

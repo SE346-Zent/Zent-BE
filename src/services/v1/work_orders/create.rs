@@ -42,7 +42,8 @@ pub fn decide_create_work_order(
     // 1. Location Policy Validation
     if creation_payload.city != "HCM" && creation_payload.city != "HN" {
         tracing::warn!(
-            reason = "UnsupportedCity",
+            error.message = "UnsupportedCity",
+            error.details = "",
             city = %creation_payload.city,
             customer_id = %requesting_customer_id,
             message = "Only HCM and HN are supported at this time"
@@ -56,7 +57,8 @@ pub fn decide_create_work_order(
     let workday_start: u32 = match policies.get("workday_start") {
         None => {
             tracing::error!(
-                reason = "MissingWorkdayStartPolicy",
+                error.message = "MissingWorkdayStartPolicy",
+                error.details = "",
                 customer_id = %requesting_customer_id,
                 message = "Missing workday_start policy"
             );
@@ -65,7 +67,8 @@ pub fn decide_create_work_order(
         Some(val) => match val.parse() {
             Err(_) => {
                 tracing::error!(
-                    reason = "InvalidWorkdayStartPolicy",
+                    error.message = "InvalidWorkdayStartPolicy",
+                    error.details = "",
                     customer_id = %requesting_customer_id,
                     message = "Invalid workday_start policy"
                 );
@@ -78,7 +81,8 @@ pub fn decide_create_work_order(
     let workday_end: u32 = match policies.get("workday_end") {
         None => {
             tracing::error!(
-                reason = "MissingWorkdayEndPolicy",
+                error.message = "MissingWorkdayEndPolicy",
+                error.details = "",
                 customer_id = %requesting_customer_id,
                 message = "Missing workday_end policy"
             );
@@ -87,7 +91,8 @@ pub fn decide_create_work_order(
         Some(val) => match val.parse() {
             Err(_) => {
                 tracing::error!(
-                    reason = "InvalidWorkdayEndPolicy",
+                    error.message = "InvalidWorkdayEndPolicy",
+                    error.details = "",
                     customer_id = %requesting_customer_id,
                     message = "Invalid workday_end policy"
                 );
@@ -101,7 +106,8 @@ pub fn decide_create_work_order(
     let hour = appointment_local.hour();
     if hour < workday_start || hour >= workday_end {
         tracing::warn!(
-            reason = "AppointmentOutsideWorkdayLimits",
+            error.message = "AppointmentOutsideWorkdayLimits",
+            error.details = "",
             appointment = %creation_payload.appointment,
             hour = %hour,
             workday_start = %workday_start,

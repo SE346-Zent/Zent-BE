@@ -21,7 +21,8 @@ pub fn decide_close_account(user: users::Model) -> Result<CloseAccountEffect, Ap
         tracing::warn!(
             user_id = %user_id,
             role_id = %user.role_id,
-            reason = "RoleNotAllowed",
+            error.message = "RoleNotAllowed",
+            error.details = "",
             message = "Only customers can close their account"
         );
         return Err(AppError::Forbidden("Only customers can close their account".to_string()));
@@ -34,7 +35,8 @@ pub fn decide_close_account(user: users::Model) -> Result<CloseAccountEffect, Ap
     if user.account_status == STATUS_TERMINATED {
         tracing::warn!(
             user_id = %user_id,
-            reason = "AccountAlreadyClosed",
+            error.message = "AccountAlreadyClosed",
+            error.details = "",
             message = "Account is already closed"
         );
         return Err(AppError::Conflict("Account is already closed".to_string()));

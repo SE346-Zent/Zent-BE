@@ -31,7 +31,7 @@ pub fn decide_accept_part(
 ) -> Result<AcceptPartEffect, AppError> {
     if current_form_status.to_lowercase() != "pending" {
         tracing::warn!(
-            reason = "InvalidPartFormStatus",
+            error.message = "InvalidPartFormStatus", error.details = "",
             target_part_form_id = %target_part_form_id,
             approving_admin_id = %approving_admin_id,
             current_form_status = %current_form_status,

@@ -35,7 +35,8 @@ pub fn decide_approve_refusal(
 ) -> Result<ApproveRefusalEffect, AppError> {
     if work_order.reject_form_id != Some(reject_form.id) {
         tracing::warn!(
-            reason = "RejectFormMismatch",
+            error.message = "RejectFormMismatch",
+            error.details = "",
             work_order_id = %work_order.id,
             reject_form_id = %reject_form.id,
             message = "Work order does not match this rejection form"

@@ -65,7 +65,7 @@ pub fn get_product_detail(
 ) -> Result<ProductDetailResponse, AppError> {
     if !can_user_see_product_detail(requesting_role_name, requesting_user_id, product_relation_data) {
         tracing::warn!(
-            reason = "NotAuthorized",
+            error.message = "NotAuthorized", error.details = "",
             product_id = %product_relation_data.product_record.id,
             requesting_role_name = %requesting_role_name,
             requesting_user_id = %requesting_user_id,

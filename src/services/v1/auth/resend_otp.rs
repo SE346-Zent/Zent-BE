@@ -36,7 +36,7 @@ pub fn decide_resend_otp(
         Some(u) => u,
         None => {
             tracing::warn!(
-                reason = "UserNotFound",
+                error.message = "UserNotFound", error.details = "",
                 email = %_resend_payload.email,
                 "Resend OTP failed: user not found"
             );
@@ -46,7 +46,7 @@ pub fn decide_resend_otp(
 
     if user.account_status != pending_status_id {
         tracing::warn!(
-            reason = "AccountNotPending",
+            error.message = "AccountNotPending", error.details = "",
             user_id = %user.id,
             email = %user.email,
             status = %user.account_status,

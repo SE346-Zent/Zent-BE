@@ -43,8 +43,9 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                         Err(_) => {
                             tracing::warn!(
                                 code = 4001,
-                                reason = "InvalidToken",
-                                message = "Invalid or expired token",
+                                error.message = "InvalidToken",
+                                error.details = "",
+                                auth_error = "Invalid or expired token",
                                 "WebSocket authentication failed for client {}",
                                 addr
                             );
@@ -65,8 +66,9 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                 _ => {
                     tracing::warn!(
                         code = 4000,
-                        reason = "MissingAuthFrame",
-                        message = "First frame must be AUTH",
+                        error.message = "MissingAuthFrame",
+                        error.details = "",
+                        auth_error = "First frame must be AUTH",
                         "WebSocket authentication failed for client {}",
                         addr
                     );

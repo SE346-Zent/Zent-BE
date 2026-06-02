@@ -35,7 +35,8 @@ pub fn decide_refuse_work_order(
 ) -> Result<RefuseEffect, AppError> {
     if work_order.technician_id != Some(technician_id) {
         tracing::warn!(
-            reason = "NotAssignedTechnician",
+            error.message = "NotAssignedTechnician",
+            error.details = "",
             work_order_id = %work_order.id,
             technician_id = %technician_id,
             assigned_technician_id = ?work_order.technician_id,

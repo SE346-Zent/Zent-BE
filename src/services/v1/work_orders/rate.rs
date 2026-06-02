@@ -24,7 +24,8 @@ pub fn decide_rate_work_order(
     // Only the owner of the work order can rate
     if work_order.customer_id != customer_id {
         tracing::warn!(
-            reason = "NotWorkOrderOwner",
+            error.message = "NotWorkOrderOwner",
+            error.details = "",
             work_order_id = %work_order.id,
             customer_id = %work_order.customer_id,
             requesting_customer_id = %customer_id,
@@ -36,7 +37,8 @@ pub fn decide_rate_work_order(
     // Only closed work orders can be rated
     if work_order.work_order_status_id != closed_status_id {
         tracing::warn!(
-            reason = "WorkOrderNotClosed",
+            error.message = "WorkOrderNotClosed",
+            error.details = "",
             work_order_id = %work_order.id,
             status_id = %work_order.work_order_status_id,
             message = "Only closed work orders can be rated"
@@ -47,7 +49,8 @@ pub fn decide_rate_work_order(
     // A work order can only be rated once
     if rating_already_exists {
         tracing::warn!(
-            reason = "WorkOrderAlreadyRated",
+            error.message = "WorkOrderAlreadyRated",
+            error.details = "",
             work_order_id = %work_order.id,
             message = "A rating has already been submitted for this work order"
         );

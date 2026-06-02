@@ -34,7 +34,7 @@ pub fn decide_reset_password(
 ) -> Result<ResetPasswordEffect, AppError> {
     if is_new_password_same_as_current {
         tracing::warn!(
-            reason = "NewPasswordSameAsCurrent",
+            error.message = "NewPasswordSameAsCurrent", error.details = "",
             user_id = %user_record.id,
             email = %user_record.email,
             "Reset password failed: new password is the same as the current password"

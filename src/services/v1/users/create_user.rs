@@ -38,7 +38,8 @@ pub fn decide_can_create_user(current_user: users::Model, req: UserCreateRequest
             current_user_id = %current_user_id,
             current_role = %current_role,
             target_role = %target_role,
-            reason = "CreateUserRoleForbidden",
+            error.message = "CreateUserRoleForbidden",
+            error.details = "",
             message = "You are not authorized to create a user with this role"
         );
         return Err(AppError::Forbidden(

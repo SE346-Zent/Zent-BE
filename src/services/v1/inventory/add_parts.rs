@@ -43,7 +43,7 @@ pub fn decide_add_parts(
 ) -> Result<AddPartsEffect, AppError> {
     if work_order_record.technician_id != Some(requesting_technician_id) {
         tracing::warn!(
-            reason = "TechnicianNotAssignedToWorkOrder",
+            error.message = "TechnicianNotAssignedToWorkOrder", error.details = "",
             work_order_id = %work_order_record.id,
             assigned_technician_id = ?work_order_record.technician_id,
             requesting_technician_id = %requesting_technician_id,

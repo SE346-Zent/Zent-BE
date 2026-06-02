@@ -53,7 +53,7 @@ pub fn decide_refresh_token(
 ) -> Result<RefreshTokenEffect, AppError> {
     if session_record.revoked_at.is_some() || session_record.expires_at < Utc::now() {
         tracing::warn!(
-            reason = "SessionInvalidOrExpired",
+            error.message = "SessionInvalidOrExpired", error.details = "",
             session_id = %session_record.id,
             user_id = %user_record.id,
             "Token refresh failed: session is revoked or expired"
@@ -65,7 +65,7 @@ pub fn decide_refresh_token(
 
     if active_refresh_token_hash.as_deref() != Some(provided_refresh_token_hash) {
         tracing::error!(
-            reason = "RefreshTokenReuseAttack",
+            error.message = "RefreshTokenReuseAttack", error.details = "",
             session_id = %session_record.id,
             user_id = %user_record.id,
             "Token refresh failed: refresh token reuse attack detected"

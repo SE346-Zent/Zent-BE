@@ -44,7 +44,7 @@ pub fn decide_verify_forgot_password_otp(
         }
         -1 => {
             tracing::warn!(
-                reason = "OtpExpiredOrInvalid",
+                error.message = "OtpExpiredOrInvalid", error.details = "",
                 email = %user_email,
                 "Forgot password OTP verification failed: OTP expired or invalid"
             );
@@ -52,7 +52,7 @@ pub fn decide_verify_forgot_password_otp(
         }
         -2 => {
             tracing::warn!(
-                reason = "InvalidOtp",
+                error.message = "InvalidOtp", error.details = "",
                 email = %user_email,
                 "Forgot password OTP verification failed: invalid OTP"
             );
@@ -60,7 +60,7 @@ pub fn decide_verify_forgot_password_otp(
         }
         -3 => {
             tracing::warn!(
-                reason = "TooManyOtpAttempts",
+                error.message = "TooManyOtpAttempts", error.details = "",
                 email = %user_email,
                 "Forgot password OTP verification failed: too many attempts"
             );
@@ -68,7 +68,7 @@ pub fn decide_verify_forgot_password_otp(
         }
         _ => {
             tracing::error!(
-                reason = "UnexpectedOtpVerificationResult",
+                error.message = "UnexpectedOtpVerificationResult", error.details = "",
                 email = %user_email,
                 result = lua_verification_result,
                 "Forgot password OTP verification failed: unexpected Lua verification result"

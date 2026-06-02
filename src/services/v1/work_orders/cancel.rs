@@ -44,7 +44,8 @@ pub fn decide_cancel_work_order(
     // Only the owner of the work order can cancel it
     if work_order.customer_id != requesting_customer_id {
         tracing::warn!(
-            reason = "NotWorkOrderOwner",
+            error.message = "NotWorkOrderOwner",
+            error.details = "",
             work_order_id = %work_order.id,
             customer_id = %work_order.customer_id,
             requesting_customer_id = %requesting_customer_id,
@@ -58,7 +59,8 @@ pub fn decide_cancel_work_order(
 
     if current_timestamp >= cancellation_cutoff {
         tracing::warn!(
-            reason = "CancellationWindowPassed",
+            error.message = "CancellationWindowPassed",
+            error.details = "",
             work_order_id = %work_order.id,
             appointment = %work_order.appointment,
             cancel_window_hours = %cancel_window_hours,

@@ -24,7 +24,8 @@ pub fn decide_change_password(
     // Reject deleted accounts
     if user.deleted_at.is_some() {
         tracing::warn!(
-            reason = "AccountDeactivated",
+            error.message = "AccountDeactivated",
+            error.details = "",
             user_id = %user.id,
             email = %user.email,
             "Password change failed: account is deactivated/deleted"
@@ -35,7 +36,8 @@ pub fn decide_change_password(
     // Old password must match
     if !is_old_password_valid {
         tracing::warn!(
-            reason = "InvalidOldPassword",
+            error.message = "InvalidOldPassword",
+            error.details = "",
             user_id = %user.id,
             email = %user.email,
             "Password change failed: old password is incorrect"

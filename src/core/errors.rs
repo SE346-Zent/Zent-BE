@@ -29,37 +29,78 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
             AppError::BadRequest(msg) => {
-                tracing::warn!(code = %StatusCode::BAD_REQUEST.as_u16(), reason = "BadRequest", message = %msg, "Endpoint returned bad request");
+                tracing::warn!(
+                    code = %StatusCode::BAD_REQUEST.as_u16(),
+                    error.message = "BadRequest",
+                    error.details = "",
+                    message = %msg,
+                    "Endpoint returned bad request"
+                );
                 (StatusCode::BAD_REQUEST, msg)
             }
             AppError::Unauthorized(msg) => {
-                tracing::warn!(code = %StatusCode::UNAUTHORIZED.as_u16(), reason = "Unauthorized", message = %msg, "Authentication failed or missing");
+                tracing::warn!(
+                    code = %StatusCode::UNAUTHORIZED.as_u16(),
+                    error.message = "Unauthorized",
+                    error.details = "",
+                    message = %msg,
+                    "Authentication failed or missing"
+                );
                 (StatusCode::UNAUTHORIZED, msg)
             }
             AppError::Forbidden(msg) => {
-                tracing::warn!(code = %StatusCode::FORBIDDEN.as_u16(), reason = "Forbidden", message = %msg, "User lacks permission");
+                tracing::warn!(
+                    code = %StatusCode::FORBIDDEN.as_u16(),
+                    error.message = "Forbidden",
+                    error.details = "",
+                    message = %msg,
+                    "User lacks permission"
+                );
                 (StatusCode::FORBIDDEN, msg)
             }
             AppError::NotFound(msg) => {
-                tracing::warn!(code = %StatusCode::NOT_FOUND.as_u16(), reason = "NotFound", message = %msg, "Resource not found");
+                tracing::warn!(
+                    code = %StatusCode::NOT_FOUND.as_u16(),
+                    error.message = "NotFound",
+                    error.details = "",
+                    message = %msg,
+                    "Resource not found"
+                );
                 (StatusCode::NOT_FOUND, msg)
             }
             AppError::Conflict(msg) => {
-                tracing::warn!(code = %StatusCode::CONFLICT.as_u16(), reason = "Conflict", message = %msg, "State conflict occurred");
+                tracing::warn!(
+                    code = %StatusCode::CONFLICT.as_u16(),
+                    error.message = "Conflict",
+                    error.details = "",
+                    message = %msg,
+                    "State conflict occurred"
+                );
                 (StatusCode::CONFLICT, msg)
             }
             AppError::ValidationError(msg) => {
-                tracing::warn!(code = %StatusCode::UNPROCESSABLE_ENTITY.as_u16(), reason = "ValidationError", message = %msg, "Validation failed");
+                tracing::warn!(
+                    code = %StatusCode::UNPROCESSABLE_ENTITY.as_u16(),
+                    error.message = "ValidationError",
+                    error.details = "",
+                    message = %msg,
+                    "Validation failed"
+                );
                 (StatusCode::UNPROCESSABLE_ENTITY, msg)
             }
             AppError::ServiceUnavailable(msg) => {
-                tracing::error!(code = %StatusCode::SERVICE_UNAVAILABLE.as_u16(), reason = "ServiceUnavailable", message = %msg, "Required dependency is unavailable");
+                tracing::error!(
+                    code = %StatusCode::SERVICE_UNAVAILABLE.as_u16(),
+                    error.message = "ServiceUnavailable",
+                    error.details = "",
+                    message = %msg,
+                    "Required dependency is unavailable"
+                );
                 (StatusCode::SERVICE_UNAVAILABLE, msg)
             }
             AppError::Internal(err) => {
                 tracing::error!(
                     code = %StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
-                    reason = "InternalServerError",
                     message = "Internal server error",
                     error.message = %err,
                     error.details = ?err,

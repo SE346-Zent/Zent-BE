@@ -48,7 +48,8 @@ pub fn decide_auto_assign(
     let workday_start: u32 = match policies.get("workday_start") {
         None => {
             tracing::error!(
-                reason = "MissingWorkdayStartPolicy",
+                error.message = "MissingWorkdayStartPolicy",
+                error.details = "",
                 work_order_id = %work_order.id,
                 message = "Missing workday_start policy"
             );
@@ -57,7 +58,8 @@ pub fn decide_auto_assign(
         Some(val) => match val.parse() {
             Err(_) => {
                 tracing::error!(
-                    reason = "InvalidWorkdayStartPolicy",
+                    error.message = "InvalidWorkdayStartPolicy",
+                    error.details = "",
                     work_order_id = %work_order.id,
                     message = "Invalid workday_start policy"
                 );

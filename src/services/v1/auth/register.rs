@@ -55,7 +55,7 @@ pub fn decide_register(
     if let Some(user) = existing_user_record {
         if user.account_status != pending_status_id {
             tracing::warn!(
-                reason = "EmailAlreadyRegistered",
+                error.message = "EmailAlreadyRegistered", error.details = "",
                 email = %registration_request.email,
                 existing_user_id = %user.id,
                 existing_status = %user.account_status,

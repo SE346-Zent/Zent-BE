@@ -26,7 +26,8 @@ pub fn list_notifications(
         if !super::is_valid_category_id(category_id) {
             tracing::warn!(
                 category_id = %category_id,
-                reason = "InvalidCategoryId",
+                error.message = "InvalidCategoryId",
+                error.details = "",
                 message = "Queried category ID is invalid or out of bounds"
             );
         }

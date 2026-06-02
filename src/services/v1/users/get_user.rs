@@ -30,7 +30,8 @@ pub fn decide_get_user(
         tracing::warn!(
             current_user_id = %current_user_id,
             target_user_id = %target_user_id,
-            reason = "UserDeleted",
+            error.message = "UserDeleted",
+            error.details = "",
             message = "Target user has been soft-deleted"
         );
         return Err(AppError::NotFound("User not found".to_string()));
@@ -48,7 +49,8 @@ pub fn decide_get_user(
                 tracing::warn!(
                     current_user_id = %current_user_id,
                     target_user_id = %target_user_id,
-                    reason = "AdminProvinceMissing",
+                    error.message = "AdminProvinceMissing",
+                    error.details = "",
                     message = "Admin profile missing province assignment"
                 );
                 return Err(AppError::Forbidden(
@@ -59,7 +61,8 @@ pub fn decide_get_user(
                 tracing::warn!(
                     current_user_id = %current_user_id,
                     target_user_id = %target_user_id,
-                    reason = "TargetProvinceMissing",
+                    error.message = "TargetProvinceMissing",
+                    error.details = "",
                     message = "Target user profile missing province assignment"
                 );
                 return Err(AppError::Forbidden(
@@ -72,7 +75,8 @@ pub fn decide_get_user(
                     target_user_id = %target_user_id,
                     admin_province = %admin_province,
                     target_province = %target_province,
-                    reason = "ProvinceMismatch",
+                    error.message = "ProvinceMismatch",
+                    error.details = "",
                     message = "Admin and target user provinces do not match"
                 );
                 return Err(AppError::Forbidden(
@@ -85,7 +89,8 @@ pub fn decide_get_user(
                 current_user_id = %current_user_id,
                 current_role = %current_role,
                 target_user_id = %target_user_id,
-                reason = "NotAuthorized",
+                error.message = "NotAuthorized",
+                error.details = "",
                 message = "Only administrators can view user details"
             );
             return Err(AppError::Forbidden(

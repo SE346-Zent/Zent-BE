@@ -27,7 +27,8 @@ pub fn decide_update_me(user: users::Model, req: ProfileUpdateRequest) -> Result
     if user.deleted_at.is_some() {
         tracing::warn!(
             user_id = %user_id,
-            reason = "AccountDeactivated",
+            error.message = "AccountDeactivated",
+            error.details = "",
             message = "Account is deactivated/soft-deleted"
         );
         return Err(AppError::Unauthorized("Account is deactivated".to_string()));

@@ -55,7 +55,7 @@ pub fn decide_login(
     // 1. Check if user is deleted
     if user_record.deleted_at.is_some() {
         tracing::warn!(
-            reason = "AccountDeactivated",
+            error.message = "AccountDeactivated", error.details = "",
             user_id = %user_record.id,
             email = %user_record.email,
             "Login failed: account is deactivated/deleted"
@@ -66,7 +66,7 @@ pub fn decide_login(
     // 2. Verify password (passed in)
     if !is_password_valid {
         tracing::warn!(
-            reason = "InvalidPassword",
+            error.message = "InvalidPassword", error.details = "",
             user_id = %user_record.id,
             email = %user_record.email,
             "Login failed: invalid password"
@@ -80,7 +80,7 @@ pub fn decide_login(
         AccountStatusEnum::Active => {}
         AccountStatusEnum::Pending => {
             tracing::warn!(
-                reason = "AccountPending",
+                error.message = "AccountPending", error.details = "",
                 user_id = %user_record.id,
                 email = %user_record.email,
                 "Login failed: account is pending verification"
@@ -91,7 +91,7 @@ pub fn decide_login(
         }
         _ => {
             tracing::warn!(
-                reason = "AccountNotActive",
+                error.message = "AccountNotActive", error.details = "",
                 user_id = %user_record.id,
                 email = %user_record.email,
                 status = ?account_status,
