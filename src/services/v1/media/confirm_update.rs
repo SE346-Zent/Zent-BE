@@ -53,6 +53,13 @@ pub fn decide_confirm_update(
 ) -> Result<ConfirmUpdateEffect, AppError> {
     // 1. Security Check
     if work_order_record.technician_id != Some(requesting_technician_id) {
+        tracing::warn!(
+            reason = "TechnicianNotAssignedToWorkOrder",
+            work_order_id = %work_order_record.id,
+            assigned_technician_id = ?work_order_record.technician_id,
+            requesting_technician_id = %requesting_technician_id,
+            message = "Technician is not assigned to this work order"
+        );
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
@@ -64,6 +71,14 @@ pub fn decide_confirm_update(
     let current_server_time = Utc::now();
     let drift_seconds = (current_server_time.timestamp() - update_payload.internet_time).abs();
     if drift_seconds > allowed_drift_minutes * 60 {
+        tracing::warn!(
+            reason = "DeviceTimeDriftTooLarge",
+            work_order_id = %work_order_record.id,
+            requesting_technician_id = %requesting_technician_id,
+            drift_seconds = %drift_seconds,
+            allowed_drift_minutes = %allowed_drift_minutes,
+            message = "Device time is too far from server time"
+        );
         return Err(AppError::BadRequest(format!(
             "Device time is too far from server time ({} seconds drift, max {} minutes allowed). Please sync your device clock and try again.",
             drift_seconds, allowed_drift_minutes
@@ -84,6 +99,17 @@ pub fn decide_confirm_update(
     );
 
     if !is_within_site {
+        tracing::warn!(
+            reason = "GeofencingViolation",
+            work_order_id = %work_order_record.id,
+            requesting_technician_id = %requesting_technician_id,
+            latitude = %update_payload.latitude,
+            longitude = %update_payload.longitude,
+            site_latitude = %site_latitude,
+            site_longitude = %site_longitude,
+            geofence_radius_meters = %geofence_radius_meters,
+            message = "Geofencing violation: technician is too far from the work site"
+        );
         return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
     }
 
@@ -93,6 +119,12 @@ pub fn decide_confirm_update(
     image_link_update_model.longitude = Set(Some(update_payload.longitude));
     image_link_update_model.is_verified = Set(true);
 
+    tracing::info!(
+        work_order_id = %work_order_record.id,
+        target_image_id = %target_image_id,
+        requesting_technician_id = %requesting_technician_id,
+        message = "Successfully decided to confirm media update"
+    );
     Ok(ConfirmUpdateEffect {
         target_image_id,
         new_object_name: new_uploaded_object_name,

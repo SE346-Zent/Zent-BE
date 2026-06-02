@@ -22,6 +22,7 @@ pub struct CreateUserEffect {
 /// - SuperAdmin: uses the province from the request (must be provided for Admin, optional for Technician).
 /// - Admin: province is forced to the admin's own province.
 pub fn decide_can_create_user(current_user: users::Model, req: UserCreateRequest) -> Result<CreateUserEffect, AppError> {
+    let current_user_id = current_user.id;
     let current_role = current_user.role_id;
     let target_role = req.role_id;
 
@@ -33,6 +34,13 @@ pub fn decide_can_create_user(current_user: users::Model, req: UserCreateRequest
     };
 
     if !allowed {
+        tracing::warn!(
+            current_user_id = %current_user_id,
+            current_role = %current_role,
+            target_role = %target_role,
+            reason = "CreateUserRoleForbidden",
+            message = "You are not authorized to create a user with this role"
+        );
         return Err(AppError::Forbidden(
             "You are not authorized to create a user with this role".to_string(),
         ));
@@ -52,6 +60,14 @@ pub fn decide_can_create_user(current_user: users::Model, req: UserCreateRequest
     };
 
     let now = chrono::Utc::now();
+
+    tracing::info!(
+        current_user_id = %current_user_id,
+        target_role = %target_role,
+        email = %req.email,
+        reason = "CreateUserDecided",
+        message = "User creation successfully decided"
+    );
 
     let user_active_model = users::ActiveModel {
         id: sea_orm::Set(uuid::Uuid::new_v4()),

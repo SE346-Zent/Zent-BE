@@ -22,10 +22,23 @@ pub fn update_preference(
     permitted_category_ids: &[i32],
 ) -> Result<(), AppError> {
     if !permitted_category_ids.contains(&target_category_id) {
+        tracing::warn!(
+            target_category_id = %target_category_id,
+            reason = "CategoryNotPermitted",
+            message = "Invalid notification category ID for your role"
+        );
         return Err(AppError::BadRequest(format!("Invalid notification category ID for your role: {}", target_category_id)));
     }
 
     current_user_preferences.insert(target_category_id, is_os_delivery_enabled);
+
+    tracing::info!(
+        target_category_id = %target_category_id,
+        is_os_delivery_enabled = %is_os_delivery_enabled,
+        reason = "UpdatePreferenceDecided",
+        message = "Successfully updated notification category preference"
+    );
+
     Ok(())
 }
 

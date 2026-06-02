@@ -30,8 +30,20 @@ pub fn decide_accept_part(
     current_timestamp: chrono::DateTime<chrono::Utc>,
 ) -> Result<AcceptPartEffect, AppError> {
     if current_form_status.to_lowercase() != "pending" {
+        tracing::warn!(
+            reason = "InvalidPartFormStatus",
+            target_part_form_id = %target_part_form_id,
+            approving_admin_id = %approving_admin_id,
+            current_form_status = %current_form_status,
+            message = "Cannot accept part because its status is not pending"
+        );
         return Err(AppError::BadRequest(format!("Cannot accept part with status '{}'; must be 'pending'", current_form_status)));
     }
+    tracing::info!(
+        target_part_form_id = %target_part_form_id,
+        approving_admin_id = %approving_admin_id,
+        message = "Successfully decided to accept part form"
+    );
     Ok(AcceptPartEffect {
         target_part_form_id,
         approval_audit_model: part_audit_log::ActiveModel {

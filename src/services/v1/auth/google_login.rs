@@ -50,28 +50,64 @@ pub fn get_firebase_project_id() -> Option<String> {
 /// Decode and verify Google/Firebase ID tokens.
 pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> Result<FirebaseClaims, AppError> {
     let header = decode_header(token)
-        .map_err(|e| AppError::Unauthorized(format!("Invalid token header: {}", e)))?;
-    let kid = header.kid.ok_or_else(|| AppError::Unauthorized("Missing kid in token header".to_string()))?;
+        .map_err(|e| {
+            tracing::warn!(
+                reason = "InvalidTokenHeader",
+                error = %e,
+                "Google/Firebase token verification failed: invalid token header"
+            );
+            AppError::Unauthorized(format!("Invalid token header: {}", e))
+        })?;
+    let kid = header.kid.ok_or_else(|| {
+        tracing::warn!(
+            reason = "MissingKid",
+            "Google/Firebase token verification failed: missing kid in token header"
+        );
+        AppError::Unauthorized("Missing kid in token header".to_string())
+    })?;
 
     let parts: Vec<&str> = token.split('.').collect();
     if parts.len() != 3 {
+        tracing::warn!(
+            reason = "InvalidJwtFormat",
+            "Google/Firebase token verification failed: invalid JWT format"
+        );
         return Err(AppError::Unauthorized("Invalid JWT format".to_string()));
     }
     
     let payload_decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[1])
-        .map_err(|_| AppError::Unauthorized("Invalid token payload base64".to_string()))?;
+        .map_err(|e| {
+            tracing::warn!(
+                reason = "InvalidTokenPayloadBase64",
+                error = %e,
+                "Google/Firebase token verification failed: invalid token payload base64"
+            );
+            AppError::Unauthorized("Invalid token payload base64".to_string())
+        })?;
     
     #[derive(Deserialize)]
     struct TempClaims {
         iss: String,
     }
     let temp: TempClaims = serde_json::from_slice(&payload_decoded)
-        .map_err(|_| AppError::Unauthorized("Invalid claims JSON".to_string()))?;
+        .map_err(|e| {
+            tracing::warn!(
+                reason = "InvalidClaimsJson",
+                error = %e,
+                "Google/Firebase token verification failed: invalid claims JSON"
+            );
+            AppError::Unauthorized("Invalid claims JSON".to_string())
+        })?;
 
     let is_firebase = temp.iss.starts_with("https://securetoken.google.com/");
     let is_google = temp.iss == "https://accounts.google.com" || temp.iss == "accounts.google.com";
 
     if !is_firebase && !is_google {
+        tracing::warn!(
+            reason = "UnsupportedIssuer",
+            issuer = %temp.iss,
+            "Google/Firebase token verification failed: unsupported issuer"
+        );
         return Err(AppError::Unauthorized("Unsupported issuer".to_string()));
     }
 
@@ -85,17 +121,45 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
     let certs: serde_json::Value = client.get(certs_url)
         .send()
         .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to fetch public certificates: {}", e)))?
+        .map_err(|e| {
+            tracing::error!(
+                reason = "FetchPublicCertificatesFailed",
+                error = %e,
+                "Google/Firebase token verification failed: failed to fetch public certificates"
+            );
+            AppError::Internal(anyhow::anyhow!("Failed to fetch public certificates: {}", e))
+        })?
         .json()
         .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse public certificates: {}", e)))?;
+        .map_err(|e| {
+            tracing::error!(
+                reason = "ParsePublicCertificatesFailed",
+                error = %e,
+                "Google/Firebase token verification failed: failed to parse public certificates"
+            );
+            AppError::Internal(anyhow::anyhow!("Failed to parse public certificates: {}", e))
+        })?;
 
     let cert_pem = certs.get(&kid)
         .and_then(|v| v.as_str())
-        .ok_or_else(|| AppError::Unauthorized("Public key certificate not found for kid".to_string()))?;
+        .ok_or_else(|| {
+            tracing::warn!(
+                reason = "PublicKeyCertificateNotFound",
+                kid = %kid,
+                "Google/Firebase token verification failed: public key certificate not found for kid"
+            );
+            AppError::Unauthorized("Public key certificate not found for kid".to_string())
+        })?;
 
     let decoding_key = DecodingKey::from_rsa_pem(cert_pem.as_bytes())
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse public key PEM: {}", e)))?;
+        .map_err(|e| {
+            tracing::error!(
+                reason = "ParsePublicKeyPemFailed",
+                error = %e,
+                "Google/Firebase token verification failed: failed to parse public key PEM"
+            );
+            AppError::Internal(anyhow::anyhow!("Failed to parse public key PEM: {}", e))
+        })?;
 
     let mut validation = Validation::new(Algorithm::RS256);
     validation.leeway = 60;
@@ -109,6 +173,10 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
             // project_id is required for Firebase tokens; without it we cannot
             // validate the audience and risk accepting tokens issued for a
             // different Firebase project.
+            tracing::error!(
+                reason = "FirebaseProjectIdNotConfigured",
+                "Google/Firebase token verification failed: FIREBASE_PROJECT_ID is not configured"
+            );
             return Err(AppError::Internal(anyhow::anyhow!(
                 "FIREBASE_PROJECT_ID is not configured. \
                  Cannot validate Firebase ID token audience."
@@ -126,6 +194,10 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
             _ => {
                 // Refuse rather than skip audience validation — accepting any
                 // audience would allow tokens minted for other apps.
+                tracing::error!(
+                    reason = "GoogleClientIdNotConfigured",
+                    "Google/Firebase token verification failed: GOOGLE_CLIENT_ID is not configured"
+                );
                 return Err(AppError::Internal(anyhow::anyhow!(
                     "GOOGLE_CLIENT_ID is not configured. \
                      Cannot validate Google ID token audience."
@@ -135,7 +207,14 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
     }
 
     let token_data = decode::<FirebaseClaims>(token, &decoding_key, &validation)
-        .map_err(|e| AppError::Unauthorized(format!("Token validation failed: {}", e)))?;
+        .map_err(|e| {
+            tracing::warn!(
+                reason = "TokenValidationFailed",
+                error = %e,
+                "Google/Firebase token verification failed: token validation failed"
+            );
+            AppError::Unauthorized(format!("Token validation failed: {}", e))
+        })?;
 
     Ok(token_data.claims)
 }
@@ -189,11 +268,24 @@ pub fn decide_google_login(
     if let Some(user_record) = existing_user {
         // 1. Check if user is deleted
         if user_record.deleted_at.is_some() {
+            tracing::warn!(
+                reason = "AccountDeactivated",
+                user_id = %user_record.id,
+                email = %email,
+                "Google login failed: account is deactivated/deleted"
+            );
             return Err(AppError::Unauthorized("Account is deactivated".to_string()));
         }
 
         // 2. Google login is restricted only to Customer accounts
         if user_record.role_id != customer_role_id {
+            tracing::warn!(
+                reason = "InvalidRole",
+                user_id = %user_record.id,
+                email = %email,
+                role_id = %user_record.role_id,
+                "Google login failed: only customer accounts are allowed to authenticate via Google"
+            );
             return Err(AppError::Forbidden("Only customer accounts are allowed to authenticate via Google".to_string()));
         }
 
@@ -206,6 +298,11 @@ pub fn decide_google_login(
             }
             AccountStatusEnum::Pending => {
                 // Auto-activate pending users who log in via Google
+                tracing::info!(
+                    user_id = %user_record.id,
+                    email = %email,
+                    "Auto-activating pending account on Google login success"
+                );
                 let mut active: users::ActiveModel = user_record.clone().into();
                 active.account_status = Set(active_status_id);
                 active.updated_at = Set(Utc::now());
@@ -213,6 +310,13 @@ pub fn decide_google_login(
                 final_status = AccountStatusEnum::Active;
             }
             _ => {
+                tracing::warn!(
+                    reason = "AccountNotActive",
+                    user_id = %user_record.id,
+                    email = %email,
+                    status = ?account_status,
+                    "Google login failed: account is not active"
+                );
                 return Err(AppError::Forbidden(format!("Account is {:?}", account_status)));
             }
         }
@@ -262,6 +366,13 @@ pub fn decide_google_login(
 
     let session_id = Uuid::new_v4();
     let session_expires_at = Utc::now() + chrono::Duration::seconds(session_ttl.0);
+
+    tracing::info!(
+        user_id = %user_id,
+        email = %email,
+        is_new_user = %existing_user.is_none(),
+        "Google login succeeded"
+    );
 
     Ok(GoogleLoginEffect {
         session_id,

@@ -34,14 +34,34 @@ pub fn decide_resend_otp(
 ) -> Result<ResendOtpEffect, AppError> {
     let user = match user_record {
         Some(u) => u,
-        None => return Err(AppError::NotFound("User not found".to_string())),
+        None => {
+            tracing::warn!(
+                reason = "UserNotFound",
+                email = %_resend_payload.email,
+                "Resend OTP failed: user not found"
+            );
+            return Err(AppError::NotFound("User not found".to_string()));
+        }
     };
 
     if user.account_status != pending_status_id {
+        tracing::warn!(
+            reason = "AccountNotPending",
+            user_id = %user.id,
+            email = %user.email,
+            status = %user.account_status,
+            "Resend OTP failed: account status is not pending"
+        );
         return Err(AppError::BadRequest("Account is not pending".to_string()));
     }
 
     let verification_code = otp::generate_6digit_otp();
+
+    tracing::info!(
+        user_id = %user.id,
+        email = %user.email,
+        "Resend OTP decided successfully"
+    );
 
     Ok(ResendOtpEffect {
         email_address: user.email.clone(),

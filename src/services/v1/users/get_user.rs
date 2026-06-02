@@ -22,8 +22,17 @@ pub fn decide_get_user(
     current_user: users::Model,
     target_user: users::Model,
 ) -> Result<GetUserEffect, AppError> {
+    let current_user_id = current_user.id;
+    let target_user_id = target_user.id;
+
     // Reject deleted users
     if target_user.deleted_at.is_some() {
+        tracing::warn!(
+            current_user_id = %current_user_id,
+            target_user_id = %target_user_id,
+            reason = "UserDeleted",
+            message = "Target user has been soft-deleted"
+        );
         return Err(AppError::NotFound("User not found".to_string()));
     }
 
@@ -36,27 +45,61 @@ pub fn decide_get_user(
         1 => {
             // Admin: must be in the same province (fail-closed if admin has no province)
             let Some(ref admin_province) = current_user.province else {
+                tracing::warn!(
+                    current_user_id = %current_user_id,
+                    target_user_id = %target_user_id,
+                    reason = "AdminProvinceMissing",
+                    message = "Admin profile missing province assignment"
+                );
                 return Err(AppError::Forbidden(
                     "Admin profile missing province assignment".to_string(),
                 ));
             };
             let Some(ref target_province) = target_user.province else {
+                tracing::warn!(
+                    current_user_id = %current_user_id,
+                    target_user_id = %target_user_id,
+                    reason = "TargetProvinceMissing",
+                    message = "Target user profile missing province assignment"
+                );
                 return Err(AppError::Forbidden(
                     "You can only view users in your province".to_string(),
                 ));
             };
             if admin_province != target_province {
+                tracing::warn!(
+                    current_user_id = %current_user_id,
+                    target_user_id = %target_user_id,
+                    admin_province = %admin_province,
+                    target_province = %target_province,
+                    reason = "ProvinceMismatch",
+                    message = "Admin and target user provinces do not match"
+                );
                 return Err(AppError::Forbidden(
                     "You can only view users in your province".to_string(),
                 ));
             }
         }
         _ => {
+            tracing::warn!(
+                current_user_id = %current_user_id,
+                current_role = %current_role,
+                target_user_id = %target_user_id,
+                reason = "NotAuthorized",
+                message = "Only administrators can view user details"
+            );
             return Err(AppError::Forbidden(
                 "Only administrators can view user details".to_string(),
             ));
         }
     }
+
+    tracing::info!(
+        current_user_id = %current_user_id,
+        target_user_id = %target_user_id,
+        reason = "GetUserDecided",
+        message = "User detail retrieval successfully decided"
+    );
 
     let response_data = UserResponseData {
         id: target_user.id,

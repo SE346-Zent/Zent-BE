@@ -1,22 +1,22 @@
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use futures::stream::StreamExt;
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use lapin::{
-    options::{BasicConsumeOptions, BasicAckOptions, BasicNackOptions},
+    options::{BasicAckOptions, BasicConsumeOptions, BasicNackOptions},
     types::FieldTable,
     Connection, ConnectionProperties,
 };
-use tokio_executor_trait::Tokio as TokioExecutor;
-use futures::stream::StreamExt;
+use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
-use sea_orm::{EntityTrait, Set, ActiveModelTrait};
-use tracing::{info, error, warn};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
-use jsonwebtoken::{encode, Header, EncodingKey, Algorithm};
+use tokio_executor_trait::Tokio as TokioExecutor;
+use tracing::{error, info, warn};
 
 use crate::core::config::AppConfig;
 use crate::entities::outbox_records;
-use crate::infrastructure::mq::fcm::{FCM_QUEUE, setup_fcm_topology};
+use crate::infrastructure::mq::fcm::{setup_fcm_topology, FCM_QUEUE};
 
 /// Payload received from the FCM queue.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,21 +46,18 @@ struct CachedToken {
 /// Try to resolve the path to the Firebase service account credentials file.
 /// Checks (in order): AppConfig, process environment, .env file.
 fn resolve_credentials_path() -> Result<String, anyhow::Error> {
-    // 1. AppConfig (envy deserialization)
     if let Some(p) = AppConfig::get().google_application_credentials.as_deref() {
         if !p.is_empty() {
             return Ok(p.to_string());
         }
     }
 
-    // 2. Process environment (std::env::var)
     if let Ok(p) = std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
         if !p.is_empty() {
             return Ok(p);
         }
     }
 
-    // 3. Parse .env file directly (fallback in case dotenvy didn't load it)
     if let Ok(content) = std::fs::read_to_string(".env") {
         for line in content.lines() {
             let trimmed = line.trim();
@@ -83,16 +80,11 @@ fn resolve_credentials_path() -> Result<String, anyhow::Error> {
 }
 
 impl FcmCredentials {
-    /// Load credentials from the path specified in `google_application_credentials` config.
-    /// Tries multiple sources in order:
-    /// 1. AppConfig (envy deserialization)
-    /// 2. `std::env::var("GOOGLE_APPLICATION_CREDENTIALS")` (process environment)
-    /// 3. Parse `.env` file directly (in case dotenvy didn't load it)
+    /// Load credentials from the path specified in configuration layers.
     fn from_config() -> Result<Self, anyhow::Error> {
-        let path = resolve_credentials_path()
-            .map_err(|_| anyhow::anyhow!(
-                "GOOGLE_APPLICATION_CREDENTIALS not found — add it to your .env"
-            ))?;
+        let path = resolve_credentials_path().map_err(|_| {
+            anyhow::anyhow!("GOOGLE_APPLICATION_CREDENTIALS not found — add it to your .env")
+        })?;
 
         let content = std::fs::read_to_string(&path)
             .map_err(|e| anyhow::anyhow!("Failed to read credentials file '{}': {}", path, e))?;
@@ -116,8 +108,10 @@ impl FcmCredentials {
     }
 
     /// Obtain (or refresh) an OAuth2 access token for the Firebase Messaging scope.
-    async fn get_access_token(&self, cache: &Mutex<Option<CachedToken>>) -> Result<String, anyhow::Error> {
-        // Check if we have a cached token that's still valid (> 5 min buffer)
+    async fn get_access_token(
+        &self,
+        cache: &Mutex<Option<CachedToken>>,
+    ) -> Result<String, anyhow::Error> {
         {
             let guard = cache.lock().await;
             if let Some(cached) = guard.as_ref() {
@@ -127,7 +121,6 @@ impl FcmCredentials {
             }
         }
 
-        // 1. Create the JWT assertion (RFC 7523)
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs() as usize;
@@ -155,7 +148,6 @@ impl FcmCredentials {
             &EncodingKey::from_rsa_pem(self.private_key.as_bytes())?,
         )?;
 
-        // 2. Exchange assertion for access token
         let client = reqwest::Client::new();
         let body = format!(
             "grant_type={}&assertion={}",
@@ -187,9 +179,8 @@ impl FcmCredentials {
             .to_string();
 
         let expires_in = token_body["expires_in"].as_i64().unwrap_or(3600);
-        let expires_at = Instant::now() + Duration::from_secs(expires_in as u64 - 300); // 5 min buffer
+        let expires_at = Instant::now() + Duration::from_secs(expires_in as u64 - 300);
 
-        // Cache the token
         let mut guard = cache.lock().await;
         *guard = Some(CachedToken {
             token: access_token.clone(),
@@ -200,14 +191,12 @@ impl FcmCredentials {
     }
 
     /// Send a push notification via Firebase Cloud Messaging v1 HTTP API.
-    async fn send_push(&self, token_cache: &Mutex<Option<CachedToken>>, msg: &FcmMessage) -> bool {
-        let access_token = match self.get_access_token(token_cache).await {
-            Ok(t) => t,
-            Err(e) => {
-                error!("Failed to obtain FCM access token: {:?}", e);
-                return false;
-            }
-        };
+    async fn send_push(
+        &self,
+        token_cache: &Mutex<Option<CachedToken>>,
+        msg: &FcmMessage,
+    ) -> Result<(), anyhow::Error> {
+        let access_token = self.get_access_token(token_cache).await?;
 
         let fcm_payload = serde_json::json!({
             "message": {
@@ -240,56 +229,63 @@ impl FcmCredentials {
         {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    info!("FCM push sent to user {}", msg.user_id);
-                    true
+                    info!(
+                        message = "FCM push notification delivered",
+                        user_id = %msg.user_id,
+                        notification_id = %msg.notification_id,
+                        "FCM gateway accepted delivery request"
+                    );
+                    Ok(())
                 } else {
                     let status = resp.status();
                     let body = resp.text().await.unwrap_or_default();
-                    error!("FCM push failed ({}): {}", status, body);
-                    false
+                    Err(anyhow::anyhow!("FCM push failed ({}): {}", status, body))
                 }
             }
-            Err(e) => {
-                error!("FCM HTTP request failed: {:?}", e);
-                false
-            }
+            Err(e) => Err(anyhow::anyhow!("FCM HTTP request failed: {:?}", e)),
         }
     }
 }
 
 /// Start the FCM consumer background task.
-///
-/// Listens on `fcm_queue`, sends push via Firebase Cloud Messaging v1 API
-/// (using service account credentials from `GOOGLE_APPLICATION_CREDENTIALS`),
-/// and updates the MySQL `outbox_records` row to `delivered = true` on success.
 pub async fn start_fcm_consumer(
     connection: Option<Arc<Connection>>,
     db: sea_orm::DatabaseConnection,
 ) {
-    // Load service account credentials at startup — bail early if misconfigured
     let creds = match FcmCredentials::from_config() {
         Ok(c) => c,
         Err(e) => {
-            error!("FCM consumer: Failed to load credentials: {:?}. FCM pushes will be DISABLED.", e);
+            error!(
+                message = "FCM infrastructure initialization failed",
+                error.message = %e,
+                error.details = ?e,
+                "Disabling background push consumer loop"
+            );
             return;
         }
     };
 
-    // connection parameter kept for API compatibility but not used;
-    // the consumer dials independently so it works even when the shared
-    // connection is None or has already died.
     let _ = connection;
     let token_cache: Arc<Mutex<Option<CachedToken>>> = Arc::new(Mutex::new(None));
     let url = AppConfig::get().rabbitmq_url.clone();
 
     tokio::spawn(async move {
         loop {
-            // --- Establish a dedicated connection ---
             let fresh_url = crate::infrastructure::mq::ensure_heartbeat(&url);
-            let conn = match Connection::connect(&fresh_url, ConnectionProperties::default().with_executor(TokioExecutor::current())).await {
+            let conn = match Connection::connect(
+                &fresh_url,
+                ConnectionProperties::default().with_executor(TokioExecutor::current()),
+            )
+            .await
+            {
                 Ok(c) => Arc::new(c),
                 Err(e) => {
-                    error!("FCM consumer: Failed to connect to RabbitMQ: {:?}. Retrying in 5s...", e);
+                    error!(
+                        message = "RabbitMQ connection establishment failed for FCM consumer",
+                        error.message = %e,
+                        error.details = ?e,
+                        "Retrying connection fallback sequence in 5 seconds"
+                    );
                     sleep(Duration::from_secs(5)).await;
                     continue;
                 }
@@ -298,78 +294,138 @@ pub async fn start_fcm_consumer(
             let channel = match conn.create_channel().await {
                 Ok(c) => c,
                 Err(e) => {
-                    error!("FCM consumer: Failed to create channel: {:?}. Retrying in 5s...", e);
+                    error!(
+                        message = "AMQP channel creation failed for FCM consumer",
+                        error.message = %e,
+                        error.details = ?e,
+                        "Retrying channel recovery loop in 5 seconds"
+                    );
                     sleep(Duration::from_secs(5)).await;
                     continue;
                 }
             };
 
             if let Err(e) = setup_fcm_topology(&channel).await {
-                error!("FCM consumer: Failed to setup topology: {:?}. Retrying in 5s...", e);
+                error!(
+                    message = "AMQP topology setup failed for FCM queue",
+                    error.message = %e,
+                    error.details = ?e,
+                    "Retrying topology registration in 5 seconds"
+                );
                 sleep(Duration::from_secs(5)).await;
                 continue;
             }
 
-            let mut consumer = match channel.basic_consume(
-                FCM_QUEUE,
-                "",   // broker-generated unique tag
-                BasicConsumeOptions::default(),
-                FieldTable::default(),
-            ).await {
+            let mut consumer = match channel
+                .basic_consume(
+                    FCM_QUEUE,
+                    "",
+                    BasicConsumeOptions::default(),
+                    FieldTable::default(),
+                )
+                .await
+            {
                 Ok(c) => c,
                 Err(e) => {
-                    error!("FCM consumer: Failed to attach: {:?}. Retrying in 5s...", e);
+                    error!(
+                        message = "AMQP consumer binding failed for FCM queue",
+                        error.message = %e,
+                        error.details = ?e,
+                        queue = %FCM_QUEUE,
+                        "Retrying queue consumption in 5 seconds"
+                    );
                     sleep(Duration::from_secs(5)).await;
                     continue;
                 }
             };
 
-            info!("FCM Consumer listening on {}", FCM_QUEUE);
+            info!(
+                message = "FCM consumer stream activated",
+                queue = %FCM_QUEUE,
+                "Awaiting inbound message frames"
+            );
 
             while let Some(delivery) = consumer.next().await {
                 match delivery {
                     Ok(delivery) => {
                         if let Ok(payload_str) = std::str::from_utf8(&delivery.data) {
                             match serde_json::from_str::<FcmMessage>(payload_str) {
-                                Ok(msg) => {
-                                    let success = creds.send_push(&token_cache, &msg).await;
-                                    if success {
-                                        // Update outbox record to delivered=true
-                                        if let Err(e) = mark_outbox_delivered(&db, msg.notification_id).await {
-                                            error!("FCM consumer: Failed to update outbox: {:?}", e);
+                                Ok(msg) => match creds.send_push(&token_cache, &msg).await {
+                                    Ok(()) => {
+                                        if let Err(e) =
+                                            mark_outbox_delivered(&db, msg.notification_id).await
+                                        {
+                                            error!(
+                                                message = "Transactional outbox status synchronization failed",
+                                                error.message = %e,
+                                                error.details = ?e,
+                                                notification_id = %msg.notification_id,
+                                                "Acking delivery payload despite tracking update failure"
+                                            );
                                         }
                                         let _ = delivery.ack(BasicAckOptions::default()).await;
-                                    } else {
-                                        error!("FCM consumer: Push failed for notif {}", msg.notification_id);
-                                        let _ = delivery.nack(BasicNackOptions {
+                                    }
+                                    Err(e) => {
+                                        error!(
+                                            message = "FCM delivery gateway transaction rejected",
+                                            error.message = %e,
+                                            error.details = ?e,
+                                            notification_id = %msg.notification_id,
+                                            user_id = %msg.user_id,
+                                            "Sending negative acknowledgment (NACK) without requeue"
+                                        );
+                                        let _ = delivery
+                                            .nack(BasicNackOptions {
+                                                requeue: false,
+                                                ..Default::default()
+                                            })
+                                            .await;
+                                    }
+                                },
+                                Err(e) => {
+                                    error!(
+                                        message = "Inbound payload serialization failed",
+                                        error.message = %e,
+                                        error.details = ?e,
+                                        "Rejecting corrupted queue frame"
+                                    );
+                                    let _ = delivery
+                                        .nack(BasicNackOptions {
                                             requeue: false,
                                             ..Default::default()
-                                        }).await;
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("FCM consumer: Invalid message: {:?}", e);
-                                    let _ = delivery.nack(BasicNackOptions {
-                                        requeue: false,
-                                        ..Default::default()
-                                    }).await;
+                                        })
+                                        .await;
                                 }
                             }
                         } else {
-                            let _ = delivery.nack(BasicNackOptions {
-                                requeue: false,
-                                ..Default::default()
-                            }).await;
+                            error!(
+                                message = "Inbound queue frame contains invalid UTF-8 data",
+                                "Rejecting unreadable message payload"
+                            );
+                            let _ = delivery
+                                .nack(BasicNackOptions {
+                                    requeue: false,
+                                    ..Default::default()
+                                })
+                                .await;
                         }
                     }
                     Err(e) => {
-                        error!("FCM consumer: Stream error: {:?}", e);
+                        error!(
+                            message = "AMQP delivery stream connection severed",
+                            error.message = %e,
+                            error.details = ?e,
+                            "Breaking trace stream consumer loop"
+                        );
                         break;
                     }
                 }
             }
 
-            warn!("FCM consumer loop exited, reconnecting in 5s...");
+            warn!(
+                message = "FCM consumer transaction loop broken unexpectedly",
+                "Initiating restart cooling delay for 5 seconds"
+            );
             sleep(Duration::from_secs(5)).await;
         }
     });

@@ -34,6 +34,15 @@ pub fn decide_escalation(
         return None; // Already notified at or above this level
     }
 
+    tracing::info!(
+        reason = "WorkOrderEscalationDetermined",
+        baseline_minutes = %baseline_minutes,
+        elapsed_minutes = %elapsed_minutes,
+        target_level = %target_level,
+        level_label = %level_label,
+        message = "Work order escalation determined"
+    );
+
     Some(EscalationEffect {
         target_level,
         level_label,

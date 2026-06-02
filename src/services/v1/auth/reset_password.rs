@@ -33,8 +33,20 @@ pub fn decide_reset_password(
     reset_token_cache_key: String,
 ) -> Result<ResetPasswordEffect, AppError> {
     if is_new_password_same_as_current {
+        tracing::warn!(
+            reason = "NewPasswordSameAsCurrent",
+            user_id = %user_record.id,
+            email = %user_record.email,
+            "Reset password failed: new password is the same as the current password"
+        );
         return Err(AppError::BadRequest("New password cannot be the same as current".to_string()));
     }
+
+    tracing::info!(
+        user_id = %user_record.id,
+        email = %user_record.email,
+        "Reset password decided successfully"
+    );
 
     Ok(ResetPasswordEffect {
         user_id: user_record.id,

@@ -24,6 +24,13 @@ pub fn decide_logout(
 ) -> Result<LogoutEffect, AppError> {
     // 1. Verify session belongs to user
     if session_record.user_id != requesting_user_id {
+        tracing::warn!(
+            reason = "SessionOwnershipMismatch",
+            session_id = %session_record.id,
+            session_owner_id = %session_record.user_id,
+            requesting_user_id = %requesting_user_id,
+            "Logout failed: session does not belong to user"
+        );
         return Err(AppError::Unauthorized(
             "Session does not belong to user".to_string(),
         ));
@@ -31,8 +38,20 @@ pub fn decide_logout(
 
     // 2. Check if already revoked
     if session_record.revoked_at.is_some() {
+        tracing::warn!(
+            reason = "SessionAlreadyRevoked",
+            session_id = %session_record.id,
+            user_id = %requesting_user_id,
+            "Logout failed: session is already revoked"
+        );
         return Err(AppError::BadRequest("Session already revoked".to_string()));
     }
+
+    tracing::info!(
+        session_id = %session_record.id,
+        user_id = %requesting_user_id,
+        "Logout succeeded"
+    );
 
     Ok(LogoutEffect {
         revoked_session_id: session_record.id,

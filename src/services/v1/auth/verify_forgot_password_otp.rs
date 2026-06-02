@@ -31,6 +31,10 @@ pub fn decide_verify_forgot_password_otp(
 ) -> Result<VerifyForgotPasswordOtpEffect, AppError> {
     match lua_verification_result {
         1 => {
+            tracing::info!(
+                email = %user_email,
+                "Forgot password OTP verification succeeded"
+            );
             Ok(VerifyForgotPasswordOtpEffect {
                 password_reset_token: new_password_reset_token.clone(),
                 reset_token_cache_key: format!("password_reset_token:{}", new_password_reset_token),
@@ -38,10 +42,39 @@ pub fn decide_verify_forgot_password_otp(
                 token_ttl_seconds: 900,
             })
         }
-        -1 => Err(AppError::BadRequest("OTP expired or invalid".to_string())),
-        -2 => Err(AppError::BadRequest("Invalid OTP".to_string())),
-        -3 => Err(AppError::Forbidden("Too many attempts".to_string())),
-        _ => Err(AppError::Internal(anyhow::anyhow!("Unexpected result: {}", lua_verification_result))),
+        -1 => {
+            tracing::warn!(
+                reason = "OtpExpiredOrInvalid",
+                email = %user_email,
+                "Forgot password OTP verification failed: OTP expired or invalid"
+            );
+            Err(AppError::BadRequest("OTP expired or invalid".to_string()))
+        }
+        -2 => {
+            tracing::warn!(
+                reason = "InvalidOtp",
+                email = %user_email,
+                "Forgot password OTP verification failed: invalid OTP"
+            );
+            Err(AppError::BadRequest("Invalid OTP".to_string()))
+        }
+        -3 => {
+            tracing::warn!(
+                reason = "TooManyOtpAttempts",
+                email = %user_email,
+                "Forgot password OTP verification failed: too many attempts"
+            );
+            Err(AppError::Forbidden("Too many attempts".to_string()))
+        }
+        _ => {
+            tracing::error!(
+                reason = "UnexpectedOtpVerificationResult",
+                email = %user_email,
+                result = lua_verification_result,
+                "Forgot password OTP verification failed: unexpected Lua verification result"
+            );
+            Err(AppError::Internal(anyhow::anyhow!("Unexpected result: {}", lua_verification_result)))
+        }
     }
 }
 

@@ -32,6 +32,12 @@ pub fn decide_change_appointment(
     if work_order.work_order_status_id != pending_status_id
         && work_order.work_order_status_id != assigned_status_id
     {
+        tracing::warn!(
+            reason = "InvalidWorkOrderStatusForAppointmentChange",
+            work_order_id = %work_order.id,
+            status_id = %work_order.work_order_status_id,
+            message = "Appointment can only be changed when the work order is Pending or Assigned"
+        );
         return Err(AppError::BadRequest(
             "Appointment can only be changed when the work order is Pending or Assigned".into(),
         ));
@@ -40,21 +46,62 @@ pub fn decide_change_appointment(
     // Workday Hours Validation
     let appointment_local = crate::utils::time::to_utc7_time(new_appointment);
 
-    let workday_start: u32 = policies
-        .get("workday_start")
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing workday_start policy")))?
-        .parse()
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid workday_start policy")))?;
+    let workday_start: u32 = match policies.get("workday_start") {
+        None => {
+            tracing::error!(
+                reason = "MissingWorkdayStartPolicy",
+                work_order_id = %work_order.id,
+                message = "Missing workday_start policy"
+            );
+            return Err(AppError::Internal(anyhow::anyhow!("Missing workday_start policy")));
+        }
+        Some(val) => match val.parse() {
+            Err(_) => {
+                tracing::error!(
+                    reason = "InvalidWorkdayStartPolicy",
+                    work_order_id = %work_order.id,
+                    message = "Invalid workday_start policy"
+                );
+                return Err(AppError::Internal(anyhow::anyhow!("Invalid workday_start policy")));
+            }
+            Ok(parsed) => parsed,
+        }
+    };
 
-    let workday_end: u32 = policies
-        .get("workday_end")
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing workday_end policy")))?
-        .parse()
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid workday_end policy")))?;
+    let workday_end: u32 = match policies.get("workday_end") {
+        None => {
+            tracing::error!(
+                reason = "MissingWorkdayEndPolicy",
+                work_order_id = %work_order.id,
+                message = "Missing workday_end policy"
+            );
+            return Err(AppError::Internal(anyhow::anyhow!("Missing workday_end policy")));
+        }
+        Some(val) => match val.parse() {
+            Err(_) => {
+                tracing::error!(
+                    reason = "InvalidWorkdayEndPolicy",
+                    work_order_id = %work_order.id,
+                    message = "Invalid workday_end policy"
+                );
+                return Err(AppError::Internal(anyhow::anyhow!("Invalid workday_end policy")));
+            }
+            Ok(parsed) => parsed,
+        }
+    };
 
     use chrono::Timelike;
     let hour = appointment_local.hour();
     if hour < workday_start || hour >= workday_end {
+        tracing::warn!(
+            reason = "AppointmentOutsideWorkdayLimits",
+            work_order_id = %work_order.id,
+            appointment = %new_appointment,
+            hour = %hour,
+            workday_start = %workday_start,
+            workday_end = %workday_end,
+            message = "Appointment hour is outside workday limits"
+        );
         return Err(AppError::BadRequest(format!(
             "Appointment hour {:02}:{:02} is outside workday limits ({:02}:00 - {:02}:00)",
             hour,
@@ -82,6 +129,13 @@ pub fn decide_change_appointment(
         created_at: Set(now),
     };
 
+    tracing::info!(
+        reason = "ChangeAppointmentSuccess",
+        work_order_id = %work_order.id,
+        new_appointment = %new_appointment,
+        changed_by_id = %changed_by_id,
+        message = "Successfully decided to change appointment time for work order"
+    );
 
     Ok(ChangeAppointmentEffect {
         work_order: active_wo,

@@ -23,16 +23,34 @@ pub fn decide_change_password(
 ) -> Result<ChangePasswordEffect, AppError> {
     // Reject deleted accounts
     if user.deleted_at.is_some() {
+        tracing::warn!(
+            reason = "AccountDeactivated",
+            user_id = %user.id,
+            email = %user.email,
+            "Password change failed: account is deactivated/deleted"
+        );
         return Err(AppError::Unauthorized("Account is deactivated".to_string()));
     }
 
     // Old password must match
     if !is_old_password_valid {
+        tracing::warn!(
+            reason = "InvalidOldPassword",
+            user_id = %user.id,
+            email = %user.email,
+            "Password change failed: old password is incorrect"
+        );
         return Err(AppError::Unauthorized("Old password is incorrect".to_string()));
     }
 
     // Basic check: new password should differ from old
     // (exact comparison not possible without hashing, skip for now)
+
+    tracing::info!(
+        user_id = %user.id,
+        email = %user.email,
+        "Password changed successfully"
+    );
 
     let now = chrono::Utc::now();
     let mut user_active_model: users::ActiveModel = user.into();

@@ -6,8 +6,8 @@ use axum_extra::{
     headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
-use tracing::error;
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use tracing::{error, warn};
 
 use crate::core::errors::AppError;
 use crate::model::jwt_claims::Claims;
@@ -24,7 +24,12 @@ where
             TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
                 .await
                 .map_err(|e| {
-                    error!("Auth extract error: {}", e);
+                    warn!(
+                        message = "Authorization header not found",
+                        error.message = %e,
+                        error.details = ?e,
+                        "Authorization header extraction failed"
+                    );
                     AppError::Unauthorized("Authorization header not found".to_string())
                 })?;
 
@@ -33,9 +38,14 @@ where
         validation.leeway = 10;
         validation.set_required_spec_claims(&["exp", "sub", "iat"]);
 
-        let token_data = decode::<Claims>(bearer.token(), &decoding_key, &validation)
-            .map_err(|e| {
-                error!("Token decode error: {}", e);
+        let token_data =
+            decode::<Claims>(bearer.token(), &decoding_key, &validation).map_err(|e| {
+                error!(
+                    message = "Invalid token",
+                    error.message = %e,
+                    error.details = ?e,
+                    "JWT decoding or validation failed"
+                );
                 match e.kind() {
                     jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
                         AppError::Unauthorized("Token has expired".to_string())

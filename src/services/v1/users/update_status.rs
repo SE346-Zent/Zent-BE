@@ -21,6 +21,8 @@ pub fn decide_can_update_status(
     target_user: users::Model,
     req: UserStatusUpdateRequest,
 ) -> Result<UpdateStatusEffect, AppError> {
+    let current_user_id = current_user.id;
+    let target_user_id = target_user.id;
     let current_role = current_user.role_id;
 
     match current_role {
@@ -30,27 +32,62 @@ pub fn decide_can_update_status(
         1 => {
             // Admin: must be in the same province (fail-closed if admin has no province)
             let Some(ref admin_province) = current_user.province else {
+                tracing::warn!(
+                    current_user_id = %current_user_id,
+                    target_user_id = %target_user_id,
+                    reason = "AdminProvinceMissing",
+                    message = "Admin profile missing province assignment"
+                );
                 return Err(AppError::Forbidden(
                     "Admin profile missing province assignment".to_string(),
                 ));
             };
             let Some(ref target_province) = target_user.province else {
+                tracing::warn!(
+                    current_user_id = %current_user_id,
+                    target_user_id = %target_user_id,
+                    reason = "TargetProvinceMissing",
+                    message = "Target user profile missing province assignment"
+                );
                 return Err(AppError::Forbidden(
                     "You can only update users in your province".to_string(),
                 ));
             };
             if admin_province != target_province {
+                tracing::warn!(
+                    current_user_id = %current_user_id,
+                    target_user_id = %target_user_id,
+                    admin_province = %admin_province,
+                    target_province = %target_province,
+                    reason = "ProvinceMismatch",
+                    message = "Admin and target user provinces do not match"
+                );
                 return Err(AppError::Forbidden(
                     "You can only update users in your province".to_string(),
                 ));
             }
         }
         _ => {
+            tracing::warn!(
+                current_user_id = %current_user_id,
+                current_role = %current_role,
+                target_user_id = %target_user_id,
+                reason = "NotAuthorized",
+                message = "Only administrators can update user status"
+            );
             return Err(AppError::Forbidden(
                 "Only administrators can update user status".to_string(),
             ));
         }
     }
+
+    tracing::info!(
+        current_user_id = %current_user_id,
+        target_user_id = %target_user_id,
+        new_status = %req.account_status_id,
+        reason = "UpdateStatusDecided",
+        message = "User status update successfully decided"
+    );
 
     let mut user_active_model: users::ActiveModel = target_user.into();
     user_active_model.account_status = sea_orm::Set(req.account_status_id);

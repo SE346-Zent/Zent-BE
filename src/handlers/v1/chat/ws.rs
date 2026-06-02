@@ -1,24 +1,24 @@
+use crate::core::state::AppState;
+use crate::infrastructure::cron_tasks::{ws_expiry, ws_heartbeat};
+use crate::infrastructure::ws::{ConnectionCommand, WsIncoming, WsOutgoing};
+use crate::model::jwt_claims::Claims;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State, ConnectInfo,
+        ConnectInfo, State,
     },
     response::IntoResponse,
 };
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::Duration;
 use futures::{SinkExt, StreamExt};
+use jsonwebtoken::{decode, DecodingKey, Validation};
+use redis::AsyncCommands;
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 use uuid::Uuid;
-use jsonwebtoken::{decode, DecodingKey, Validation};
-use redis::AsyncCommands;
-use crate::core::state::AppState;
-use crate::infrastructure::ws::{WsIncoming, WsOutgoing, ConnectionCommand};
-use crate::infrastructure::cron_tasks::{ws_heartbeat, ws_expiry};
-use crate::model::jwt_claims::Claims;
 
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
@@ -36,33 +36,53 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     // Phase 1: Wait for AUTH frame
     let user_id = loop {
         match ws_receiver.next().await {
-            Some(Ok(Message::Text(text))) => {
-                match serde_json::from_str::<WsIncoming>(&text) {
-                    Ok(WsIncoming::Auth { token }) => {
-                        match validate_ws_token(&token, &state.decoding_key) {
-                            Ok(uid) => break uid,
-                            Err(_) => {
-                                let _ = ws_sender.send(Message::Text(
+            Some(Ok(Message::Text(text))) => match serde_json::from_str::<WsIncoming>(&text) {
+                Ok(WsIncoming::Auth { token }) => {
+                    match validate_ws_token(&token, &state.decoding_key) {
+                        Ok(uid) => break uid,
+                        Err(_) => {
+                            tracing::warn!(
+                                code = 4001,
+                                reason = "InvalidToken",
+                                message = "Invalid or expired token",
+                                "WebSocket authentication failed for client {}",
+                                addr
+                            );
+                            let _ = ws_sender
+                                .send(Message::Text(
                                     serde_json::to_string(&WsOutgoing::Error {
                                         code: 4001,
                                         message: "Invalid or expired token".to_string(),
-                                    }).unwrap_or_default().into(),
-                                )).await;
-                                return;
-                            }
+                                    })
+                                    .unwrap_or_default()
+                                    .into(),
+                                ))
+                                .await;
+                            return;
                         }
                     }
-                    _ => {
-                        let _ = ws_sender.send(Message::Text(
+                }
+                _ => {
+                    tracing::warn!(
+                        code = 4000,
+                        reason = "MissingAuthFrame",
+                        message = "First frame must be AUTH",
+                        "WebSocket authentication failed for client {}",
+                        addr
+                    );
+                    let _ = ws_sender
+                        .send(Message::Text(
                             serde_json::to_string(&WsOutgoing::Error {
                                 code: 4000,
                                 message: "First frame must be AUTH".to_string(),
-                            }).unwrap_or_default().into(),
-                        )).await;
-                        return;
-                    }
+                            })
+                            .unwrap_or_default()
+                            .into(),
+                        ))
+                        .await;
+                    return;
                 }
-            }
+            },
             Some(Ok(_)) => continue,
             _ => return,
         }
@@ -90,7 +110,9 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     let ex_mgr = ws_manager.clone();
     let ex_tx = cmd_tx.clone();
     let ttl = state.access_token_ttl.0;
-    tokio::spawn(async move { ws_expiry::run_expiry_enforcer(ex_user, ex_mgr, ex_tx, ttl, deadline_rx).await });
+    tokio::spawn(async move {
+        ws_expiry::run_expiry_enforcer(ex_user, ex_mgr, ex_tx, ttl, deadline_rx).await
+    });
 
     // Writer task
     let mut writer_sender = ws_sender;
@@ -98,20 +120,30 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
         while let Some(cmd) = cmd_rx.recv().await {
             match cmd {
                 ConnectionCommand::Send(text) => {
-                    if writer_sender.send(Message::Text(text.into())).await.is_err() {
+                    if writer_sender
+                        .send(Message::Text(text.into()))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
                 ConnectionCommand::Ping(data) => {
-                    if writer_sender.send(Message::Ping(data.into())).await.is_err() {
+                    if writer_sender
+                        .send(Message::Ping(data.into()))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
                 ConnectionCommand::Close { code, reason } => {
-                    let _ = writer_sender.send(Message::Close(Some(axum::extract::ws::CloseFrame {
-                        code,
-                        reason: reason.into(),
-                    }))).await;
+                    let _ = writer_sender
+                        .send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                            code,
+                            reason: reason.into(),
+                        })))
+                        .await;
                     break;
                 }
             }
@@ -130,8 +162,16 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                         WsIncoming::Leaving => {
                             handle_leaving(&state, user_id).await;
                         }
-                        WsIncoming::Message { room_id, content, image_url, reply_to } => {
-                            handle_ws_message(&state, user_id, &room_id, content, image_url, reply_to).await;
+                        WsIncoming::Message {
+                            room_id,
+                            content,
+                            image_url,
+                            reply_to,
+                        } => {
+                            handle_ws_message(
+                                &state, user_id, &room_id, content, image_url, reply_to,
+                            )
+                            .await;
                         }
                         WsIncoming::MarkRead { message_ids } => {
                             handle_mark_read(&state, user_id, &message_ids).await;
@@ -139,7 +179,8 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                         WsIncoming::RefreshToken { token } => {
                             if validate_ws_token(&token, &state.decoding_key).is_ok() {
                                 tracing::info!("Token refreshed for user {}", user_id);
-                                let new_deadline = Instant::now() + Duration::from_secs(state.access_token_ttl.0 as u64);
+                                let new_deadline = Instant::now()
+                                    + Duration::from_secs(state.access_token_ttl.0 as u64);
                                 let _ = deadline_tx.send(new_deadline);
                             }
                         }
@@ -207,9 +248,9 @@ async fn handle_ws_message(
     image_url: Option<String>,
     reply_to: Option<String>,
 ) {
-    use mongodb::bson::doc;
-    use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
     use crate::entities::{chat_room_members, users};
+    use mongodb::bson::doc;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     use uuid::Uuid as UuidParsed;
 
     // Look up the sender's display name for the notification and WS payload
@@ -232,13 +273,17 @@ async fn handle_ws_message(
         "edited_at": mongodb::bson::Bson::Null,
     };
 
-    let col = state.mongodb.collection::<mongodb::bson::Document>("messages");
+    let col = state
+        .mongodb
+        .collection::<mongodb::bson::Document>("messages");
     let result = match col.insert_one(doc).await {
         Ok(r) => r,
         Err(_) => return,
     };
 
-    let message_id = result.inserted_id.as_object_id()
+    let message_id = result
+        .inserted_id
+        .as_object_id()
         .map(|o| o.to_hex())
         .unwrap_or_default();
 
@@ -277,7 +322,8 @@ async fn handle_ws_message(
                 let is_viewing = if let Some(ref vc) = state.valkey {
                     if let Ok(mut conn) = vc.get_connection().await {
                         let viewing_key = format!("chat:viewing:{}", member.user_id);
-                        let viewing_room: Option<String> = conn.get(&viewing_key).await.unwrap_or(None);
+                        let viewing_room: Option<String> =
+                            conn.get(&viewing_key).await.unwrap_or(None);
                         viewing_room.as_deref() == Some(room_id)
                     } else {
                         false
@@ -306,16 +352,18 @@ async fn handle_ws_message(
                         "sender_id": sender_id.to_string(),
                         "sender_name": &sender_name_for_notif,
                     });
-                    let _ = crate::handlers::v1::notifications::send_notification::send_notification(
-                        state.mongodb.as_ref(),
-                        state.valkey.clone(),
-                        state.db.as_ref(),
-                        member.user_id,
-                        "chat_message",
-                        &format!("New message from {}", sender_name_for_notif),
-                        content_preview.as_deref().unwrap_or("Sent an attachment"),
-                        notification_data,
-                    ).await;
+                    let _ =
+                        crate::handlers::v1::notifications::send_notification::send_notification(
+                            state.mongodb.as_ref(),
+                            state.valkey.clone(),
+                            state.db.as_ref(),
+                            member.user_id,
+                            "chat_message",
+                            &format!("New message from {}", sender_name_for_notif),
+                            content_preview.as_deref().unwrap_or("Sent an attachment"),
+                            notification_data,
+                        )
+                        .await;
                 }
                 // else: is_viewing → don't increment unread, don't send push notification
             }
@@ -330,7 +378,9 @@ async fn handle_mark_read(state: &AppState, user_id: Uuid, message_ids: &[String
         return;
     }
 
-    let col = state.mongodb.collection::<mongodb::bson::Document>("read_receipts");
+    let col = state
+        .mongodb
+        .collection::<mongodb::bson::Document>("read_receipts");
     let now = mongodb::bson::DateTime::now();
     let user_id_str = user_id.to_string();
 
@@ -352,12 +402,9 @@ async fn handle_mark_read(state: &AppState, user_id: Uuid, message_ids: &[String
             }
         };
         tasks.spawn(async move {
-            let _ = col.update_one(filter, update)
-                .upsert(true)
-                .await;
+            let _ = col.update_one(filter, update).upsert(true).await;
         });
     }
 
     while let Some(_result) = tasks.join_next().await {}
 }
-

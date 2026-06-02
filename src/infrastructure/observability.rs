@@ -1,21 +1,21 @@
-use opentelemetry::{KeyValue, global, trace::TracerProvider as _};
-use opentelemetry_otlp::{WithExportConfig, SpanExporter, MetricExporter, LogExporter};
+use crate::core::config::AppConfig;
+use opentelemetry::{global, trace::TracerProvider as _, KeyValue};
+use opentelemetry_otlp::{LogExporter, MetricExporter, SpanExporter, WithExportConfig};
 use opentelemetry_sdk::{
-    trace::{BatchSpanProcessor, TracerProvider as SdkTracerProvider},
-    metrics::{PeriodicReader, SdkMeterProvider},
     logs::{BatchLogProcessor, LoggerProvider as SdkLoggerProvider},
+    metrics::{PeriodicReader, SdkMeterProvider},
     propagation::TraceContextPropagator,
+    trace::{BatchSpanProcessor, TracerProvider as SdkTracerProvider},
     Resource,
 };
+use std::sync::OnceLock;
+use std::time::Duration;
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
     layer::SubscriberExt,
     util::SubscriberInitExt,
     EnvFilter,
 };
-use std::time::Duration;
-use std::sync::OnceLock;
-use crate::core::config::AppConfig;
 
 static METER_PROVIDER: OnceLock<SdkMeterProvider> = OnceLock::new();
 static LOGGER_PROVIDER: OnceLock<SdkLoggerProvider> = OnceLock::new();
@@ -23,30 +23,45 @@ static LOGGER_PROVIDER: OnceLock<SdkLoggerProvider> = OnceLock::new();
 /// Initialise the global observability pipeline (Traces, Metrics, Logs).
 pub fn init_tracing() {
     let cfg = AppConfig::get();
-    
+
     // 1. Set up global propagator (W3C TraceContext)
     global::set_text_map_propagator(TraceContextPropagator::new());
 
     // 2. Build Resource
     let resource = Resource::new_with_defaults(vec![
-        KeyValue::new("service.name", cfg.otel_service_name.clone().unwrap_or_else(|| "zent-be".to_string())),
+        KeyValue::new(
+            "service.name",
+            cfg.otel_service_name
+                .clone()
+                .unwrap_or_else(|| "zent-be".to_string()),
+        ),
         KeyValue::new("environment", cfg.app_stage.clone()),
     ]);
 
-    let agent_endpoint = cfg.otel_exporter_otlp_endpoint.clone()
+    let agent_endpoint = cfg
+        .otel_exporter_otlp_endpoint
+        .clone()
         .unwrap_or_else(|| "http://localhost:4318".to_string());
 
-    println!("Observability: Configuring OTEL Agent Endpoint: {}", agent_endpoint);
+    println!(
+        "Observability: Configuring OTEL Agent Endpoint: {}",
+        agent_endpoint
+    );
 
     // 3. Build OTLP tracer provider
-    let otel_trace_layer = if let Some(provider) = build_otlp_tracer_provider(&agent_endpoint, resource.clone()) {
-        let tracer = provider.tracer(cfg.otel_service_name.clone().unwrap_or_else(|| "zent-be".to_string()));
-        global::set_tracer_provider(provider);
-        Some(tracing_opentelemetry::layer().with_tracer(tracer))
-    } else {
-        println!("Warning: Failed to initialize OTLP tracer provider");
-        None
-    };
+    let otel_trace_layer =
+        if let Some(provider) = build_otlp_tracer_provider(&agent_endpoint, resource.clone()) {
+            let tracer = provider.tracer(
+                cfg.otel_service_name
+                    .clone()
+                    .unwrap_or_else(|| "zent-be".to_string()),
+            );
+            global::set_tracer_provider(provider);
+            Some(tracing_opentelemetry::layer().with_tracer(tracer))
+        } else {
+            println!("Warning: Failed to initialize OTLP tracer provider");
+            None
+        };
 
     // 4. Build OTLP meter provider
     if let Some(meter_provider) = build_otlp_meter_provider(&agent_endpoint, resource.clone()) {
@@ -59,16 +74,19 @@ pub fn init_tracing() {
     }
 
     // 5. Build OTLP logger provider and tracing layer
-    let otel_log_layer = if let Some(logger_provider) = build_otlp_logger_provider(&agent_endpoint, resource) {
-        let layer = opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge::new(&logger_provider);
-        if let Err(_) = LOGGER_PROVIDER.set(logger_provider) {
-            println!("Warning: LOGGER_PROVIDER already set");
-        }
-        Some(layer)
-    } else {
-        println!("Warning: Failed to initialize OTLP logger provider");
-        None
-    };
+    let otel_log_layer =
+        if let Some(logger_provider) = build_otlp_logger_provider(&agent_endpoint, resource) {
+            let layer = opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge::new(
+                &logger_provider,
+            );
+            if let Err(_) = LOGGER_PROVIDER.set(logger_provider) {
+                println!("Warning: LOGGER_PROVIDER already set");
+            }
+            Some(layer)
+        } else {
+            println!("Warning: Failed to initialize OTLP logger provider");
+            None
+        };
 
     // 6. Configure EnvFilter
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -93,7 +111,7 @@ pub fn init_tracing() {
         .with(otel_trace_layer)
         .with(otel_log_layer)
         .init();
-        
+
     // 9. Set custom panic hook for structured logging
     set_panic_hook();
 
@@ -102,7 +120,10 @@ pub fn init_tracing() {
 
 fn set_panic_hook() {
     std::panic::set_hook(Box::new(|panic_info| {
-        let location = panic_info.location().map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column())).unwrap_or_else(|| "unknown".to_string());
+        let location = panic_info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown".to_string());
         let payload = panic_info.payload();
         let message = if let Some(s) = payload.downcast_ref::<&str>() {
             s.to_string()
@@ -117,11 +138,16 @@ fn set_panic_hook() {
             panic.location = %location,
             "Application panicked"
         );
+
+        shutdown_tracing();
     }));
 }
 
 /// Builds an OTLP/HTTP tracer provider.
-fn build_otlp_tracer_provider(base_endpoint: &str, resource: Resource) -> Option<SdkTracerProvider> {
+fn build_otlp_tracer_provider(
+    base_endpoint: &str,
+    resource: Resource,
+) -> Option<SdkTracerProvider> {
     let endpoint = if base_endpoint.ends_with("/v1/traces") {
         base_endpoint.to_string()
     } else {
@@ -134,7 +160,8 @@ fn build_otlp_tracer_provider(base_endpoint: &str, resource: Resource) -> Option
         .build()
         .ok()?;
 
-    let batch_processor = BatchSpanProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio).build();
+    let batch_processor =
+        BatchSpanProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio).build();
 
     let provider = SdkTracerProvider::builder()
         .with_resource(resource)
@@ -171,7 +198,10 @@ fn build_otlp_meter_provider(base_endpoint: &str, resource: Resource) -> Option<
 }
 
 /// Builds an OTLP/HTTP logger provider.
-fn build_otlp_logger_provider(base_endpoint: &str, resource: Resource) -> Option<SdkLoggerProvider> {
+fn build_otlp_logger_provider(
+    base_endpoint: &str,
+    resource: Resource,
+) -> Option<SdkLoggerProvider> {
     let endpoint = if base_endpoint.ends_with("/v1/logs") {
         base_endpoint.to_string()
     } else {
@@ -184,7 +214,8 @@ fn build_otlp_logger_provider(base_endpoint: &str, resource: Resource) -> Option
         .build()
         .ok()?;
 
-    let batch_processor = BatchLogProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio).build();
+    let batch_processor =
+        BatchLogProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio).build();
 
     let provider = SdkLoggerProvider::builder()
         .with_resource(resource)
@@ -197,29 +228,32 @@ fn build_otlp_logger_provider(base_endpoint: &str, resource: Resource) -> Option
 /// Flush and shutdown all global observability signals.
 pub fn shutdown_tracing() {
     println!("Observability: Shutting down pipeline...");
-    
+
     // Shut down Tracer
     global::shutdown_tracer_provider();
-    
+
     // Shut down Meter
     if let Some(mp) = METER_PROVIDER.get() {
         if let Err(err) = mp.shutdown() {
             eprintln!("Error shutting down meter provider: {:?}", err);
         }
     }
-    
+
     // Shut down Logger
     if let Some(lp) = LOGGER_PROVIDER.get() {
         if let Err(err) = lp.shutdown() {
             eprintln!("Error shutting down logger provider: {:?}", err);
         }
     }
-    
+
     println!("Observability: Pipeline shut down complete.");
 }
 
 /// Returns the application-global meter.
 pub fn meter() -> opentelemetry::metrics::Meter {
-    let name = AppConfig::get().otel_service_name.as_deref().unwrap_or("zent-be");
+    let name = AppConfig::get()
+        .otel_service_name
+        .as_deref()
+        .unwrap_or("zent-be");
     global::meter(name)
 }

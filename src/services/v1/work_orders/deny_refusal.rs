@@ -35,10 +35,18 @@ pub fn decide_deny_refusal(
     target_pending_status_id: i32,
 ) -> Result<DenyRefuseEffect, AppError> {
     if work_order.reject_form_id != Some(reject_form.id) {
+        tracing::warn!(
+            reason = "RejectFormMismatch",
+            work_order_id = %work_order.id,
+            reject_form_id = %reject_form.id,
+            message = "Work order does not match this rejection form"
+        );
         return Err(AppError::BadRequest("Work order does not match this rejection form".to_string()));
     }
 
     let current_timestamp = Utc::now();
+
+    let reject_form_id = reject_form.id;
 
     // 1. Mark form as NOT approved (Denied)
     let mut reject_form_active_model: work_order_reject_forms::ActiveModel = reject_form.into();
@@ -61,6 +69,14 @@ pub fn decide_deny_refusal(
         changed_by_id: Set(admin_id),
         changed_at: Set(current_timestamp),
     };
+
+    tracing::info!(
+        reason = "DenyRefusalSuccess",
+        work_order_id = %work_order.id,
+        reject_form_id = %reject_form_id,
+        admin_id = %admin_id,
+        message = "Successfully decided to deny refusal for work order"
+    );
 
     Ok(DenyRefuseEffect {
         work_order_model: work_order_active_model,

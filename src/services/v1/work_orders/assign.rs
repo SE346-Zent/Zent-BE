@@ -48,17 +48,49 @@ pub fn decide_assign_work_order(
 ) -> Result<AssignWorkOrderEffect, AppError> {
     let appointment_local = crate::utils::time::to_utc7_time(work_order.appointment);
 
-    let workday_start: u32 = policies
-        .get("workday_start")
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing workday_start policy")))?
-        .parse()
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid workday_start policy")))?;
+    let workday_start: u32 = match policies.get("workday_start") {
+        None => {
+            tracing::error!(
+                reason = "MissingWorkdayStartPolicy",
+                work_order_id = %work_order.id,
+                message = "Missing workday_start policy"
+            );
+            return Err(AppError::Internal(anyhow::anyhow!("Missing workday_start policy")));
+        }
+        Some(val) => match val.parse() {
+            Err(_) => {
+                tracing::error!(
+                    reason = "InvalidWorkdayStartPolicy",
+                    work_order_id = %work_order.id,
+                    message = "Invalid workday_start policy"
+                );
+                return Err(AppError::Internal(anyhow::anyhow!("Invalid workday_start policy")));
+            }
+            Ok(parsed) => parsed,
+        }
+    };
 
-    let workday_end: u32 = policies
-        .get("workday_end")
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing workday_end policy")))?
-        .parse()
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid workday_end policy")))?;
+    let workday_end: u32 = match policies.get("workday_end") {
+        None => {
+            tracing::error!(
+                reason = "MissingWorkdayEndPolicy",
+                work_order_id = %work_order.id,
+                message = "Missing workday_end policy"
+            );
+            return Err(AppError::Internal(anyhow::anyhow!("Missing workday_end policy")));
+        }
+        Some(val) => match val.parse() {
+            Err(_) => {
+                tracing::error!(
+                    reason = "InvalidWorkdayEndPolicy",
+                    work_order_id = %work_order.id,
+                    message = "Invalid workday_end policy"
+                );
+                return Err(AppError::Internal(anyhow::anyhow!("Invalid workday_end policy")));
+            }
+            Ok(parsed) => parsed,
+        }
+    };
 
     let _buffer_hours: i64 = policies
         .get("buffer")
@@ -67,6 +99,15 @@ pub fn decide_assign_work_order(
 
     let hour = appointment_local.hour();
     if hour < workday_start || hour >= workday_end {
+        tracing::warn!(
+            reason = "AppointmentOutsideWorkdayLimits",
+            work_order_id = %work_order.id,
+            appointment = %work_order.appointment,
+            hour = %hour,
+            workday_start = %workday_start,
+            workday_end = %workday_end,
+            message = "Appointment hour is outside workday limits"
+        );
         return Err(AppError::BadRequest(format!(
             "Appointment hour {:02}:{:02} is outside workday limits ({:02}:00 - {:02}:00)",
             hour,
@@ -78,6 +119,12 @@ pub fn decide_assign_work_order(
 
     // Ensure the work order doesn't already have a technician (use reassign instead)
     if work_order.technician_id.is_some() {
+        tracing::warn!(
+            reason = "WorkOrderAlreadyAssigned",
+            work_order_id = %work_order.id,
+            existing_technician_id = ?work_order.technician_id,
+            message = "Work order already has a technician — use reassign instead"
+        );
         return Err(AppError::BadRequest(
             "Work order already has a technician — use reassign instead".into(),
         ));
@@ -85,6 +132,12 @@ pub fn decide_assign_work_order(
 
     // Ensure we don't assign a completed or rejected work order
     if work_order.work_order_status_id == completed_status_id {
+        tracing::warn!(
+            reason = "CannotAssignCompletedWorkOrder",
+            work_order_id = %work_order.id,
+            completed_status_id = %completed_status_id,
+            message = "Cannot assign a completed work order"
+        );
         return Err(AppError::BadRequest(
             "Cannot assign a completed work order".into(),
         ));
@@ -100,6 +153,13 @@ pub fn decide_assign_work_order(
         }
 
         if other_wo.appointment == work_order.appointment {
+            tracing::warn!(
+                reason = "TechnicianScheduleConflict",
+                work_order_id = %work_order.id,
+                technician_id = %assignment_payload.technician_id,
+                appointment = %work_order.appointment,
+                message = "Technician already has an appointment at this exact time"
+            );
             return Err(AppError::Conflict(
                 "Technician already has an appointment at this exact time".into(),
             ));
@@ -119,6 +179,14 @@ pub fn decide_assign_work_order(
         changed_by_id: Set(admin_user_id),
         changed_at: Set(Utc::now()),
     };
+
+    tracing::info!(
+        reason = "AssignWorkOrderSuccess",
+        work_order_id = %work_order.id,
+        technician_id = %assignment_payload.technician_id,
+        admin_user_id = %admin_user_id,
+        message = "Successfully decided to assign work order"
+    );
 
     Ok(AssignWorkOrderEffect {
         work_order_model: work_order_active_model,

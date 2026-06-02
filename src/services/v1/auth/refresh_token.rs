@@ -52,12 +52,24 @@ pub fn decide_refresh_token(
     encoding_key: &EncodingKey,
 ) -> Result<RefreshTokenEffect, AppError> {
     if session_record.revoked_at.is_some() || session_record.expires_at < Utc::now() {
+        tracing::warn!(
+            reason = "SessionInvalidOrExpired",
+            session_id = %session_record.id,
+            user_id = %user_record.id,
+            "Token refresh failed: session is revoked or expired"
+        );
         return Err(AppError::Unauthorized(
             "Session invalid or expired".to_string(),
         ));
     }
 
     if active_refresh_token_hash.as_deref() != Some(provided_refresh_token_hash) {
+        tracing::error!(
+            reason = "RefreshTokenReuseAttack",
+            session_id = %session_record.id,
+            user_id = %user_record.id,
+            "Token refresh failed: refresh token reuse attack detected"
+        );
         return Ok(RefreshTokenEffect::ReuseAttackDetected {
             session_id: session_record.id,
         });
@@ -70,6 +82,12 @@ pub fn decide_refresh_token(
     )?;
 
     let remaining_duration_seconds = (session_record.expires_at.timestamp() - Utc::now().timestamp()).max(0) as u64;
+
+    tracing::info!(
+        session_id = %session_record.id,
+        user_id = %user_record.id,
+        "Token refreshed successfully"
+    );
 
     Ok(RefreshTokenEffect::Success {
         user_info: UserInfo {

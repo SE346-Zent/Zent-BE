@@ -34,14 +34,40 @@ pub fn decide_deny_part(
 ) -> Result<DenyPartEffect, AppError> {
     let trimmed_reason = denial_reason.trim();
     if trimmed_reason.len() < 10 {
+        tracing::warn!(
+            reason = "DenialReasonTooShort",
+            target_part_form_id = %target_part_form_id,
+            denying_admin_id = %denying_admin_id,
+            reason_length = trimmed_reason.len(),
+            message = "Denial reason is too short"
+        );
         return Err(AppError::BadRequest(format!("Denial reason must be at least 10 characters; got {}", trimmed_reason.len())));
     }
     if trimmed_reason.len() > 2000 {
+        tracing::warn!(
+            reason = "DenialReasonTooLong",
+            target_part_form_id = %target_part_form_id,
+            denying_admin_id = %denying_admin_id,
+            reason_length = trimmed_reason.len(),
+            message = "Denial reason exceeds maximum length"
+        );
         return Err(AppError::BadRequest(format!("Denial reason must not exceed 2000 characters; got {}", trimmed_reason.len())));
     }
     if current_form_status.to_lowercase() != "pending" {
+        tracing::warn!(
+            reason = "InvalidPartFormStatus",
+            target_part_form_id = %target_part_form_id,
+            denying_admin_id = %denying_admin_id,
+            current_form_status = %current_form_status,
+            message = "Cannot deny part because its status is not pending"
+        );
         return Err(AppError::BadRequest(format!("Cannot deny part with status '{}'; must be 'pending'", current_form_status)));
     }
+    tracing::info!(
+        target_part_form_id = %target_part_form_id,
+        denying_admin_id = %denying_admin_id,
+        message = "Successfully decided to deny part form"
+    );
     Ok(DenyPartEffect {
         target_part_form_id,
         denial_audit_model: part_audit_log::ActiveModel {

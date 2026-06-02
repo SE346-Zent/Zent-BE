@@ -12,6 +12,11 @@ pub struct GetMeEffect {
 
 /// Retrieve the current user's profile information.
 pub fn decide_get_me(user: users::Model) -> GetMeEffect {
+    tracing::info!(
+        user_id = %user.id,
+        reason = "GetMeSuccessful",
+        message = "Successfully retrieved current user profile data"
+    );
     let response_data = MeResponseData {
         id: user.id,
         role_id: user.role_id,

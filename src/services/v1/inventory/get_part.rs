@@ -63,6 +63,13 @@ pub fn get_part_detail(
     requesting_user_id: uuid::Uuid,
 ) -> Result<PartDetailResponse, AppError> {
     if !can_user_see_part_detail(requesting_role_name, requesting_user_id, part_relation_data) {
+        tracing::warn!(
+            reason = "NotAuthorized",
+            part_id = %part_relation_data.part_record.id,
+            requesting_role_name = %requesting_role_name,
+            requesting_user_id = %requesting_user_id,
+            message = "User is not authorized to see part details"
+        );
         return Err(AppError::Forbidden("You do not have access to this part".to_string()));
     }
     Ok(PartDetailResponse {

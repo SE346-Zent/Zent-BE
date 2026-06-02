@@ -54,11 +54,23 @@ pub fn decide_login(
 ) -> Result<LoginEffect, AppError> {
     // 1. Check if user is deleted
     if user_record.deleted_at.is_some() {
+        tracing::warn!(
+            reason = "AccountDeactivated",
+            user_id = %user_record.id,
+            email = %user_record.email,
+            "Login failed: account is deactivated/deleted"
+        );
         return Err(AppError::Unauthorized("Invalid credentials".to_string()));
     }
 
     // 2. Verify password (passed in)
     if !is_password_valid {
+        tracing::warn!(
+            reason = "InvalidPassword",
+            user_id = %user_record.id,
+            email = %user_record.email,
+            "Login failed: invalid password"
+        );
         return Err(AppError::Unauthorized("Invalid credentials".to_string()));
     }
 
@@ -67,11 +79,24 @@ pub fn decide_login(
     match account_status {
         AccountStatusEnum::Active => {}
         AccountStatusEnum::Pending => {
+            tracing::warn!(
+                reason = "AccountPending",
+                user_id = %user_record.id,
+                email = %user_record.email,
+                "Login failed: account is pending verification"
+            );
             return Err(AppError::Forbidden(
                 "Account is pending verification".to_string(),
             ));
         }
         _ => {
+            tracing::warn!(
+                reason = "AccountNotActive",
+                user_id = %user_record.id,
+                email = %user_record.email,
+                status = ?account_status,
+                "Login failed: account status is not active"
+            );
             return Err(AppError::Forbidden(format!("Account is {:?}", account_status)));
         }
     }
@@ -87,6 +112,12 @@ pub fn decide_login(
     let session_id = Uuid::new_v4();
     let session_duration_seconds = session_ttl.0;
     let session_expires_at = Utc::now() + chrono::Duration::seconds(session_duration_seconds);
+
+    tracing::info!(
+        user_id = %user_record.id,
+        email = %user_record.email,
+        "Login succeeded"
+    );
 
     Ok(LoginEffect {
         session_id,

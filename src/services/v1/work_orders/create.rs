@@ -41,27 +41,74 @@ pub fn decide_create_work_order(
 ) -> Result<CreateWorkOrderEffect, AppError> {
     // 1. Location Policy Validation
     if creation_payload.city != "HCM" && creation_payload.city != "HN" {
+        tracing::warn!(
+            reason = "UnsupportedCity",
+            city = %creation_payload.city,
+            customer_id = %requesting_customer_id,
+            message = "Only HCM and HN are supported at this time"
+        );
         return Err(AppError::BadRequest("Only HCM and HN are supported at this time".to_string()));
     }
 
     // 2. Workday Hours Validation
     let appointment_local = crate::utils::time::to_utc7_time(creation_payload.appointment);
 
-    let workday_start: u32 = policies
-        .get("workday_start")
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing workday_start policy")))?
-        .parse()
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid workday_start policy")))?;
+    let workday_start: u32 = match policies.get("workday_start") {
+        None => {
+            tracing::error!(
+                reason = "MissingWorkdayStartPolicy",
+                customer_id = %requesting_customer_id,
+                message = "Missing workday_start policy"
+            );
+            return Err(AppError::Internal(anyhow::anyhow!("Missing workday_start policy")));
+        }
+        Some(val) => match val.parse() {
+            Err(_) => {
+                tracing::error!(
+                    reason = "InvalidWorkdayStartPolicy",
+                    customer_id = %requesting_customer_id,
+                    message = "Invalid workday_start policy"
+                );
+                return Err(AppError::Internal(anyhow::anyhow!("Invalid workday_start policy")));
+            }
+            Ok(parsed) => parsed,
+        }
+    };
 
-    let workday_end: u32 = policies
-        .get("workday_end")
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing workday_end policy")))?
-        .parse()
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid workday_end policy")))?;
+    let workday_end: u32 = match policies.get("workday_end") {
+        None => {
+            tracing::error!(
+                reason = "MissingWorkdayEndPolicy",
+                customer_id = %requesting_customer_id,
+                message = "Missing workday_end policy"
+            );
+            return Err(AppError::Internal(anyhow::anyhow!("Missing workday_end policy")));
+        }
+        Some(val) => match val.parse() {
+            Err(_) => {
+                tracing::error!(
+                    reason = "InvalidWorkdayEndPolicy",
+                    customer_id = %requesting_customer_id,
+                    message = "Invalid workday_end policy"
+                );
+                return Err(AppError::Internal(anyhow::anyhow!("Invalid workday_end policy")));
+            }
+            Ok(parsed) => parsed,
+        }
+    };
 
     use chrono::Timelike;
     let hour = appointment_local.hour();
     if hour < workday_start || hour >= workday_end {
+        tracing::warn!(
+            reason = "AppointmentOutsideWorkdayLimits",
+            appointment = %creation_payload.appointment,
+            hour = %hour,
+            workday_start = %workday_start,
+            workday_end = %workday_end,
+            customer_id = %requesting_customer_id,
+            message = "Appointment hour is outside workday limits"
+        );
         return Err(AppError::BadRequest(format!(
             "Appointment hour {:02}:{:02} is outside workday limits ({:02}:00 - {:02}:00)",
             hour,
@@ -109,6 +156,13 @@ pub fn decide_create_work_order(
         changed_by_id: Set(requesting_customer_id),
         changed_at: Set(current_timestamp),
     };
+
+    tracing::info!(
+        reason = "CreateWorkOrderSuccess",
+        customer_id = %requesting_customer_id,
+        work_order_id = %work_order_id,
+        message = "Successfully decided to create work order"
+    );
 
     Ok(CreateWorkOrderEffect { work_order_model: work_order_active_model, state_history_model: state_history_active_model })
 }

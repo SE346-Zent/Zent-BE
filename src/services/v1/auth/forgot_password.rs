@@ -31,13 +31,25 @@ pub fn decide_forgot_password(
     match user_record {
         Some(user) => {
             let recovery_otp = otp::generate_6digit_otp();
+            tracing::info!(
+                user_id = %user.id,
+                email = %user.email,
+                "Forgot password OTP generated successfully"
+            );
             Ok(Some(ForgotPasswordEffect {
                 email_address: forgot_password_payload.email,
                 full_name: user.full_name.clone(),
                 recovery_otp,
             }))
         }
-        None => Ok(None),
+        None => {
+            tracing::warn!(
+                reason = "UserNotFound",
+                email = %forgot_password_payload.email,
+                "Forgot password requested for non-existent email"
+            );
+            Ok(None)
+        }
     }
 }
 

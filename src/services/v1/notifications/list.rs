@@ -22,6 +22,16 @@ pub fn list_notifications(
     notification_records: &[NotificationRecord],
     list_query: &NotificationListQuery,
 ) -> (Vec<NotificationListItem>, PaginationResponse) {
+    if let Some(category_id) = list_query.category_id {
+        if !super::is_valid_category_id(category_id) {
+            tracing::warn!(
+                category_id = %category_id,
+                reason = "InvalidCategoryId",
+                message = "Queried category ID is invalid or out of bounds"
+            );
+        }
+    }
+
     let current_page = list_query.page.unwrap_or(1);
     let page_limit = list_query.limit.unwrap_or(20);
     
@@ -55,6 +65,14 @@ pub fn list_notifications(
         .collect();
 
     let total_pages = (total_records as f64 / page_limit as f64).ceil() as u64;
+
+    tracing::info!(
+        current_page = %current_page,
+        page_limit = %page_limit,
+        total_records = %total_records,
+        reason = "ListNotificationsDecided",
+        message = "Successfully paginated notifications"
+    );
 
     (paginated_items, PaginationResponse {
         current_page: current_page as u64,

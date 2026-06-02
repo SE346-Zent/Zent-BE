@@ -22,13 +22,31 @@ pub fn decide_list_users(
     users: Vec<users::Model>,
     total: u64,
 ) -> Result<ListUsersEffect, AppError> {
+    let current_user_id = current_user.id;
+    let role_id = current_user.role_id;
     // RBAC: only Admin (1) or SuperAdmin (2) may list users.
     // Role IDs are resolved upstream via LookupTables; here we accept the raw i32.
     // The middleware already gates on Admin/SuperAdmin, but we double-check.
-    match current_user.role_id {
+    match role_id {
         1 | 2 => {} // Admin or SuperAdmin
-        _ => return Err(AppError::Forbidden("Only administrators can list users".to_string())),
+        _ => {
+            tracing::warn!(
+                current_user_id = %current_user_id,
+                role_id = %role_id,
+                reason = "NotAuthorized",
+                message = "Only administrators can list users"
+            );
+            return Err(AppError::Forbidden("Only administrators can list users".to_string()));
+        }
     }
+
+    tracing::info!(
+        current_user_id = %current_user_id,
+        role_id = %role_id,
+        total_count = %total,
+        reason = "ListUsersDecided",
+        message = "User listing successfully decided"
+    );
 
     Ok(ListUsersEffect { users, total })
 }

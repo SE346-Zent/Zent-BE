@@ -43,6 +43,13 @@ pub fn decide_cancel_work_order(
 ) -> Result<CancelWorkOrderEffect, AppError> {
     // Only the owner of the work order can cancel it
     if work_order.customer_id != requesting_customer_id {
+        tracing::warn!(
+            reason = "NotWorkOrderOwner",
+            work_order_id = %work_order.id,
+            customer_id = %work_order.customer_id,
+            requesting_customer_id = %requesting_customer_id,
+            message = "You can only cancel your own work orders"
+        );
         return Err(AppError::Forbidden("You can only cancel your own work orders".to_string()));
     }
 
@@ -50,6 +57,13 @@ pub fn decide_cancel_work_order(
     let cancellation_cutoff = work_order.appointment - Duration::hours(cancel_window_hours);
 
     if current_timestamp >= cancellation_cutoff {
+        tracing::warn!(
+            reason = "CancellationWindowPassed",
+            work_order_id = %work_order.id,
+            appointment = %work_order.appointment,
+            cancel_window_hours = %cancel_window_hours,
+            message = "Cannot cancel within cutoff window"
+        );
         return Err(AppError::BadRequest(format!(
             "Cannot cancel within {} hours of the appointment. Please contact support for assistance.",
             cancel_window_hours
@@ -68,6 +82,13 @@ pub fn decide_cancel_work_order(
         changed_by_id: Set(requesting_customer_id),
         changed_at: Set(current_timestamp),
     };
+
+    tracing::info!(
+        reason = "CancelWorkOrderSuccess",
+        work_order_id = %work_order.id,
+        customer_id = %requesting_customer_id,
+        message = "Successfully decided to cancel work order"
+    );
 
     Ok(CancelWorkOrderEffect { work_order_model: work_order_active_model, state_history_model: state_history_active_model })
 }

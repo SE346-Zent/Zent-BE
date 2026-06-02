@@ -22,8 +22,14 @@ pub struct UpdateMeEffect {
 /// Deleted accounts are rejected. Only provided fields are updated; omitted fields keep
 /// their current value.
 pub fn decide_update_me(user: users::Model, req: ProfileUpdateRequest) -> Result<UpdateMeEffect, AppError> {
+    let user_id = user.id;
     // Reject deleted accounts
     if user.deleted_at.is_some() {
+        tracing::warn!(
+            user_id = %user_id,
+            reason = "AccountDeactivated",
+            message = "Account is deactivated/soft-deleted"
+        );
         return Err(AppError::Unauthorized("Account is deactivated".to_string()));
     }
 
@@ -54,6 +60,12 @@ pub fn decide_update_me(user: users::Model, req: ProfileUpdateRequest) -> Result
         created_at: user.created_at.to_rfc3339(),
         updated_at: now.to_rfc3339(),
     };
+
+    tracing::info!(
+        user_id = %user_id,
+        reason = "UpdateMeDecided",
+        message = "Profile update successfully decided"
+    );
 
     Ok(UpdateMeEffect { user_active_model, response_data })
 }

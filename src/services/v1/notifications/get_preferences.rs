@@ -18,6 +18,11 @@ pub fn get_preferences(
     current_user_preferences: &HashMap<i32, bool>,
     permitted_category_ids: &[i32],
 ) -> Vec<NotificationPreferenceResponse> {
+    tracing::info!(
+        permitted_category_ids_count = %permitted_category_ids.len(),
+        reason = "GetPreferencesDecided",
+        message = "Successfully built notification preferences response"
+    );
     permitted_category_ids.iter().filter_map(|&category_id| {
         let category_slug = find_category_slug_by_id(category_id)?;
         let index = (category_id - 1) as usize;

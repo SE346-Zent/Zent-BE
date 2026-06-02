@@ -34,9 +34,11 @@ pub struct ApiResponse<T: Serialize> {
 impl<T: Serialize> ApiResponse<T> {
     /// Build a successful response without pagination metadata.
     pub fn success(status_code: u16, message: impl Into<String>, data: T) -> Self {
+        let msg = message.into();
+        tracing::info!(code = %status_code, reason = "Success", message = %msg, "Endpoint returned success");
         Self {
             status_code,
-            message: message.into(),
+            message: msg,
             data: Some(data),
             meta: None,
         }
@@ -49,9 +51,11 @@ impl<T: Serialize> ApiResponse<T> {
         data: T,
         meta: PaginationResponse,
     ) -> Self {
+        let msg = message.into();
+        tracing::info!(code = %status_code, reason = "SuccessWithMeta", message = %msg, "Endpoint returned success with meta");
         Self {
             status_code,
-            message: message.into(),
+            message: msg,
             data: Some(data),
             meta: Some(meta),
         }
@@ -62,9 +66,11 @@ impl<T: Serialize> ApiResponse<T> {
 impl ApiResponse<()> {
     /// Build a message-only response (no data payload).
     pub fn message_only(status_code: u16, message: impl Into<String>) -> Self {
+        let msg = message.into();
+        tracing::info!(code = %status_code, reason = "MessageOnly", message = %msg, "Endpoint returned message only");
         Self {
             status_code,
-            message: message.into(),
+            message: msg,
             data: None,
             meta: None,
         }

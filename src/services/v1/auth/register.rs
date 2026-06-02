@@ -54,6 +54,13 @@ pub fn decide_register(
     // 1. Check existing user
     if let Some(user) = existing_user_record {
         if user.account_status != pending_status_id {
+            tracing::warn!(
+                reason = "EmailAlreadyRegistered",
+                email = %registration_request.email,
+                existing_user_id = %user.id,
+                existing_status = %user.account_status,
+                "Registration failed: email is already registered and active"
+            );
             return Err(AppError::Conflict(
                 "Email already registered and active".to_string(),
             ));
@@ -70,6 +77,12 @@ pub fn decide_register(
 
     // 3. OTP
     let verification_otp = otp::generate_6digit_otp();
+
+    tracing::info!(
+        email = %registration_request.email,
+        is_new_record = %is_new_record,
+        "User registration decided successfully"
+    );
 
     Ok(RegisterEffect {
         user_id,

@@ -45,10 +45,27 @@ pub fn decide_auto_assign(
 ) -> Result<Option<AutoAssignWorkOrderEffect>, AppError> {
     let target_appointment_start = crate::utils::time::to_utc7_time(work_order.appointment);
 
-    let workday_start: u32 = policies.get("workday_start")
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing workday_start policy")))?
-        .parse()
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid workday_start policy")))?;
+    let workday_start: u32 = match policies.get("workday_start") {
+        None => {
+            tracing::error!(
+                reason = "MissingWorkdayStartPolicy",
+                work_order_id = %work_order.id,
+                message = "Missing workday_start policy"
+            );
+            return Err(AppError::Internal(anyhow::anyhow!("Missing workday_start policy")));
+        }
+        Some(val) => match val.parse() {
+            Err(_) => {
+                tracing::error!(
+                    reason = "InvalidWorkdayStartPolicy",
+                    work_order_id = %work_order.id,
+                    message = "Invalid workday_start policy"
+                );
+                return Err(AppError::Internal(anyhow::anyhow!("Invalid workday_start policy")));
+            }
+            Ok(parsed) => parsed,
+        }
+    };
 
     let buffer_hours: i64 = policies.get("buffer")
         .and_then(|v| v.parse().ok())
@@ -136,8 +153,21 @@ pub fn decide_auto_assign(
             changed_at: Set(Utc::now()),
         };
 
+        tracing::info!(
+            reason = "AutoAssignSuccess",
+            work_order_id = %work_order.id,
+            technician_id = %tech_id,
+            system_user_id = %system_user_id,
+            message = "Successfully decided to auto-assign work order"
+        );
+
         Ok(Some(AutoAssignWorkOrderEffect { work_order_model: active_wo, state_history_model: state_history }))
     } else {
+        tracing::info!(
+            reason = "NoTechnicianFoundForAutoAssign",
+            work_order_id = %work_order.id,
+            message = "No suitable technician was found for auto assignment"
+        );
         Ok(None)
     }
 }

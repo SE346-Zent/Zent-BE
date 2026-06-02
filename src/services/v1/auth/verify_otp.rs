@@ -37,6 +37,11 @@ pub fn decide_verify_otp(
         1 => {
             match user_record {
                 Some(user) => {
+                    tracing::info!(
+                        user_id = %user.id,
+                        email = %user.email,
+                        "Registration OTP verification succeeded"
+                    );
                     Ok(VerifyOtpEffect {
                         verified_user_id: user.id,
                         target_active_status_id,
@@ -44,13 +49,81 @@ pub fn decide_verify_otp(
                         user_full_name: user.full_name.clone(),
                     })
                 }
-                None => Err(AppError::NotFound("User not found".to_string())),
+                None => {
+                    tracing::warn!(
+                        reason = "UserNotFound",
+                        "Registration OTP verification failed: user not found even though OTP script returned success"
+                    );
+                    Err(AppError::NotFound("User not found".to_string()))
+                }
             }
         }
-        -1 => Err(AppError::BadRequest("OTP expired or invalid".to_string())),
-        -2 => Err(AppError::BadRequest("Invalid OTP".to_string())),
-        -3 => Err(AppError::Forbidden("Too many attempts".to_string())),
-        _ => Err(AppError::Internal(anyhow::anyhow!("Unexpected result: {}", lua_verification_result))),
+        -1 => {
+            if let Some(user) = user_record {
+                tracing::warn!(
+                    reason = "OtpExpiredOrInvalid",
+                    user_id = %user.id,
+                    email = %user.email,
+                    "Registration OTP verification failed: OTP expired or invalid"
+                );
+            } else {
+                tracing::warn!(
+                    reason = "OtpExpiredOrInvalid",
+                    "Registration OTP verification failed: OTP expired or invalid"
+                );
+            }
+            Err(AppError::BadRequest("OTP expired or invalid".to_string()))
+        }
+        -2 => {
+            if let Some(user) = user_record {
+                tracing::warn!(
+                    reason = "InvalidOtp",
+                    user_id = %user.id,
+                    email = %user.email,
+                    "Registration OTP verification failed: invalid OTP"
+                );
+            } else {
+                tracing::warn!(
+                    reason = "InvalidOtp",
+                    "Registration OTP verification failed: invalid OTP"
+                );
+            }
+            Err(AppError::BadRequest("Invalid OTP".to_string()))
+        }
+        -3 => {
+            if let Some(user) = user_record {
+                tracing::warn!(
+                    reason = "TooManyOtpAttempts",
+                    user_id = %user.id,
+                    email = %user.email,
+                    "Registration OTP verification failed: too many attempts"
+                );
+            } else {
+                tracing::warn!(
+                    reason = "TooManyOtpAttempts",
+                    "Registration OTP verification failed: too many attempts"
+                );
+            }
+            Err(AppError::Forbidden("Too many attempts".to_string()))
+        }
+        _ => {
+            if let Some(user) = user_record {
+                tracing::error!(
+                    reason = "UnexpectedOtpVerificationResult",
+                    user_id = %user.id,
+                    email = %user.email,
+                    result = lua_verification_result,
+                    "Registration OTP verification failed: unexpected Lua verification result"
+                );
+            } else {
+                tracing::error!(
+                    reason = "UnexpectedOtpVerificationResult",
+                    result = lua_verification_result,
+                    "Registration OTP verification failed: unexpected Lua verification result"
+                );
+            }
+            Err(AppError::Internal(anyhow::anyhow!("Unexpected result: {}", lua_verification_result)))
+        }
     }
 }
 

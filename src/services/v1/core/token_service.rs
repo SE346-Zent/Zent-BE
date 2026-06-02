@@ -1,13 +1,12 @@
-use jsonwebtoken::{encode, Header, EncodingKey};
-use crate::model::jwt_claims::Claims;
 use crate::core::errors::AppError;
+use crate::model::jwt_claims::Claims;
 use base64::{engine::general_purpose::URL_SAFE, Engine};
+use chrono::Utc;
+use jsonwebtoken::{encode, EncodingKey, Header};
 use rand::RngCore;
 use sha2::{Digest, Sha256};
-use chrono::Utc;
 
 /// Contains a set of security tokens and the hash for database verification.
-
 pub struct TokenBundle {
     /// The JSON Web Token (JWT) for immediate authentication.
     pub access_token: String,
@@ -32,8 +31,17 @@ pub fn generate_token_bundle(
         exp: (current_timestamp_seconds + access_token_ttl_seconds) as usize,
     };
 
-    let access_token = encode(&Header::default(), &claims, encoding_key)
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to encode JWT: {}", e)))?;
+    let access_token = encode(&Header::default(), &claims, encoding_key).map_err(|e| {
+        // Aligned with standard telemetry structure
+        tracing::error!(
+            message = "JWT access token generation failed",
+            error.message = %e,
+            error.details = ?e,
+            user_id = %user_id,
+            "Failed to encode cryptographic authorization payload"
+        );
+        AppError::Internal(anyhow::Error::new(e).context("Token bundle compilation failed"))
+    })?;
 
     // 2. Generate Raw Refresh Token
     let mut refresh_token_bytes = [0u8; 48];
@@ -51,8 +59,6 @@ pub fn generate_token_bundle(
         refresh_token_hash,
     })
 }
-
-/// Utility to hash a refresh token using SHA-256 for secure lookup and verification.
 
 /// Utility to hash a refresh token (useful for lookups)
 pub fn hash_refresh_token(raw_refresh_token: &str) -> String {

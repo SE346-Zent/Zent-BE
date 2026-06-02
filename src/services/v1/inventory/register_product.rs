@@ -1,6 +1,4 @@
-use sea_orm::Set;
 use crate::core::errors::AppError;
-use crate::entities::products;
 use crate::model::requests::inventory::register_product_request::RegisterProductRequest;
 
 /// Represents the calculated results and side-effects of a successful product registration request.
@@ -50,13 +48,35 @@ pub fn decide_register_product(
     current_timestamp: chrono::DateTime<chrono::Utc>,
 ) -> Result<RegisterProductEffect, AppError> {
     let identified_model_code = catalog_model_code
-        .ok_or_else(|| AppError::BadRequest(format!("Serial number '{}' not found in the product catalog", registration_payload.serial_number)))?;
+        .ok_or_else(|| {
+            tracing::warn!(
+                reason = "SerialNumberNotFound",
+                serial_number = %registration_payload.serial_number,
+                customer_id = %requesting_user_id,
+                message = "Serial number not found in the product catalog"
+            );
+            AppError::BadRequest(format!("Serial number '{}' not found in the product catalog", registration_payload.serial_number))
+        })?;
     let identified_model_name = catalog_model_name
-        .ok_or_else(|| AppError::BadRequest(format!("Model name not found for serial '{}'", registration_payload.serial_number)))?;
+        .ok_or_else(|| {
+            tracing::warn!(
+                reason = "ModelNameNotFound",
+                serial_number = %registration_payload.serial_number,
+                customer_id = %requesting_user_id,
+                message = "Model name not found for serial number"
+            );
+            AppError::BadRequest(format!("Model name not found for serial '{}'", registration_payload.serial_number))
+        })?;
 
     if let Some(product_id) = existing_product_record_id {
         // Re-registration — returns existing ID, no email
         let effective_country = if registration_payload.country.is_empty() { "Vietnam".to_string() } else { registration_payload.country.clone() };
+        tracing::info!(
+            serial_number = %registration_payload.serial_number,
+            customer_id = %requesting_user_id,
+            product_id = %product_id,
+            message = "Product re-registered successfully"
+        );
         return Ok(RegisterProductEffect {
             registered_product_id: product_id,
             customer_id: requesting_user_id,
@@ -70,6 +90,12 @@ pub fn decide_register_product(
     }
 
     let effective_country = if registration_payload.country.is_empty() { "Vietnam".to_string() } else { registration_payload.country.clone() };
+    tracing::info!(
+        serial_number = %registration_payload.serial_number,
+        customer_id = %requesting_user_id,
+        should_send_confirmation_email = %(registration_payload.send_email_confirmation && !registration_payload.email.is_empty()),
+        message = "Successfully decided to register product"
+    );
     Ok(RegisterProductEffect {
         registered_product_id: uuid::Uuid::new_v4(),
         customer_id: requesting_user_id,

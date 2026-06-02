@@ -34,6 +34,13 @@ pub fn decide_refuse_work_order(
     technician_id: Uuid,
 ) -> Result<RefuseEffect, AppError> {
     if work_order.technician_id != Some(technician_id) {
+        tracing::warn!(
+            reason = "NotAssignedTechnician",
+            work_order_id = %work_order.id,
+            technician_id = %technician_id,
+            assigned_technician_id = ?work_order.technician_id,
+            message = "You are not assigned to this work order"
+        );
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
@@ -84,6 +91,14 @@ pub fn decide_refuse_work_order(
         changed_by_id: Set(technician_id),
         changed_at: Set(current_timestamp),
     };
+
+    tracing::info!(
+        reason = "RefuseWorkOrderSuccess",
+        work_order_id = %work_order_active_model.id.clone().unwrap(),
+        technician_id = %technician_id,
+        reject_form_id = %reject_form_id,
+        message = "Successfully decided to refuse work order"
+    );
 
     Ok(RefuseEffect {
         work_order_model: work_order_active_model,

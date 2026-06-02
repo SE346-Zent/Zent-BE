@@ -29,6 +29,13 @@ pub async fn decide_start(
     site_longitude: f64,
 ) -> Result<StartWorkOrderEffect, AppError> {
     if work_order.technician_id != Some(technician_id) {
+        tracing::warn!(
+            reason = "NotAssignedTechnician",
+            work_order_id = %work_order.id,
+            technician_id = %technician_id,
+            assigned_technician_id = ?work_order.technician_id,
+            message = "You are not assigned to this work order"
+        );
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
@@ -46,6 +53,17 @@ pub async fn decide_start(
     );
 
     if !is_verified {
+        tracing::warn!(
+            reason = "GeofencingViolation",
+            work_order_id = %work_order.id,
+            technician_id = %technician_id,
+            technician_lat = %start_payload.latitude,
+            technician_lng = %start_payload.longitude,
+            site_lat = %site_latitude,
+            site_lng = %site_longitude,
+            geofence_radius = %geofence_radius_meters,
+            message = "Geofencing violation: You are too far from the work site"
+        );
         return Err(AppError::Forbidden("Geofencing violation: You are too far from the work site".to_string()));
     }
 
@@ -62,6 +80,13 @@ pub async fn decide_start(
         changed_by_id: Set(technician_id),
         changed_at: Set(current_timestamp),
     };
+
+    tracing::info!(
+        reason = "StartWorkOrderSuccess",
+        work_order_id = %work_order.id,
+        technician_id = %technician_id,
+        message = "Successfully decided to start work order"
+    );
 
     Ok(StartWorkOrderEffect {
         work_order_model: work_order_active_model,

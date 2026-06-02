@@ -111,6 +111,13 @@ pub fn decide_complete_work_order(
         changed_at: Set(current_timestamp),
     };
 
+    tracing::info!(
+        reason = "CompleteWorkOrderSuccess",
+        work_order_id = %work_order.id,
+        technician_id = %technician_id,
+        message = "Successfully decided to complete work order"
+    );
+
     Ok(CompleteWorkOrderEffect {
         closing_form_id,
         closing_form_model: closing_form_active_model,

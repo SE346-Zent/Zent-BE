@@ -15,8 +15,15 @@ pub struct CloseAccountEffect {
 /// Only customers (role_id = 3) can close their own account.
 /// Admin, SuperAdmin, and Technician accounts cannot be self-closed.
 pub fn decide_close_account(user: users::Model) -> Result<CloseAccountEffect, AppError> {
+    let user_id = user.id;
     // Only customers can close their own account
     if user.role_id != 3 {
+        tracing::warn!(
+            user_id = %user_id,
+            role_id = %user.role_id,
+            reason = "RoleNotAllowed",
+            message = "Only customers can close their account"
+        );
         return Err(AppError::Forbidden("Only customers can close their account".to_string()));
     }
 
@@ -25,12 +32,23 @@ pub fn decide_close_account(user: users::Model) -> Result<CloseAccountEffect, Ap
 
     // Reject if already terminated
     if user.account_status == STATUS_TERMINATED {
+        tracing::warn!(
+            user_id = %user_id,
+            reason = "AccountAlreadyClosed",
+            message = "Account is already closed"
+        );
         return Err(AppError::Conflict("Account is already closed".to_string()));
     }
 
     let mut user_active_model: users::ActiveModel = user.into();
     user_active_model.account_status = sea_orm::Set(STATUS_TERMINATED);
     user_active_model.updated_at = sea_orm::Set(chrono::Utc::now());
+
+    tracing::info!(
+        user_id = %user_id,
+        reason = "AccountClosedSuccessfully",
+        message = "Account closure successfully decided"
+    );
 
     Ok(CloseAccountEffect { user_active_model })
 }

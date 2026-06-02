@@ -42,6 +42,13 @@ pub fn decide_add_parts(
     requesting_technician_id: Uuid,
 ) -> Result<AddPartsEffect, AppError> {
     if work_order_record.technician_id != Some(requesting_technician_id) {
+        tracing::warn!(
+            reason = "TechnicianNotAssignedToWorkOrder",
+            work_order_id = %work_order_record.id,
+            assigned_technician_id = ?work_order_record.technician_id,
+            requesting_technician_id = %requesting_technician_id,
+            message = "Technician is not assigned to this work order"
+        );
         return Err(AppError::Forbidden("You are not assigned to this work order".to_string()));
     }
 
@@ -82,6 +89,11 @@ pub fn decide_add_parts(
         });
     }
 
+    tracing::info!(
+        work_order_id = %work_order_record.id,
+        requesting_technician_id = %requesting_technician_id,
+        message = "Successfully decided to add parts"
+    );
     Ok(AddPartsEffect {
         part_form_model,
         image_models,
