@@ -16,7 +16,9 @@ use uuid::Uuid;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use redis::AsyncCommands;
 use crate::core::state::AppState;
-use crate::infrastructure::ws::{WsIncoming, WsOutgoing, ConnectionCommand};
+use crate::infrastructure::ws::{WsIncoming, WsOutgoing, ConnectionCommand, ShutdownSignal};
+
+const MAX_WS_FRAME_BYTES: usize = 1 * 1024 * 1024; // 1 MiB
 use crate::infrastructure::cron_tasks::{ws_heartbeat, ws_expiry};
 use crate::model::jwt_claims::Claims;
 
@@ -33,44 +35,60 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<ConnectionCommand>();
 
-    // Phase 1: Wait for AUTH frame
+    // Phase 1: Wait for AUTH frame (with timeout)
+    let auth_deadline = tokio::time::Instant::now() + Duration::from_secs(30);
     let user_id = loop {
-        match ws_receiver.next().await {
-            Some(Ok(Message::Text(text))) => {
-                match serde_json::from_str::<WsIncoming>(&text) {
-                    Ok(WsIncoming::Auth { token }) => {
-                        match validate_ws_token(&token, &state.decoding_key) {
-                            Ok(uid) => break uid,
-                            Err(_) => {
+        tokio::select! {
+            msg = ws_receiver.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        match serde_json::from_str::<WsIncoming>(&text) {
+                            Ok(WsIncoming::Auth { token }) => {
+                                match validate_ws_token(&token, &state.decoding_key) {
+                                    Ok(uid) => break uid,
+                                    Err(_) => {
+                                        let _ = ws_sender.send(Message::Text(
+                                            serde_json::to_string(&WsOutgoing::Error {
+                                                code: 4001,
+                                                message: "Invalid or expired token".to_string(),
+                                            }).unwrap_or_default().into(),
+                                        )).await;
+                                        return;
+                                    }
+                                }
+                            }
+                            _ => {
                                 let _ = ws_sender.send(Message::Text(
                                     serde_json::to_string(&WsOutgoing::Error {
-                                        code: 4001,
-                                        message: "Invalid or expired token".to_string(),
+                                        code: 4000,
+                                        message: "First frame must be AUTH".to_string(),
                                     }).unwrap_or_default().into(),
                                 )).await;
                                 return;
                             }
                         }
                     }
-                    _ => {
-                        let _ = ws_sender.send(Message::Text(
-                            serde_json::to_string(&WsOutgoing::Error {
-                                code: 4000,
-                                message: "First frame must be AUTH".to_string(),
-                            }).unwrap_or_default().into(),
-                        )).await;
-                        return;
-                    }
+                    Some(Ok(_)) => continue,
+                    _ => return,
                 }
             }
-            Some(Ok(_)) => continue,
-            _ => return,
+            _ = tokio::time::sleep_until(auth_deadline) => {
+                tracing::warn!("WebSocket auth timed out from {}", addr);
+                let _ = ws_sender.send(Message::Text(
+                    serde_json::to_string(&WsOutgoing::Error {
+                        code: 4008,
+                        message: "Authentication timeout".to_string(),
+                    }).unwrap_or_default().into(),
+                )).await;
+                let _ = ws_sender.send(Message::Close(None)).await;
+                return;
+            }
         }
     };
 
     let ws_manager = crate::infrastructure::ws::get_ws_manager();
-    ws_manager.register(user_id, cmd_tx.clone()).await;
-    tracing::info!("WebSocket authenticated for user {} from {}", user_id, addr);
+    let user_conn_id = ws_manager.register(user_id, cmd_tx.clone()).await;
+    tracing::info!("WebSocket authenticated for user {} (conn {}) from {}", user_id, user_conn_id, addr);
 
     // Heartbeat pong counter — incremented by reader on each protocol-level Pong
     let pong_counter = Arc::new(AtomicU32::new(0));
@@ -79,18 +97,24 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     let initial_deadline = Instant::now() + Duration::from_secs(state.access_token_ttl.0 as u64);
     let (deadline_tx, deadline_rx) = tokio::sync::watch::channel(initial_deadline);
 
+    // Cooperative shutdown signal — old-connection tasks stop when a new
+    // connection registers for the same user.
+    let shutdown = ShutdownSignal::new();
+
     // Spawn heartbeat + expiry from cron_tasks
     let hb_user = user_id;
     let hb_mgr = ws_manager.clone();
     let hb_tx = cmd_tx.clone();
     let hb_pong = pong_counter.clone();
-    tokio::spawn(async move { ws_heartbeat::run_heartbeat(hb_user, hb_mgr, hb_tx, hb_pong).await });
+    let hb_shutdown = shutdown.receiver();
+    tokio::spawn(async move { ws_heartbeat::run_heartbeat(hb_user, hb_mgr, hb_tx, hb_pong, user_conn_id, hb_shutdown).await });
 
     let ex_user = user_id;
     let ex_mgr = ws_manager.clone();
     let ex_tx = cmd_tx.clone();
     let ttl = state.access_token_ttl.0;
-    tokio::spawn(async move { ws_expiry::run_expiry_enforcer(ex_user, ex_mgr, ex_tx, ttl, deadline_rx).await });
+    let ex_shutdown = shutdown.receiver();
+    tokio::spawn(async move { ws_expiry::run_expiry_enforcer(ex_user, ex_mgr, ex_tx, ttl, deadline_rx, user_conn_id, ex_shutdown).await });
 
     // Writer task
     let mut writer_sender = ws_sender;
@@ -122,6 +146,16 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     while let Some(msg) = ws_receiver.next().await {
         match msg {
             Ok(Message::Text(text)) => {
+                if text.len() > MAX_WS_FRAME_BYTES {
+                    tracing::warn!("Oversized frame ({} bytes) from user {}", text.len(), user_id);
+                    let _ = cmd_tx.send(ConnectionCommand::Send(
+                        serde_json::to_string(&WsOutgoing::Error {
+                            code: 4013,
+                            message: "Frame too large".to_string(),
+                        }).unwrap_or_default(),
+                    ));
+                    break;
+                }
                 if let Ok(incoming) = serde_json::from_str::<WsIncoming>(&text) {
                     match incoming {
                         WsIncoming::Viewing { room_id } => {
@@ -164,10 +198,16 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
         }
     }
 
-    // Cleanup
-    handle_leaving(&state, user_id).await;
-    ws_manager.unregister(&user_id).await;
-    tracing::info!("WebSocket disconnected for user {}", user_id);
+    // Cleanup — stop spawned tasks and conditionally unregister.
+    // The conn_id check prevents a stale connection's cleanup from
+    // unregistering a newer connection for the same user.
+    shutdown.shutdown();
+    let still_us = ws_manager.user_conn_id(&user_id).await == Some(user_conn_id);
+    if still_us {
+        handle_leaving(&state, user_id).await;
+    }
+    ws_manager.unregister(&user_id, user_conn_id).await;
+    tracing::info!("WebSocket disconnected for user {} (conn {})", user_id, user_conn_id);
 }
 
 fn validate_ws_token(token: &str, decoding_key: &DecodingKey) -> Result<Uuid, ()> {
