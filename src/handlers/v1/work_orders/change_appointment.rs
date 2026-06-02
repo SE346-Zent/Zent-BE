@@ -37,9 +37,9 @@ pub async fn change_appointment(
     let admin_role_id = *luts.roles_by_name.get("Admin")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Admin role missing from lookup tables")))?;
     if auth.user.role_id == admin_role_id {
-        let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Admin has no province assigned".to_string()))?;
+        let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Your admin profile does not have a province assigned".to_string()))?;
         if p != &work_order.province {
-            return Err(AppError::Forbidden("Admin province does not match work order province".to_string()));
+            return Err(AppError::Forbidden("You do not have permission to manage work orders in this province".to_string()));
         }
     }
 
@@ -49,6 +49,7 @@ pub async fn change_appointment(
         use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
         use crate::entities::work_orders as work_orders_ent;
         let conflict = work_orders_ent::Entity::find()
+            .filter(work_orders_ent::Column::DeletedAt.is_null())
             .filter(work_orders_ent::Column::TechnicianId.eq(tech_id))
             .filter(work_orders_ent::Column::Id.ne(work_order.id))
             .filter(work_orders_ent::Column::Appointment.eq(payload.new_appointment))
@@ -56,7 +57,7 @@ pub async fn change_appointment(
             .await?;
         if conflict.is_some() {
             return Err(AppError::Conflict(
-                "Technician already has an appointment at this time".into(),
+                "Technician already has an appointment at that time".into(),
             ));
         }
     }

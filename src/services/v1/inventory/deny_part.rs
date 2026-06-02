@@ -1,5 +1,5 @@
 use crate::core::errors::AppError;
-use crate::entities::part_audit_log;
+use crate::entities::new_part_audit_log;
 use sea_orm::Set;
 
 /// Represents the calculated results and side-effects of a successful part denial request.
@@ -7,7 +7,7 @@ pub struct DenyPartEffect {
     /// The unique identifier of the part registration form being denied.
     pub target_part_form_id: uuid::Uuid,
     /// The database model for the audit log entry recording this denial and its reason.
-    pub denial_audit_model: part_audit_log::ActiveModel,
+    pub denial_audit_model: new_part_audit_log::ActiveModel,
 }
 
 /// Determine the outcome of a part denial attempt by validating the current form status and the provided reason.
@@ -70,7 +70,7 @@ pub fn decide_deny_part(
     );
     Ok(DenyPartEffect {
         target_part_form_id,
-        denial_audit_model: part_audit_log::ActiveModel {
+        denial_audit_model: new_part_audit_log::ActiveModel {
             id: Set(uuid::Uuid::new_v4()),
             new_part_form_id: Set(target_part_form_id),
             action: Set("denied".to_string()),

@@ -6,6 +6,7 @@ use crate::extractor::role_check::require_role;
 
 pub mod get_me;
 pub mod update_me;
+pub mod change_avatar;
 pub mod close_account;
 pub mod list_users;
 pub mod get_user;
@@ -17,6 +18,7 @@ pub fn router(state: AppState) -> Router<AppState> {
     let generic_routes = Router::new()
         .route("/me", get(get_me::get_me_handler))
         .route("/me", put(update_me::update_me_handler))
+        .route("/me/avatar", post(change_avatar::change_avatar))
         .route("/me/close", post(close_account::close_account_handler));
 
     let admin_only_routes = Router::new()

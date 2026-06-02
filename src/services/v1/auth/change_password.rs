@@ -1,7 +1,4 @@
-use crate::{
-    core::errors::AppError,
-    entities::users,
-};
+use crate::{core::errors::AppError, entities::users};
 
 /// Represents the side-effects for changing a user's password.
 #[derive(Debug)]
@@ -42,7 +39,9 @@ pub fn decide_change_password(
             email = %user.email,
             "Password change failed: old password is incorrect"
         );
-        return Err(AppError::Unauthorized("Old password is incorrect".to_string()));
+        return Err(AppError::Unauthorized(
+            "Old password is incorrect".to_string(),
+        ));
     }
 
     // Basic check: new password should differ from old

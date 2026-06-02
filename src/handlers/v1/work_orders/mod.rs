@@ -71,24 +71,53 @@ use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::AppError;
 use crate::entities::roles::Role;
 use crate::entities::work_orders as work_orders_ent;
-use crate::entities::{products, work_order_symptoms, users, work_order_state_history};
+use crate::entities::{products, work_order_symptoms, users, work_order_state_history, work_order_ratings, warranties};
 use crate::extractor::role_check::require_role;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::list_response::WorkOrderListItem;
 use crate::model::responses::pagination::PaginationResponse;
 use crate::model::requests::pagination::PaginationRequest;
 use crate::services::v1::work_orders::list as list_svc;
+use crate::services::v1::work_orders::technician_stats::{TechnicianStatsInput, TechnicianStatsSnapshot};
 use crate::infrastructure::cache::ValkeyClient;
+use crate::services::v1::inventory::ports::ZeusInventoryClient;
 
 /// Sentinel value stored during the idempotency claim window.
 pub(crate) const IDEMPOTENCY_PENDING: &str = "__PENDING__";
+
+async fn load_zeus_product_model(product_id: Uuid) -> Option<products::Model> {
+    let base_url = match std::env::var("ZEUS_BASE_URL") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => return None,
+    };
+    let api_key = match std::env::var("ZEUS_API_KEY") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => return None,
+    };
+
+    let client = crate::infrastructure::clients::zeus::ZeusClient::new(base_url, api_key);
+    let zeus_prod = match client.get_product(product_id).await {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
+
+    Some(products::Model {
+        id: zeus_prod.id,
+        product_model_code: zeus_prod.product_model_code,
+        customer_id: zeus_prod.customer_id,
+        product_name: zeus_prod.product_name,
+        serial_number: zeus_prod.serial_number,
+        created_at: zeus_prod.created_at,
+        updated_at: zeus_prod.updated_at,
+        deleted_at: None,
+    })
+}
 
 /// Initialize and configure the work order sub-router with role-based access control.
 
 pub fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(create))
-        .route("/{id}/cancel", axum::routing::post(cancel))
         .route("/{id}/rate", axum::routing::post(rate))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -124,6 +153,7 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/{id}", axum::routing::get(get_details))
         .route("/{id}/history", axum::routing::get(history))
+        .route("/cancel", axum::routing::post(cancel))
         .merge(list_route)
         .merge(customer_routes)
         .merge(tech_routes)
@@ -145,12 +175,14 @@ pub(crate) async fn get_cached_work_order_model(
 ) -> Result<work_orders_ent::Model, AppError> {
     let model_cache_key = format!("cache:work_order_model:{}", id);
 
-    // Cache hit — serve from RAM
+    // Cache hit — serve from RAM (but skip soft-deleted)
     if let Some(client) = valkey_client.as_ref() {
         if let Ok(mut conn) = client.get_connection().await {
             if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&model_cache_key).await {
                 if let Ok(model) = serde_json::from_str::<work_orders_ent::Model>(&cached_json) {
-                    return Ok(model);
+                    if model.deleted_at.is_none() {
+                        return Ok(model);
+                    }
                 }
             }
         }
@@ -161,6 +193,10 @@ pub(crate) async fn get_cached_work_order_model(
         .one(db)
         .await?
         .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+
+    if model.deleted_at.is_some() {
+        return Err(AppError::NotFound("Work order not found".to_string()));
+    }
 
     // Populate cache for next time (TTL matches details cache)
     if let Some(client) = valkey_client.as_ref() {
@@ -195,13 +231,13 @@ pub(crate) async fn write_through_work_order_cache(
     if valkey_client.is_none() {
         return;
     }
-    // Re-fetch the work order with joins so we can build the full WorkOrderDetails
-    if let Ok(Some((wo, product, symptom))) = work_orders_ent::Entity::find_by_id(wo_id)
-        .find_also_related(products::Entity)
+    // Re-fetch the work order with symptom relation so we can build WorkOrderDetails.
+    if let Ok(Some((wo, symptom))) = work_orders_ent::Entity::find_by_id(wo_id)
         .find_also_related(work_order_symptoms::Entity)
         .one(db)
         .await
     {
+        let product = load_zeus_product_model(wo.product_id).await;
         let client = valkey_client.as_ref().unwrap();
         let Ok(mut conn) = client.get_connection().await else { return; };
 
@@ -218,8 +254,46 @@ pub(crate) async fn write_through_work_order_cache(
         }
 
         // 2. Cache the full WorkOrderDetails (for get_details read path)
+        // Fetch warranty status for the product
+        let warranty_status = warranties::Entity::find()
+            .filter(warranties::Column::ProductId.eq(wo.product_id))
+            .one(db)
+            .await
+            .ok()
+            .flatten()
+            .map(|w| {
+                let now = chrono::Utc::now();
+                if now > w.end_date {
+                    "expired".to_string()
+                } else {
+                    w.warranty_status.clone()
+                }
+            })
+            .unwrap_or_else(|| "none".to_string());
+
+        // Fetch technician info for avatar
+        let (technician_name, technician_avatar_name) = if let Some(tech_id) = wo.technician_id {
+            users::Entity::find_by_id(tech_id)
+                .one(db)
+                .await
+                .ok()
+                .flatten()
+                .map(|t| (Some(t.full_name.clone()), t.avatar_url))
+                .unwrap_or((None, None))
+        } else {
+            (None, None)
+        };
+
+        // Fetch customer avatar
+        let customer_avatar_name = users::Entity::find_by_id(wo.customer_id)
+            .one(db)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|c| c.avatar_url);
+
         let details = crate::services::v1::work_orders::get_details::decide_get_details(
-            wo, product, symptom, lookup_tables,
+            wo, product, symptom, lookup_tables, Some(warranty_status), technician_name, technician_avatar_name, customer_avatar_name,
         );
         if let Ok(details_json) = serde_json::to_string(&details) {
             let _: () = conn
@@ -272,7 +346,7 @@ pub(crate) async fn fetch_paginated_work_orders(
         }
     }
 
-    let mut query = work_orders_ent::Entity::find();
+    let mut query = work_orders_ent::Entity::find().filter(work_orders_ent::Column::DeletedAt.is_null());
     if let Some(tech_id) = technician_id { query = query.filter(work_orders_ent::Column::TechnicianId.eq(tech_id)); }
     if let Some(province) = province_filter { query = query.filter(work_orders_ent::Column::Province.eq(province)); }
     if let Some(cust_id) = customer_id { query = query.filter(work_orders_ent::Column::CustomerId.eq(cust_id)); }
@@ -287,26 +361,36 @@ pub(crate) async fn fetch_paginated_work_orders(
 
     let models_with_related = query
         .order_by_desc(work_orders_ent::Column::CreatedAt)
-        .order_by_asc(work_orders_ent::Column::Id)
-        .find_also_related(products::Entity).find_also_related(work_order_symptoms::Entity)
+        .find_also_related(work_order_symptoms::Entity)
         .offset((pagination.page - 1) * pagination.limit).limit(pagination.limit)
         .all(db.as_ref()).await?;
 
-    // Fetch which work orders in this page have ratings
-    let wo_ids: Vec<Uuid> = models_with_related.iter().map(|(wo, _, _)| wo.id).collect();
-    let rated_ids: std::collections::HashSet<Uuid> = if wo_ids.is_empty() {
-        std::collections::HashSet::new()
-    } else {
-        crate::entities::work_order_ratings::Entity::find()
-            .filter(crate::entities::work_order_ratings::Column::WorkOrderId.is_in(wo_ids))
-            .all(db.as_ref())
-            .await?
-            .into_iter()
-            .map(|r| r.work_order_id)
-            .collect()
-    };
+    let mut enriched_models = Vec::with_capacity(models_with_related.len());
+    for (work_order, symptom) in models_with_related {
+        let product = load_zeus_product_model(work_order.product_id).await;
 
-    let (data, meta) = list_svc::decide_list(models_with_related, &lookup_tables, &pagination, total_records, &rated_ids);
+        // Fetch customer user record for avatar
+        let customer_user = users::Entity::find_by_id(work_order.customer_id)
+            .one(db.as_ref())
+            .await
+            .ok()
+            .flatten();
+
+        // Fetch technician user record for avatar
+        let technician_user = if let Some(tech_id) = work_order.technician_id {
+            users::Entity::find_by_id(tech_id)
+                .one(db.as_ref())
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
+
+        enriched_models.push((work_order, product, symptom, customer_user, technician_user));
+    }
+
+    let (data, meta) = list_svc::decide_list(enriched_models, &lookup_tables, &pagination, total_records);
 
     if let Some(mut conn) = conn_opt {
         if let Ok(cached_val) = serde_json::to_string(&(&data, &meta)) {
@@ -315,6 +399,71 @@ pub(crate) async fn fetch_paginated_work_orders(
     }
 
     Ok(axum::Json(ApiResponse::success_with_meta(200, "Work orders retrieved successfully", data, meta)))
+}
+
+pub(crate) async fn get_cached_technician_stats(
+    db: &DatabaseConnection,
+    valkey_client: &Option<Arc<ValkeyClient>>,
+    technician_id: Uuid,
+) -> Result<TechnicianStatsSnapshot, AppError> {
+    let cache_key = format!("cache:technician_stats:{}", technician_id);
+
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&cache_key).await {
+                if let Ok(snapshot) = serde_json::from_str::<TechnicianStatsSnapshot>(&cached_json) {
+                    return Ok(snapshot);
+                }
+            }
+        }
+    }
+
+    let work_order_rows = work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::DeletedAt.is_null())
+        .filter(work_orders_ent::Column::TechnicianId.eq(technician_id))
+        .all(db)
+        .await?;
+
+    let total_work_orders = work_order_rows.len() as i64;
+    let work_order_ids: Vec<Uuid> = work_order_rows.into_iter().map(|wo| wo.id).collect();
+
+    let mut rating_sum = 0i64;
+    let mut rating_count = 0i64;
+    if !work_order_ids.is_empty() {
+        let ratings = work_order_ratings::Entity::find()
+            .filter(work_order_ratings::Column::WorkOrderId.is_in(work_order_ids))
+            .all(db)
+            .await?;
+
+        for rating in ratings {
+            rating_sum += i64::from(rating.rating);
+            rating_count += 1;
+        }
+    }
+
+    let snapshot = crate::services::v1::work_orders::technician_stats::decide_technician_stats(TechnicianStatsInput {
+        total_work_orders,
+        rating_sum,
+        rating_count,
+    });
+
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            if let Ok(cached_val) = serde_json::to_string(&snapshot) {
+                let _: () = conn.set_ex(&cache_key, cached_val, 300).await.unwrap_or_default();
+            }
+        }
+    }
+
+    Ok(snapshot)
+}
+
+pub(crate) async fn refresh_technician_stats_cache(
+    db: &DatabaseConnection,
+    valkey_client: &Option<Arc<ValkeyClient>>,
+    technician_id: Uuid,
+) {
+    let _ = get_cached_technician_stats(db, valkey_client, technician_id).await;
 }
 
 /// Periodically clean up unassigned work orders that have exceeded the allowed wait window.
@@ -341,6 +490,7 @@ pub async fn run_cleanup(
 
     // Find WOs that are still pending assignment and whose appointment is within the threshold window (or already past)
     let target_wos = work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::DeletedAt.is_null())
         .filter(work_orders_ent::Column::WorkOrderStatusId.eq(pending_status_id))
         .filter(work_orders_ent::Column::TechnicianId.is_null())
         .filter(work_orders_ent::Column::Appointment.lte(threshold_window))
@@ -422,7 +572,7 @@ pub(crate) async fn try_auto_assign_single(
         return false;
     }
     let tech_ids: Vec<Uuid> = technicians.iter().map(|t| t.id).collect();
-    let agendas = match work_orders_ent::Entity::find().filter(work_orders_ent::Column::TechnicianId.is_in(tech_ids)).filter(work_orders_ent::Column::WorkOrderStatusId.ne(done_status_id)).all(db.as_ref()).await {
+    let agendas = match work_orders_ent::Entity::find().filter(work_orders_ent::Column::DeletedAt.is_null()).filter(work_orders_ent::Column::TechnicianId.is_in(tech_ids)).filter(work_orders_ent::Column::WorkOrderStatusId.ne(done_status_id)).all(db.as_ref()).await {
         Ok(a) => a, Err(e) => { tracing::warn!("Failed to load agendas: {}", e); return false; }
     };
     let mut technician_agendas: HashMap<Uuid, Vec<work_orders_ent::Model>> = HashMap::new();

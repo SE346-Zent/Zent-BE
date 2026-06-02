@@ -1,0 +1,58 @@
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Drop the foreign key constraint to products table
+        // since product_id references Zeus SCM products, not local products table
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(RegisteredDevices::Table)
+                    .drop_foreign_key(Alias::new("fk_registered_devices_product"))
+                    .to_owned(),
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Re-add the foreign key constraint (for rollback)
+        let fk = TableForeignKey::new()
+            .name("fk_registered_devices_product")
+            .from_tbl(RegisteredDevices::Table)
+            .from_col(RegisteredDevices::ProductId)
+            .to_tbl(Products::Table)
+            .to_col(Products::Id)
+            .on_delete(ForeignKeyAction::Cascade)
+            .on_update(ForeignKeyAction::Cascade)
+            .to_owned();
+
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(RegisteredDevices::Table)
+                    .add_foreign_key(&fk)
+                    .to_owned(),
+            )
+            .await?;
+
+        Ok(())
+    }
+}
+
+#[derive(DeriveIden)]
+enum RegisteredDevices {
+    Table,
+    ProductId,
+}
+
+#[derive(DeriveIden)]
+enum Products {
+    Table,
+    Id,
+}

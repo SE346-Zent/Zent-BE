@@ -65,13 +65,14 @@ where
             .await?;
 
         if user_with_role.is_empty() {
-            return Err(AppError::Unauthorized("User not found".to_string()));
+            return Err(AppError::Unauthorized("User account not found".to_string()));
         }
 
         let (user, user_roles) = user_with_role.into_iter().next().unwrap();
-        let role = user_roles.into_iter().next().ok_or_else(|| {
-            AppError::Forbidden("User profile is missing role information".to_string())
-        })?;
+        let role = user_roles
+            .into_iter()
+            .next()
+            .ok_or_else(|| AppError::Forbidden("User role is missing".to_string()))?;
 
         let auth_user = AuthUser { user, role };
         let is_cache_configured = valkey.is_some();

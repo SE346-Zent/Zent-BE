@@ -14,6 +14,7 @@ pub struct Model {
     pub description: Option<String>,
     pub work_order_id: Uuid,
     pub work_order_number: String,
+    pub status: String,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,

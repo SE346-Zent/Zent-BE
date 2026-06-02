@@ -8,11 +8,12 @@ use std::sync::Arc;
 use sea_orm::{DatabaseConnection, TransactionTrait, *};
 use jsonwebtoken::EncodingKey;
 use validator::Validate;
+use uuid::Uuid;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
 use crate::core::lookup_tables::LookupTables;
 use crate::infrastructure::cache::ValkeyClient;
-use crate::entities::{users, sessions};
+use crate::entities::{login_audit_logs, sessions, users};
 use chrono::Utc;
 use crate::utils::hasher;
 use crate::services::v1::auth::google_login;
@@ -58,7 +59,7 @@ pub async fn google_login_handler(
     let project_id = google_login::get_firebase_project_id().unwrap_or_default();
     let claims = google_login::verify_google_or_firebase_token(&payload.id_token, &project_id).await?;
 
-    let email = claims.email.ok_or_else(|| AppError::BadRequest("ID token does not contain email".to_string()))?;
+    let email = claims.email.ok_or_else(|| AppError::BadRequest("ID token does not include an email address".to_string()))?;
 
     // 2. Load required lookup constants
     let active_status_id = *lookup_tables.account_statuses_by_name.get("Active")
@@ -131,27 +132,42 @@ pub async fn google_login_handler(
                     user_active.update(txn).await?;
                 }
             }
-
-            // Session write
-            let active_session = sessions::ActiveModel {
-                id: Set(session_id),
-                user_id: Set(user_id),
-                refresh_token_hash: Set(refresh_token_hash_for_txn),
-                ip_address: Set(client_ip_clone),
-                device_fingerprint: Set(user_id.to_string()),
-                created_at: Set(Utc::now()),
-                expires_at: Set(session_expires),
-                ..Default::default()
-            };
-            active_session.insert(txn).await?;
-
             Ok(())
         })
-    })
-    .await
-    .map_err(|e| match e {
-        sea_orm::TransactionError::Connection(db_err) => AppError::Internal(anyhow::anyhow!("DB error: {}", db_err)),
-        sea_orm::TransactionError::Transaction(app_err) => app_err,
+    }).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
+    })?;
+
+    // 7. Save active session
+    let active_session = sessions::ActiveModel {
+        id: Set(session_id),
+        user_id: Set(user_id),
+        refresh_token_hash: Set(refresh_token_hash_for_txn.clone()),
+        ip_address: Set(client_ip_clone),
+        device_fingerprint: Set(payload.device_name.clone().unwrap_or_else(|| user_id.to_string())),
+        created_at: Set(Utc::now()),
+        expires_at: Set(session_expires),
+        ..Default::default()
+    };
+
+    let login_audit = login_audit_logs::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        user_id: Set(user_id),
+        session_id: Set(session_id),
+        device_name: Set(payload.device_name.clone().unwrap_or_else(|| "Unknown device".to_string())),
+        location: Set(payload.location.clone()),
+        ip_address: Set(client_ip_address),
+        created_at: Set(Utc::now()),
+    };
+
+    db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
+        active_session.insert(txn).await?;
+        login_audit.insert(txn).await?;
+        Ok(())
+    })).await.map_err(|e| match e {
+        sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)),
+        sea_orm::TransactionError::Transaction(e) => e,
     })?;
 
     // 8. Whitelist in Valkey

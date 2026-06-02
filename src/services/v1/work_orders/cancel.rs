@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     core::errors::AppError,
-    entities::{work_orders, work_order_state_history},
+    entities::{cancel_reasons, work_order_state_history, work_orders},
 };
 
 /// Represents the calculated results and side-effects of a successful work order cancellation.
@@ -15,6 +15,8 @@ pub struct CancelWorkOrderEffect {
     pub work_order_model: work_orders::ActiveModel,
     /// The database model for the state history entry recording the cancellation event.
     pub state_history_model: work_order_state_history::ActiveModel,
+    /// The database model for the cancellation reason.
+    pub cancel_reason_model: cancel_reasons::ActiveModel,
 }
 
 /// Determine if a customer can cancel their work order based on the lead time before the appointment.
@@ -40,6 +42,8 @@ pub fn decide_cancel_work_order(
     target_closed_status_id: i32,
     requesting_customer_id: Uuid,
     cancel_window_hours: i64,
+    reason: String,
+    additional_comments: Option<String>,
 ) -> Result<CancelWorkOrderEffect, AppError> {
     // Only the owner of the work order can cancel it
     if work_order.customer_id != requesting_customer_id {
@@ -51,7 +55,9 @@ pub fn decide_cancel_work_order(
             requesting_customer_id = %requesting_customer_id,
             message = "You can only cancel your own work orders"
         );
-        return Err(AppError::Forbidden("You can only cancel your own work orders".to_string()));
+        return Err(AppError::Forbidden(
+            "You can only cancel your own work orders".to_string(),
+        ));
     }
 
     let current_timestamp = Utc::now();
@@ -92,7 +98,20 @@ pub fn decide_cancel_work_order(
         message = "Successfully decided to cancel work order"
     );
 
-    Ok(CancelWorkOrderEffect { work_order_model: work_order_active_model, state_history_model: state_history_active_model })
+    let cancel_reason_active_model = cancel_reasons::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        work_order_id: Set(work_order.id),
+        cancelled_by: Set(requesting_customer_id),
+        reason: Set(reason),
+        additional_comments: Set(additional_comments),
+        created_at: Set(current_timestamp),
+    };
+
+    Ok(CancelWorkOrderEffect {
+        work_order_model: work_order_active_model,
+        state_history_model: state_history_active_model,
+        cancel_reason_model: cancel_reason_active_model,
+    })
 }
 
 #[cfg(test)]
@@ -116,7 +135,7 @@ mod tests {
             phone_number: None,
             country: "".to_string(),
             province: "".to_string(),
-            city: "".to_string(),
+            ward: "".to_string(),
             address: "".to_string(),
             building: None,
             appointment: Utc::now() + chrono::Duration::hours(48), // far future — passes 24h check
@@ -140,11 +159,21 @@ mod tests {
         let closed_status_id = 4;
         let work_order = dummy_work_order(customer_id, 1);
 
-        let result = decide_cancel_work_order(work_order, closed_status_id, customer_id, 24);
+        let result = decide_cancel_work_order(
+            work_order,
+            closed_status_id,
+            customer_id,
+            24,
+            "Changed my mind".to_string(),
+            None,
+        );
         assert!(result.is_ok());
         let effect = result.unwrap();
 
-        assert_eq!(effect.work_order_model.work_order_status_id, Set(closed_status_id));
+        assert_eq!(
+            effect.work_order_model.work_order_status_id,
+            Set(closed_status_id)
+        );
     }
 
     #[ignore]
@@ -154,7 +183,14 @@ mod tests {
         let wrong_customer_id = Uuid::new_v4();
         let work_order = dummy_work_order(customer_id, 1);
 
-        let result = decide_cancel_work_order(work_order, 4, wrong_customer_id, 24);
+        let result = decide_cancel_work_order(
+            work_order,
+            4,
+            wrong_customer_id,
+            24,
+            "Reason".to_string(),
+            None,
+        );
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::Forbidden(_) => {}
@@ -170,7 +206,8 @@ mod tests {
         // Appointment is only 1 hour away — within the 24h window
         work_order.appointment = Utc::now() + chrono::Duration::hours(1);
 
-        let result = decide_cancel_work_order(work_order, 4, customer_id, 24);
+        let result =
+            decide_cancel_work_order(work_order, 4, customer_id, 24, "Reason".to_string(), None);
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::BadRequest(_) => {}
@@ -186,7 +223,14 @@ mod tests {
         // Appointment is 25 hours away — just outside the 24h window
         work_order.appointment = Utc::now() + chrono::Duration::hours(25);
 
-        let result = decide_cancel_work_order(work_order, 4, customer_id, 24);
+        let result = decide_cancel_work_order(
+            work_order,
+            4,
+            customer_id,
+            24,
+            "Reason".to_string(),
+            Some("Extra details".to_string()),
+        );
         assert!(result.is_ok());
     }
 }

@@ -1,0 +1,208 @@
+use crate::core::errors::AppError;
+use uuid::Uuid;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusPart {
+    pub id: Uuid,
+    pub part_catalog_id: Uuid,
+    pub part_condition_id: i32,
+    pub product_id: Option<Uuid>,
+    pub serial_number: String,
+    pub manufactured_date: chrono::DateTime<chrono::Utc>,
+    pub installation_date: Option<chrono::DateTime<chrono::Utc>>,
+    pub removal_date: Option<chrono::DateTime<chrono::Utc>>,
+    pub scrapped_date: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusProduct {
+    pub id: Uuid,
+    pub product_model_code: String,
+    pub customer_id: Uuid,
+    pub product_name: String,
+    pub serial_number: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusPartCatalog {
+    pub id: Uuid,
+    pub part_number: String,
+    pub part_types_id: i32,
+    pub mfg_number: String,
+    pub description: Option<String>,
+    pub part_mfg_status: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusProductModel {
+    pub model_code: String,
+    pub model_name: String,
+    pub description: Option<String>,
+    pub image_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusLutCollection {
+    #[serde(alias = "PartTypes", alias = "part_types")]
+    pub part_types: Vec<ZeusPartType>,
+    #[serde(alias = "PartConditions", alias = "part_conditions")]
+    pub part_conditions: Vec<ZeusPartCondition>,
+    #[serde(alias = "PartMfgStatuses", alias = "part_mfg_statuses")]
+    pub part_mfg_statuses: Vec<ZeusPartMfgStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusPartType {
+    #[serde(alias = "ID", alias = "id")]
+    pub id: i32,
+    #[serde(alias = "PartTypeName", alias = "part_type_name")]
+    pub part_type_name: String,
+    #[serde(alias = "Description", alias = "description")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusPartCondition {
+    #[serde(alias = "ID", alias = "id")]
+    pub id: i32,
+    #[serde(alias = "Name", alias = "name")]
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZeusPartMfgStatus {
+    #[serde(alias = "ID", alias = "id")]
+    pub id: i32,
+    #[serde(alias = "Name", alias = "name")]
+    pub name: String,
+}
+
+#[async_trait::async_trait]
+pub trait ZeusInventoryClient: Send + Sync {
+    async fn get_part(&self, id: Uuid) -> Result<ZeusPart, AppError>;
+    async fn create_part(&self, part_catalog_id: Uuid, condition_id: i32, serial_number: &str, mfg_date: chrono::DateTime<chrono::Utc>) -> Result<ZeusPart, AppError>;
+    async fn install_part(&self, part_id: Uuid, product_id: Uuid) -> Result<(), AppError>;
+    async fn remove_part(&self, part_id: Uuid) -> Result<(), AppError>;
+    async fn find_product_by_serial(&self, serial_number: &str) -> Result<Option<ZeusProduct>, AppError>;
+    async fn get_product(&self, id: Uuid) -> Result<ZeusProduct, AppError>;
+    async fn create_product(&self, model_code: &str, customer_id: Uuid, product_name: &str, serial_number: &str) -> Result<ZeusProduct, AppError>;
+    async fn update_product(&self, id: Uuid, model_code: &str, customer_id: Uuid, product_name: &str, serial_number: &str) -> Result<ZeusProduct, AppError>;
+    async fn list_products(&self) -> Result<Vec<ZeusProduct>, AppError>;
+    async fn find_parts_by_product(&self, product_id: Uuid) -> Result<Vec<ZeusPart>, AppError>;
+    async fn get_part_catalog(&self, id: Uuid) -> Result<ZeusPartCatalog, AppError>;
+    async fn update_part_catalog_by_sku(&self, sku: &str, description: Option<&str>, part_mfg_status: Option<i32>) -> Result<ZeusPartCatalog, AppError>;
+    async fn create_part_catalog(&self, part_number: &str, part_types_id: i32, mfg_number: &str, description: Option<&str>, part_mfg_status: i32) -> Result<ZeusPartCatalog, AppError>;
+    async fn find_part_catalog_by_part_number(&self, part_number: &str) -> Result<Option<ZeusPartCatalog>, AppError>;
+    async fn get_product_model(&self, code: &str) -> Result<ZeusProductModel, AppError>;
+    async fn get_luts(&self) -> Result<ZeusLutCollection, AppError>;
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MockZeusClient;
+
+#[async_trait::async_trait]
+impl ZeusInventoryClient for MockZeusClient {
+    async fn get_part(&self, id: Uuid) -> Result<ZeusPart, AppError> {
+        Err(AppError::NotFound(format!("Part with ID {} not found", id)))
+    }
+    async fn create_part(&self, part_catalog_id: Uuid, condition_id: i32, serial_number: &str, mfg_date: chrono::DateTime<chrono::Utc>) -> Result<ZeusPart, AppError> {
+        let now = chrono::Utc::now();
+        Ok(ZeusPart {
+            id: Uuid::new_v4(),
+            part_catalog_id,
+            part_condition_id: condition_id,
+            product_id: None,
+            serial_number: serial_number.to_string(),
+            manufactured_date: mfg_date,
+            installation_date: None,
+            removal_date: None,
+            scrapped_date: None,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+    async fn install_part(&self, _part_id: Uuid, _product_id: Uuid) -> Result<(), AppError> {
+        Ok(())
+    }
+    async fn remove_part(&self, _part_id: Uuid) -> Result<(), AppError> {
+        Ok(())
+    }
+    async fn find_product_by_serial(&self, _serial_number: &str) -> Result<Option<ZeusProduct>, AppError> {
+        Ok(None)
+    }
+    async fn get_product(&self, id: Uuid) -> Result<ZeusProduct, AppError> {
+        Err(AppError::NotFound(format!("Product with ID {} not found", id)))
+    }
+    async fn create_product(&self, model_code: &str, customer_id: Uuid, product_name: &str, serial_number: &str) -> Result<ZeusProduct, AppError> {
+        let now = chrono::Utc::now();
+        Ok(ZeusProduct {
+            id: Uuid::new_v4(),
+            product_model_code: model_code.to_string(),
+            customer_id,
+            product_name: product_name.to_string(),
+            serial_number: serial_number.to_string(),
+            created_at: now,
+            updated_at: now,
+        })
+    }
+    async fn update_product(&self, id: Uuid, model_code: &str, customer_id: Uuid, product_name: &str, serial_number: &str) -> Result<ZeusProduct, AppError> {
+        let now = chrono::Utc::now();
+        Ok(ZeusProduct {
+            id,
+            product_model_code: model_code.to_string(),
+            customer_id,
+            product_name: product_name.to_string(),
+            serial_number: serial_number.to_string(),
+            created_at: now,
+            updated_at: now,
+        })
+    }
+    async fn list_products(&self) -> Result<Vec<ZeusProduct>, AppError> {
+        Ok(vec![])
+    }
+    async fn find_parts_by_product(&self, _product_id: Uuid) -> Result<Vec<ZeusPart>, AppError> {
+        Ok(vec![])
+    }
+    async fn get_part_catalog(&self, id: Uuid) -> Result<ZeusPartCatalog, AppError> {
+        Err(AppError::NotFound(format!("Part catalog with ID {} not found", id)))
+    }
+    async fn update_part_catalog_by_sku(&self, sku: &str, description: Option<&str>, part_mfg_status: Option<i32>) -> Result<ZeusPartCatalog, AppError> {
+        Ok(ZeusPartCatalog {
+            id: Uuid::new_v4(),
+            part_number: sku.to_string(),
+            part_types_id: 1,
+            mfg_number: format!("MFG-{}", sku),
+            description: description.map(|s| s.to_string()),
+            part_mfg_status: part_mfg_status.unwrap_or(1),
+        })
+    }
+
+    async fn create_part_catalog(&self, part_number: &str, part_types_id: i32, mfg_number: &str, description: Option<&str>, part_mfg_status: i32) -> Result<ZeusPartCatalog, AppError> {
+        Ok(ZeusPartCatalog {
+            id: Uuid::new_v4(),
+            part_number: part_number.to_string(),
+            part_types_id,
+            mfg_number: mfg_number.to_string(),
+            description: description.map(|s| s.to_string()),
+            part_mfg_status,
+        })
+    }
+    async fn find_part_catalog_by_part_number(&self, _part_number: &str) -> Result<Option<ZeusPartCatalog>, AppError> {
+        Ok(None)
+    }
+    async fn get_product_model(&self, code: &str) -> Result<ZeusProductModel, AppError> {
+        Err(AppError::NotFound(format!("Product model with code {} not found", code)))
+    }
+    async fn get_luts(&self) -> Result<ZeusLutCollection, AppError> {
+        Ok(ZeusLutCollection {
+            part_types: vec![],
+            part_conditions: vec![],
+            part_mfg_statuses: vec![],
+        })
+    }
+}

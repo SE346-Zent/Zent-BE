@@ -44,16 +44,16 @@ pub async fn reset_password_handler(
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     reset_payload.validate().map_err(|err| AppError::BadRequest(err.to_string()))?;
 
-    let client = valkey_client.ok_or_else(|| AppError::ServiceUnavailable("Password reset service temporarily unavailable. Please try again later.".to_string()))?;
+    let client = valkey_client.ok_or_else(|| AppError::ServiceUnavailable("Password reset service is temporarily unavailable. Please try again later.".to_string()))?;
     let mut valkey_conn = client.get_connection().await?;
     let reset_token_cache_key = format!("password_reset_token:{}", reset_payload.reset_token);
     let user_email: Option<String> = valkey_conn.get(&reset_token_cache_key).await?;
-    let user_email = user_email.ok_or_else(|| AppError::BadRequest("Invalid or expired token".to_string()))?;
+    let user_email = user_email.ok_or_else(|| AppError::BadRequest("Reset token is invalid or expired".to_string()))?;
 
     let user_record = users::Entity::find()
         .filter(users::Column::Email.eq(&user_email))
         .one(db_connection.as_ref()).await?
-        .ok_or_else(|| AppError::NotFound("User missing".to_string()))?;
+        .ok_or_else(|| AppError::NotFound("User account not found".to_string()))?;
 
     let is_same_password = hasher::verify_password(reset_payload.new_password.clone(), user_record.password_hash.clone()).await?;
     let new_password_hash = hasher::hash_password(reset_payload.new_password).await?;

@@ -8,12 +8,12 @@ use crate::{
     model::responses::auth::login_response::{AccountStatusEnum, LoginResponseData, UserInfo},
     services::v1::core::token_service,
 };
-use sea_orm::Set;
-use uuid::Uuid;
-use chrono::Utc;
-use jsonwebtoken::{decode, decode_header, DecodingKey, EncodingKey, Validation, Algorithm};
-use serde::Deserialize;
 use base64::Engine;
+use chrono::Utc;
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, EncodingKey, Validation};
+use sea_orm::Set;
+use serde::Deserialize;
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct FirebaseClaims {
@@ -48,19 +48,22 @@ pub fn get_firebase_project_id() -> Option<String> {
 }
 
 /// Decode and verify Google/Firebase ID tokens.
-pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> Result<FirebaseClaims, AppError> {
-    let header = decode_header(token)
-        .map_err(|e| {
-            tracing::warn!(
-                error.message = "InvalidTokenHeader", error.details = "",
-                error = %e,
-                "Google/Firebase token verification failed: invalid token header"
-            );
-            AppError::Unauthorized(format!("Invalid token header: {}", e))
-        })?;
+pub async fn verify_google_or_firebase_token(
+    token: &str,
+    project_id: &str,
+) -> Result<FirebaseClaims, AppError> {
+    let header = decode_header(token).map_err(|e| {
+        tracing::warn!(
+            error.message = "InvalidTokenHeader", error.details = "",
+            error = %e,
+            "Google/Firebase token verification failed: invalid token header"
+        );
+        AppError::Unauthorized(format!("Invalid token header: {}", e))
+    })?;
     let kid = header.kid.ok_or_else(|| {
         tracing::warn!(
-            error.message = "MissingKid", error.details = "",
+            error.message = "MissingKid",
+            error.details = "",
             "Google/Firebase token verification failed: missing kid in token header"
         );
         AppError::Unauthorized("Missing kid in token header".to_string())
@@ -69,13 +72,15 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
     let parts: Vec<&str> = token.split('.').collect();
     if parts.len() != 3 {
         tracing::warn!(
-            error.message = "InvalidJwtFormat", error.details = "",
+            error.message = "InvalidJwtFormat",
+            error.details = "",
             "Google/Firebase token verification failed: invalid JWT format"
         );
         return Err(AppError::Unauthorized("Invalid JWT format".to_string()));
     }
-    
-    let payload_decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[1])
+
+    let payload_decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(parts[1])
         .map_err(|e| {
             tracing::warn!(
                 error.message = "InvalidTokenPayloadBase64", error.details = "",
@@ -84,20 +89,19 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
             );
             AppError::Unauthorized("Invalid token payload base64".to_string())
         })?;
-    
+
     #[derive(Deserialize)]
     struct TempClaims {
         iss: String,
     }
-    let temp: TempClaims = serde_json::from_slice(&payload_decoded)
-        .map_err(|e| {
-            tracing::warn!(
-                error.message = "InvalidClaimsJson", error.details = "",
-                error = %e,
-                "Google/Firebase token verification failed: invalid claims JSON"
-            );
-            AppError::Unauthorized("Invalid claims JSON".to_string())
-        })?;
+    let temp: TempClaims = serde_json::from_slice(&payload_decoded).map_err(|e| {
+        tracing::warn!(
+            error.message = "InvalidClaimsJson", error.details = "",
+            error = %e,
+            "Google/Firebase token verification failed: invalid claims JSON"
+        );
+        AppError::Unauthorized("Invalid claims JSON".to_string())
+    })?;
 
     let is_firebase = temp.iss.starts_with("https://securetoken.google.com/");
     let is_google = temp.iss == "https://accounts.google.com" || temp.iss == "accounts.google.com";
@@ -118,7 +122,8 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
     };
 
     let client = reqwest::Client::new();
-    let certs: serde_json::Value = client.get(certs_url)
+    let certs: serde_json::Value = client
+        .get(certs_url)
         .send()
         .await
         .map_err(|e| {
@@ -127,7 +132,10 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
                 error = %e,
                 "Google/Firebase token verification failed: failed to fetch public certificates"
             );
-            AppError::Internal(anyhow::anyhow!("Failed to fetch public certificates: {}", e))
+            AppError::Internal(anyhow::anyhow!(
+                "Failed to fetch public certificates: {}",
+                e
+            ))
         })?
         .json()
         .await
@@ -137,29 +145,29 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
                 error = %e,
                 "Google/Firebase token verification failed: failed to parse public certificates"
             );
-            AppError::Internal(anyhow::anyhow!("Failed to parse public certificates: {}", e))
+            AppError::Internal(anyhow::anyhow!(
+                "Failed to parse public certificates: {}",
+                e
+            ))
         })?;
 
-    let cert_pem = certs.get(&kid)
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            tracing::warn!(
-                error.message = "PublicKeyCertificateNotFound", error.details = "",
-                kid = %kid,
-                "Google/Firebase token verification failed: public key certificate not found for kid"
-            );
-            AppError::Unauthorized("Public key certificate not found for kid".to_string())
-        })?;
+    let cert_pem = certs.get(&kid).and_then(|v| v.as_str()).ok_or_else(|| {
+        tracing::warn!(
+            error.message = "PublicKeyCertificateNotFound", error.details = "",
+            kid = %kid,
+            "Google/Firebase token verification failed: public key certificate not found for kid"
+        );
+        AppError::Unauthorized("Public key certificate not found for kid".to_string())
+    })?;
 
-    let decoding_key = DecodingKey::from_rsa_pem(cert_pem.as_bytes())
-        .map_err(|e| {
-            tracing::error!(
-                error.message = "ParsePublicKeyPemFailed", error.details = "",
-                error = %e,
-                "Google/Firebase token verification failed: failed to parse public key PEM"
-            );
-            AppError::Internal(anyhow::anyhow!("Failed to parse public key PEM: {}", e))
-        })?;
+    let decoding_key = DecodingKey::from_rsa_pem(cert_pem.as_bytes()).map_err(|e| {
+        tracing::error!(
+            error.message = "ParsePublicKeyPemFailed", error.details = "",
+            error = %e,
+            "Google/Firebase token verification failed: failed to parse public key PEM"
+        );
+        AppError::Internal(anyhow::anyhow!("Failed to parse public key PEM: {}", e))
+    })?;
 
     let mut validation = Validation::new(Algorithm::RS256);
     validation.leeway = 60;
@@ -174,7 +182,8 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
             // validate the audience and risk accepting tokens issued for a
             // different Firebase project.
             tracing::error!(
-                error.message = "FirebaseProjectIdNotConfigured", error.details = "",
+                error.message = "FirebaseProjectIdNotConfigured",
+                error.details = "",
                 "Google/Firebase token verification failed: FIREBASE_PROJECT_ID is not configured"
             );
             return Err(AppError::Internal(anyhow::anyhow!(
@@ -195,7 +204,8 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
                 // Refuse rather than skip audience validation — accepting any
                 // audience would allow tokens minted for other apps.
                 tracing::error!(
-                    error.message = "GoogleClientIdNotConfigured", error.details = "",
+                    error.message = "GoogleClientIdNotConfigured",
+                    error.details = "",
                     "Google/Firebase token verification failed: GOOGLE_CLIENT_ID is not configured"
                 );
                 return Err(AppError::Internal(anyhow::anyhow!(
@@ -206,19 +216,17 @@ pub async fn verify_google_or_firebase_token(token: &str, project_id: &str) -> R
         }
     }
 
-    let token_data = decode::<FirebaseClaims>(token, &decoding_key, &validation)
-        .map_err(|e| {
-            tracing::warn!(
-                error.message = "TokenValidationFailed", error.details = "",
-                error = %e,
-                "Google/Firebase token verification failed: token validation failed"
-            );
-            AppError::Unauthorized(format!("Token validation failed: {}", e))
-        })?;
+    let token_data = decode::<FirebaseClaims>(token, &decoding_key, &validation).map_err(|e| {
+        tracing::warn!(
+            error.message = "TokenValidationFailed", error.details = "",
+            error = %e,
+            "Google/Firebase token verification failed: token validation failed"
+        );
+        AppError::Unauthorized(format!("Token validation failed: {}", e))
+    })?;
 
     Ok(token_data.claims)
 }
-
 
 /// Represents the calculated results and side-effects of a successful Google/Firebase login attempt.
 #[derive(Debug)]
@@ -286,7 +294,9 @@ pub fn decide_google_login(
                 role_id = %user_record.role_id,
                 "Google login failed: only customer accounts are allowed to authenticate via Google"
             );
-            return Err(AppError::Forbidden("Only customer accounts are allowed to authenticate via Google".to_string()));
+            return Err(AppError::Forbidden(
+                "Only customer accounts are allowed to authenticate via Google".to_string(),
+            ));
         }
 
         // 3. Verify account status
@@ -317,7 +327,10 @@ pub fn decide_google_login(
                     status = ?account_status,
                     "Google login failed: account is not active"
                 );
-                return Err(AppError::Forbidden(format!("Account is {:?}", account_status)));
+                return Err(AppError::Forbidden(format!(
+                    "Account is {:?}",
+                    account_status
+                )));
             }
         }
 
@@ -328,9 +341,8 @@ pub fn decide_google_login(
     } else {
         // Auto-register a new Customer
         user_id = Uuid::new_v4();
-        let name = full_name.unwrap_or_else(|| {
-            email.split('@').next().unwrap_or("Google User").to_string()
-        });
+        let name = full_name
+            .unwrap_or_else(|| email.split('@').next().unwrap_or("Google User").to_string());
 
         let now = Utc::now();
         let active_model = users::ActiveModel {
@@ -397,8 +409,8 @@ pub fn decide_google_login(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::{fixture, rstest};
     use chrono::Utc;
+    use rstest::{fixture, rstest};
 
     #[fixture]
     fn mock_key() -> EncodingKey {
@@ -450,13 +462,14 @@ mod tests {
         assert_eq!(effect.user_id, mock_existing_user.id);
         assert!(effect.user_active_model.is_none());
         assert_eq!(effect.response_data.user.full_name, "Existing User");
-        assert_eq!(effect.response_data.user.account_status, AccountStatusEnum::Active);
+        assert_eq!(
+            effect.response_data.user.account_status,
+            AccountStatusEnum::Active
+        );
     }
 
     #[rstest]
-    fn test_decide_google_login_existing_pending(
-        mock_key: EncodingKey,
-    ) {
+    fn test_decide_google_login_existing_pending(mock_key: EncodingKey) {
         // Pending is status ID 2
         let pending_user = users::Model {
             account_status: 2,
@@ -479,13 +492,14 @@ mod tests {
 
         assert_eq!(effect.user_id, pending_user.id);
         assert!(effect.user_active_model.is_some());
-        assert_eq!(effect.response_data.user.account_status, AccountStatusEnum::Active);
+        assert_eq!(
+            effect.response_data.user.account_status,
+            AccountStatusEnum::Active
+        );
     }
 
     #[rstest]
-    fn test_decide_google_login_existing_deleted(
-        mock_key: EncodingKey,
-    ) {
+    fn test_decide_google_login_existing_deleted(mock_key: EncodingKey) {
         let deleted_user = mock_existing_user(1, true);
 
         let res = decide_google_login(
@@ -526,10 +540,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_decide_google_login_new_user(
-
-        mock_key: EncodingKey,
-    ) {
+    fn test_decide_google_login_new_user(mock_key: EncodingKey) {
         let effect = decide_google_login(
             None,
             "new@example.com".to_string(),

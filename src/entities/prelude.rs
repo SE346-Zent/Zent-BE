@@ -2,9 +2,10 @@
 
 pub use super::account_status::Entity as AccountStatus;
 pub use super::images::Entity as Images;
+pub use super::login_audit_logs::Entity as LoginAuditLogs;
+pub use super::new_part_audit_log::Entity as NewPartAuditLog;
 pub use super::new_part_form_image_links::Entity as NewPartFormImageLinks;
 pub use super::new_part_forms::Entity as NewPartForms;
-pub use super::part_audit_log::Entity as PartAuditLog;
 pub use super::part_catalog::Entity as PartCatalog;
 pub use super::part_catalog_image_links::Entity as PartCatalogImageLinks;
 pub use super::part_changes::Entity as PartChanges;
@@ -22,6 +23,7 @@ pub use super::roles::Entity as Roles;
 pub use super::sessions::Entity as Sessions;
 pub use super::users::Entity as Users;
 pub use super::warranties::Entity as Warranties;
+pub use super::warranty_statuses::Entity as WarrantyStatuses;
 pub use super::work_order_closing_forms::Entity as WorkOrderClosingForms;
 pub use super::work_order_image_links::Entity as WorkOrderImageLinks;
 pub use super::work_order_reject_form_image_links::Entity as WorkOrderRejectFormImageLinks;
@@ -32,4 +34,5 @@ pub use super::work_order_symptoms::Entity as WorkOrderSymptoms;
 pub use super::work_orders::Entity as WorkOrders;
 pub use super::work_order_appointment_changes::Entity as WorkOrderAppointmentChanges;
 pub use super::work_order_ratings::Entity as WorkOrderRatings;
+pub use super::registered_devices::Entity as RegisteredDevices;
 

@@ -48,7 +48,7 @@ where
                 );
                 match e.kind() {
                     jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
-                        AppError::Unauthorized("Token has expired".to_string())
+                        AppError::Unauthorized("Token expired. Please sign in again".to_string())
                     }
                     _ => AppError::Unauthorized("Invalid token".to_string()),
                 }

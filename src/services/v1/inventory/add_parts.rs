@@ -30,7 +30,7 @@ pub struct AddPartsEffect {
 /// and its associated images.
 ///
 /// # Arguments
-/// * `add_parts_payload` - The request containing part details and photo filenames.
+/// * `add_parts_payload` - The request containing part details and OCI object names.
 /// * `work_order_record` - The database model representing the associated work order.
 /// * `requesting_technician_id` - The unique identifier of the technician attempting the addition.
 ///
@@ -63,21 +63,23 @@ pub fn decide_add_parts(
         serial_number: Set(add_parts_payload.serial_number),
         description: Set(add_parts_payload.description),
         work_order_id: Set(work_order_record.id),
-        work_order_number: Set(add_parts_payload.work_order_number),
+        work_order_number: Set(work_order_record.work_order_number),
+        status: Set("pending".to_string()),
         created_at: Set(current_timestamp),
         updated_at: Set(current_timestamp),
         deleted_at: Set(None),
     };
 
-    // Create image + link records for each photo object name
+    // Create image + link records for each photo OCI object name
     let mut image_models = Vec::new();
     let mut image_link_models = Vec::new();
 
-    for photo_object_name in add_parts_payload.photos {
+    for oci_object_name in add_parts_payload.photos {
         let image_id = Uuid::new_v4();
+        // Store the full OCI object name so FE can append to PAR read URL
         image_models.push(images::ActiveModel {
             id: Set(image_id),
-            object_name: Set(photo_object_name),
+            object_name: Set(oci_object_name),
             created_at: Set(current_timestamp),
             updated_at: Set(current_timestamp),
             ..Default::default()
@@ -120,7 +122,7 @@ mod tests {
             phone_number: None,
             country: "".to_string(),
             province: "".to_string(),
-            city: "".to_string(),
+            ward: "".to_string(),
             address: "".to_string(),
             building: None,
             appointment: Utc::now(),
@@ -140,7 +142,8 @@ mod tests {
     #[test]
     fn test_decide_add_parts_success() {
         let technician_id = Uuid::new_v4();
-        let work_order_record = dummy_work_order(technician_id);
+        let mut work_order_record = dummy_work_order(technician_id);
+        work_order_record.work_order_number = "WO-123".to_string();
 
         let payload = AddPartsRequest {
             part_number: "PN-123".to_string(),
@@ -148,8 +151,7 @@ mod tests {
             model_code: Some("MC-123".to_string()),
             serial_number: "SN-123".to_string(),
             description: Some("desc".to_string()),
-            work_order_number: "WO-123".to_string(),
-            photos: vec!["img.png".to_string()],
+            photos: vec!["wo-uuid/parts/img-uuid_1234567890.png".to_string()],
         };
 
         let result = decide_add_parts(payload, work_order_record.clone(), technician_id);
@@ -161,7 +163,7 @@ mod tests {
         assert_eq!(add_parts_effect.part_form_model.work_order_number, Set("WO-123".to_string()));
         
         assert_eq!(add_parts_effect.image_models.len(), 1);
-        assert_eq!(add_parts_effect.image_models[0].object_name, Set("img.png".to_string()));
+        assert_eq!(add_parts_effect.image_models[0].object_name, Set("wo-uuid/parts/img-uuid_1234567890.png".to_string()));
         assert_eq!(add_parts_effect.image_link_models.len(), 1);
     }
 
@@ -177,7 +179,6 @@ mod tests {
             model_code: None,
             serial_number: "SN-123".to_string(),
             description: None,
-            work_order_number: "WO-123".to_string(),
             photos: vec![],
         };
 

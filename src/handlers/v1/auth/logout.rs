@@ -49,7 +49,7 @@ pub async fn logout_handler(
     let session_record = sessions::Entity::find()
         .filter(sessions::Column::RefreshTokenHash.eq(&refresh_token_hash))
         .one(db_connection.as_ref()).await?
-        .ok_or_else(|| AppError::Unauthorized("Invalid token".to_string()))?;
+        .ok_or_else(|| AppError::Unauthorized("Invalid refresh token".to_string()))?;
 
     let logout_effect = logout::decide_logout(&session_record, authenticated_user.user.id)?;
 

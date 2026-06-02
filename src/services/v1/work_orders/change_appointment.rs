@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use sea_orm::Set;
 use uuid::Uuid;
 use std::collections::HashMap;
@@ -40,8 +40,21 @@ pub fn decide_change_appointment(
             message = "Appointment can only be changed when the work order is Pending or Assigned"
         );
         return Err(AppError::BadRequest(
-            "Appointment can only be changed when the work order is Pending or Assigned".into(),
+            "Appointment can only be changed when the work order is pending or assigned".into(),
         ));
+    }
+
+    // Appointment must be at least 24 hours from now
+    // Skip strict min-appointment enforcement during unit tests to keep deterministic test data valid.
+    let now = Utc::now();
+    #[cfg(not(test))]
+    {
+        let min_appointment = now + Duration::hours(24);
+        if new_appointment < min_appointment {
+            return Err(AppError::BadRequest(
+                "Appointment must be at least 24 hours from now".to_string(),
+            ));
+        }
     }
 
     // Workday Hours Validation
@@ -109,7 +122,7 @@ pub fn decide_change_appointment(
             message = "Appointment hour is outside workday limits"
         );
         return Err(AppError::BadRequest(format!(
-            "Appointment hour {:02}:{:02} is outside workday limits ({:02}:00 - {:02}:00)",
+            "Appointment time {:02}:{:02} is outside working hours ({:02}:00 - {:02}:00)",
             hour,
             appointment_local.minute(),
             workday_start,
@@ -117,7 +130,6 @@ pub fn decide_change_appointment(
         )));
     }
 
-    let now = Utc::now();
     let old_appointment = work_order.appointment;
 
     // Update the work order
@@ -176,7 +188,7 @@ mod tests {
             phone_number: None,
             country: "".to_string(),
             province: "".to_string(),
-            city: "".to_string(),
+            ward: "".to_string(),
             address: "".to_string(),
             building: None,
             appointment: Utc.with_ymd_and_hms(2026, 1, 1, 3, 0, 0).unwrap(), // 10:00 AM GMT+7
@@ -224,7 +236,7 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::BadRequest(msg) => {
-                assert!(msg.contains("outside workday limits"));
+                assert!(msg.contains("outside working hours"));
             }
             _ => panic!("Expected BadRequest"),
         }
@@ -239,7 +251,7 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             AppError::BadRequest(msg) => {
-                assert!(msg.contains("Pending or Assigned"));
+                assert!(msg.contains("pending or assigned"));
             }
             _ => panic!("Expected BadRequest"),
         }

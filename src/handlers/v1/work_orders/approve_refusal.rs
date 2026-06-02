@@ -35,10 +35,10 @@ pub async fn approve_refusal(
     let admin_role_id = *luts.roles_by_name.get("Admin")
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Admin role missing from lookup tables")))?;
     if auth.user.role_id == admin_role_id {
-        let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Admin has no province assigned".to_string()))?;
-        if p != &wo.province { return Err(AppError::Forbidden("Admin province does not match work order province".to_string())); }
+        let p = auth.user.province.as_ref().ok_or_else(|| AppError::Forbidden("Your admin profile does not have a province assigned".to_string()))?;
+        if p != &wo.province { return Err(AppError::Forbidden("You do not have permission to manage work orders in this province".to_string())); }
     }
-    let rf_id = wo.reject_form_id.ok_or_else(|| AppError::BadRequest("No rejection form".to_string()))?;
+    let rf_id = wo.reject_form_id.ok_or_else(|| AppError::BadRequest("Rejection form is required".to_string()))?;
     let rf = crate::entities::work_order_reject_forms::Entity::find_by_id(rf_id).one(db.as_ref()).await?.ok_or_else(|| AppError::NotFound("Rejection form not found".to_string()))?;
     let rejected_id = *luts.work_order_statuses_by_name.get("Rejected").ok_or_else(|| AppError::Internal(anyhow::anyhow!("Rejected status not found")))?;
 

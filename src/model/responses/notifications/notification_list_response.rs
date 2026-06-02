@@ -13,4 +13,7 @@ pub struct NotificationListItem {
     pub data: Option<serde_json::Value>,
     pub is_read: bool,
     pub created_at: String,
+    /// Avatar object name of the user who triggered the notification.
+    /// FE appends this to the PAR read URL to display the sender's avatar.
+    pub sender_avatar_name: Option<String>,
 }

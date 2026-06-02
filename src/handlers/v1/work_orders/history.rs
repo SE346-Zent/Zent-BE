@@ -30,7 +30,7 @@ pub async fn history(
     // Only admins can access work order history details
     match auth.role.name.as_str() {
         "Admin" | "SuperAdmin" => {},
-        _ => return Err(AppError::Forbidden("Only admins can view work order history details".to_string())),
+        _ => return Err(AppError::Forbidden("You do not have permission to view work order history".to_string())),
     }
 
     let wo = work_orders_ent::Entity::find_by_id(id).one(db.as_ref()).await?.ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;

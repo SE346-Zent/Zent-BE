@@ -1,6 +1,6 @@
 use axum::{extract::{State, Path}, Json};
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, EntityTrait};
+use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait};
 use uuid::Uuid;
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::{AppError, ErrorResponse};
@@ -10,8 +10,9 @@ use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::details_response::WorkOrderDetails;
 use crate::services::v1::work_orders::get_details as get_svc;
 use redis::AsyncCommands;
+use chrono::Utc;
 
-use crate::entities::{products, work_orders as work_orders_ent, work_order_symptoms};
+use crate::entities::{work_orders as work_orders_ent, work_order_symptoms, warranties, users};
 
 /// Retrieve full details for a specific work order, including product and symptom info, with permission checks.
 
@@ -46,14 +47,47 @@ pub async fn get_details(
         conn_opt = Some(conn);
     }
     let result = work_orders_ent::Entity::find_by_id(id)
-        .find_also_related(products::Entity).find_also_related(work_order_symptoms::Entity)
+        .find_also_related(work_order_symptoms::Entity)
         .one(db.as_ref()).await?;
-    let (wo, product, symptom) = result.ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+    let (wo, symptom) = result.ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
+    let product = super::load_zeus_product_model(wo.product_id).await;
     
     // Check permissions
     check_wo_permissions(&auth, &wo.work_order_number, wo.technician_id, wo.customer_id, &wo.province)?;
 
-    let details = get_svc::decide_get_details(wo, product, symptom, &lookup_tables);
+    // Fetch warranty status for the product
+    let warranty_status = warranties::Entity::find()
+        .filter(warranties::Column::ProductId.eq(wo.product_id))
+        .one(db.as_ref())
+        .await?
+        .map(|w| {
+            let now = Utc::now();
+            if now > w.end_date {
+                "expired".to_string()
+            } else {
+                w.warranty_status.clone()
+            }
+        })
+        .unwrap_or_else(|| "none".to_string());
+
+    // Fetch technician info for avatar
+    let (technician_name, technician_avatar_name) = if let Some(tech_id) = wo.technician_id {
+        users::Entity::find_by_id(tech_id)
+            .one(db.as_ref())
+            .await?
+            .map(|t| (Some(t.full_name.clone()), t.avatar_url))
+            .unwrap_or((None, None))
+    } else {
+        (None, None)
+    };
+
+    // Fetch customer avatar
+    let customer_avatar_name = users::Entity::find_by_id(wo.customer_id)
+        .one(db.as_ref())
+        .await?
+        .and_then(|c| c.avatar_url);
+
+    let details = get_svc::decide_get_details(wo, product, symptom, &lookup_tables, Some(warranty_status), technician_name, technician_avatar_name, customer_avatar_name);
     if let Some(mut conn) = conn_opt {
         if let Ok(cached_val) = serde_json::to_string(&details) { let _: () = conn.set_ex(&cache_key, cached_val, 600).await.unwrap_or_default(); }
     }
@@ -73,25 +107,25 @@ fn check_wo_permissions(
         "SuperAdmin" => Ok(()),
         "Admin" => {
             let Some(ref admin_province) = auth.user.province else {
-                return Err(AppError::Forbidden("Admin profile missing province assignment".to_string()));
+                return Err(AppError::Forbidden("Your admin profile does not have a province assigned".to_string()));
             };
             if admin_province != province {
-                return Err(AppError::Forbidden(format!("You do not have permission to view work orders in province '{}'", province)));
+                return Err(AppError::Forbidden("You do not have permission to view work orders in this province".to_string()));
             }
             Ok(())
         }
         "Technician" => {
             if tech_id != Some(auth.user.id) {
-                return Err(AppError::Forbidden(format!("Work order {} is not assigned to you", wo_number)));
+                return Err(AppError::Forbidden(format!("You are not assigned to work order {}", wo_number)));
             }
             Ok(())
         }
         "Customer" => {
             if customer_id != auth.user.id {
-                return Err(AppError::Forbidden(format!("Work order {} does not belong to you", wo_number)));
+                return Err(AppError::Forbidden(format!("You do not have access to work order {}", wo_number)));
             }
             Ok(())
         }
-        _ => Err(AppError::Forbidden("Role not recognized".to_string())),
+        _ => Err(AppError::Forbidden("Your role is not permitted to access this resource".to_string())),
     }
 }

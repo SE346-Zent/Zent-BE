@@ -4,10 +4,11 @@ pub mod prelude;
 
 pub mod account_status;
 pub mod images;
+pub mod login_audit_logs;
 pub mod new_part_form_image_links;
 pub mod new_part_forms;
+pub mod new_part_audit_log;
 pub mod outbox_records;
-pub mod part_audit_log;
 pub mod part_catalog;
 pub mod part_catalog_image_links;
 pub mod part_changes;
@@ -25,6 +26,7 @@ pub mod roles;
 pub mod sessions;
 pub mod users;
 pub mod warranties;
+pub mod warranty_statuses;
 pub mod work_order_closing_forms;
 pub mod work_order_image_links;
 pub mod work_order_reject_form_image_links;
@@ -40,5 +42,7 @@ pub mod chat_rooms;
 pub mod chat_room_members;
 pub mod chat_room_image_links;
 pub mod work_order_ratings;
+pub mod registered_devices;
+pub mod cancel_reasons;
 
 

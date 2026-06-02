@@ -102,7 +102,7 @@ mod tests {
             phone_number: None,
             country: "".to_string(),
             province: "".to_string(),
-            city: "".to_string(),
+            ward: "".to_string(),
             address: "".to_string(),
             building: None,
             appointment: Utc::now(),
@@ -161,7 +161,7 @@ mod tests {
         let result = decide_approve_refusal(work_order, reject_form, admin_id, target_refused_status_id);
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::BadRequest(msg) => assert_eq!(msg, "Work order does not match this rejection form"),
+            AppError::BadRequest(msg) => assert_eq!(msg, "Rejection form does not match this work order"),
             _ => panic!("Expected BadRequest"),
         }
     }

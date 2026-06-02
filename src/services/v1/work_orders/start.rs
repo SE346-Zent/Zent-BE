@@ -115,7 +115,7 @@ mod tests {
             phone_number: None,
             country: "Vietnam".to_string(),
             province: "Ho Chi Minh City".to_string(),
-            city: "Ho Chi Minh City".to_string(),
+            ward: "Ward 1".to_string(),
             address: "123 Le Loi".to_string(),
             building: None,
             appointment: Utc::now(),
