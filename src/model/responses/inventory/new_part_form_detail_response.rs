@@ -14,6 +14,13 @@ pub struct NewPartFormDetailResponse {
     pub work_order_number: String,
     pub description: Option<String>,
     pub status: String,
+    /// Present when status is approved or rejected.
+    pub approver_name: Option<String>,
+    /// Present when status is approved.
+    pub approved_at: Option<String>,
+    /// Present when status is rejected.
+    pub rejected_at: Option<String>,
+    /// Present when status is rejected.
     pub denial_reason: Option<String>,
     pub photo_urls: Vec<String>,
     pub created_at: String,

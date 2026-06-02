@@ -46,6 +46,9 @@ pub fn map_detail_response(
     form: crate::entities::new_part_forms::Model,
     part_type_name: String,
     photo_urls: Vec<String>,
+    approver_name: Option<String>,
+    approved_at: Option<String>,
+    rejected_at: Option<String>,
     rejection_reason: Option<String>,
 ) -> NewPartFormDetailResponse {
     NewPartFormDetailResponse {
@@ -58,6 +61,9 @@ pub fn map_detail_response(
         work_order_number: form.work_order_number,
         description: form.description,
         status: if form.status.eq_ignore_ascii_case("denied") { "rejected".to_string() } else { form.status },
+        approver_name,
+        approved_at,
+        rejected_at,
         denial_reason: rejection_reason,
         photo_urls,
         created_at: crate::utils::time::to_utc7_string(form.created_at),

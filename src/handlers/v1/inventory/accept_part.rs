@@ -88,6 +88,7 @@ pub async fn accept_part(
         let form_update = new_part_forms::ActiveModel {
             id: Set(form_id),
             status: Set("approved".to_string()),
+            new_part_request_status_id: Set(2), // approved
             updated_at: Set(Utc::now()),
             ..Default::default()
         };

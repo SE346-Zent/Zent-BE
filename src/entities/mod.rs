@@ -8,6 +8,7 @@ pub mod login_audit_logs;
 pub mod new_part_form_image_links;
 pub mod new_part_forms;
 pub mod new_part_audit_log;
+pub mod new_part_request_statuses;
 pub mod outbox_records;
 pub mod part_catalog;
 pub mod part_catalog_image_links;

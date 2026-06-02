@@ -1,7 +1,9 @@
 use crate::{
     core::lookup_tables::LookupTables,
     entities::{users, work_order_state_history, work_orders, work_order_closing_forms, work_order_ratings},
-    model::responses::work_orders::history_response::{WorkOrderStateHistoryEntry, WorkOrderHistoryDetail, ClosingFormEntry, RatingEntry},
+    model::responses::work_orders::history_response::{
+        WorkOrderStateHistoryEntry, WorkOrderHistoryDetail, ClosingFormEntry, RatingEntry, PartChangeEntry,
+    },
 };
 
 /// Transform raw state-history records and associated users into human-readable response entries.
@@ -38,16 +40,27 @@ pub fn decide_get_history(
     history_entries
 }
 
-/// Pure logic: maps history rows, work order, optional closing form, and optional rating into the full
-/// history detail response (state transitions + closing form + rating).
+/// Pure logic: maps history rows, work order, optional closing form, optional rating,
+/// optional part changes, and optional evidence photos into the full history detail response.
+///
+/// For Admin/SuperAdmin: all fields populated (state_history + closing_form + rating + part_changes + evidence_photos).
+/// For Technician: state_history is absent.
+/// For Customer: handled separately by `decide_customer_history`.
 pub fn decide_get_history_detail(
     history_rows: Vec<(work_order_state_history::Model, Option<users::Model>)>,
     luts: &LookupTables,
     _wo: work_orders::Model,
     closing_form: Option<work_order_closing_forms::Model>,
     rating: Option<work_order_ratings::Model>,
+    part_changes: Vec<PartChangeEntry>,
+    evidence_photos: Vec<String>,
+    include_state_history: bool,
 ) -> WorkOrderHistoryDetail {
-    let state_history = decide_get_history(history_rows, luts);
+    let state_history = if include_state_history {
+        Some(decide_get_history(history_rows, luts))
+    } else {
+        None
+    };
 
     let closing_form = closing_form.map(|cf| ClosingFormEntry {
         id: cf.id,
@@ -68,6 +81,32 @@ pub fn decide_get_history_detail(
         state_history,
         closing_form,
         rating,
+        part_changes: Some(part_changes),
+        evidence_photos: Some(evidence_photos),
+        technician_name: None,
+        status: None,
+        ended_at: None,
+    }
+}
+
+/// Build a customer-facing history response from the work order model and optional technician name.
+///
+/// The customer sees: technician name, current status, and ended_at (only if completed).
+pub fn decide_customer_history(
+    wo: &work_orders::Model,
+    status_name: String,
+    technician_name: Option<String>,
+    ended_at: Option<String>,
+) -> WorkOrderHistoryDetail {
+    WorkOrderHistoryDetail {
+        state_history: None,
+        closing_form: None,
+        rating: None,
+        part_changes: None,
+        evidence_photos: None,
+        technician_name,
+        status: Some(status_name),
+        ended_at,
     }
 }
 
@@ -159,5 +198,45 @@ mod tests {
         let rows = vec![];
         let entries = decide_get_history(rows, &lookup_tables);
         assert_eq!(entries.len(), 0);
+    }
+
+    #[test]
+    fn test_decide_customer_history() {
+        let wo = work_orders::Model {
+            id: Uuid::new_v4(),
+            work_order_status_id: 1,
+            customer_id: Uuid::new_v4(),
+            product_id: Uuid::new_v4(),
+            reference_ticket_id: None,
+            work_order_symptom_id: 1,
+            description: "test".to_string(),
+            first_name: "Jane".to_string(),
+            last_name: "Doe".to_string(),
+            email: None,
+            phone_number: None,
+            country: "VN".to_string(),
+            province: "HCM".to_string(),
+            ward: "Ward 1".to_string(),
+            address: "123 St".to_string(),
+            building: None,
+            appointment: Utc::now(),
+            admin_id: None,
+            technician_id: None,
+            complete_form_id: None,
+            work_order_number: "WO-001".to_string(),
+            reject_form_id: None,
+            about_to_start_notified: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+            chat_room_id: None,
+        };
+
+        let detail = decide_customer_history(&wo, "Completed".to_string(), Some("Tech A".to_string()), Some("2026-06-01T10:00:00+07:00".to_string()));
+        assert!(detail.state_history.is_none());
+        assert!(detail.closing_form.is_none());
+        assert_eq!(detail.status, Some("Completed".to_string()));
+        assert_eq!(detail.technician_name, Some("Tech A".to_string()));
+        assert!(detail.ended_at.is_some());
     }
 }       

@@ -57,6 +57,7 @@ pub async fn deny_part(
         let form_update = new_part_forms::ActiveModel {
             id: Set(form_id),
             status: Set("rejected".to_string()),
+            new_part_request_status_id: Set(3), // rejected
             updated_at: Set(Utc::now()),
             ..Default::default()
         };

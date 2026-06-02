@@ -47,6 +47,7 @@ mod m20260531_100000_add_registered_devices;
 mod m20260531_110000_rename_city_to_ward;
 mod m20260531_120000_drop_product_fk_from_registered_devices;
 mod m20260601_100000_add_cancel_reason;
+mod m20260602_100000_add_new_part_request_statuses;
 
 
 pub struct Migrator;
@@ -102,6 +103,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260531_110000_rename_city_to_ward::Migration),
             Box::new(m20260531_120000_drop_product_fk_from_registered_devices::Migration),
             Box::new(m20260601_100000_add_cancel_reason::Migration),
+            Box::new(m20260602_100000_add_new_part_request_statuses::Migration),
         ]
     }
 }
