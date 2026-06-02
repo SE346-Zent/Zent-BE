@@ -46,10 +46,10 @@ pub fn decide_create_work_order(
             error.details = "",
             city = %creation_payload.province,
             customer_id = %requesting_customer_id,
-            message = "Only HCM and HN are supported at this time"
+            message = "Only HCM and HN provinces are supported "
         );
         return Err(AppError::BadRequest(
-            "Only HCM and HN are supported at this time".to_string(),
+            "Only HCM and HN provinces are supported".to_string(),
         ));
     }
 
