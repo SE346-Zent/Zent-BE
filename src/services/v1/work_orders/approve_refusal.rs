@@ -41,7 +41,9 @@ pub fn decide_approve_refusal(
             reject_form_id = %reject_form.id,
             message = "Work order does not match this rejection form"
         );
-        return Err(AppError::BadRequest("Work order does not match this rejection form".to_string()));
+        return Err(AppError::BadRequest(
+            "Work order does not match this rejection form".to_string(),
+        ));
     }
 
     let current_timestamp = Utc::now();
@@ -136,34 +138,47 @@ mod tests {
         let mut work_order = dummy_work_order();
         let reject_form = dummy_reject_form();
         work_order.reject_form_id = Some(reject_form.id);
-        
+
         let admin_id = Uuid::new_v4();
         let target_refused_status_id = 99;
 
-        let result = decide_approve_refusal(work_order, reject_form.clone(), admin_id, target_refused_status_id);
+        let result = decide_approve_refusal(
+            work_order,
+            reject_form.clone(),
+            admin_id,
+            target_refused_status_id,
+        );
         assert!(result.is_ok());
         let effect = result.unwrap();
 
-        assert_eq!(effect.work_order_model.work_order_status_id, Set(target_refused_status_id));
+        assert_eq!(
+            effect.work_order_model.work_order_status_id,
+            Set(target_refused_status_id)
+        );
         assert_eq!(effect.reject_form_model.approved, Set(true));
         assert_eq!(effect.reject_form_model.approver_id, Set(Some(admin_id)));
-        assert_eq!(effect.state_history_model.to_status_id, Set(target_refused_status_id));
+        assert_eq!(
+            effect.state_history_model.to_status_id,
+            Set(target_refused_status_id)
+        );
     }
 
     #[test]
     fn test_decide_approve_refusal_mismatch() {
         let work_order = dummy_work_order();
         let reject_form = dummy_reject_form();
-        
+
         let admin_id = Uuid::new_v4();
         let target_refused_status_id = 99;
 
-        let result = decide_approve_refusal(work_order, reject_form, admin_id, target_refused_status_id);
+        let result =
+            decide_approve_refusal(work_order, reject_form, admin_id, target_refused_status_id);
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::BadRequest(msg) => assert_eq!(msg, "Rejection form does not match this work order"),
+            AppError::BadRequest(msg) => {
+                assert_eq!(msg, "Work order does not match this rejection form")
+            }
             _ => panic!("Expected BadRequest"),
         }
     }
 }
-
