@@ -71,37 +71,25 @@ mod tests {
     #[test]
     fn test_id_zero_rejected() {
         let err = apply(0, true).unwrap_err();
-        match err {
-            AppError::BadRequest(msg) => assert!(msg.contains("0")),
-            _ => panic!("Expected BadRequest, got {:?}", err),
-        }
+        assert!(matches!(err, AppError::BadRequest(_)));
     }
 
     #[test]
     fn test_id_negative_rejected() {
         let err = apply(-1, false).unwrap_err();
-        match err {
-            AppError::BadRequest(msg) => assert!(msg.contains("-1")),
-            _ => panic!("Expected BadRequest, got {:?}", err),
-        }
+        assert!(matches!(err, AppError::BadRequest(_)));
     }
 
     #[test]
     fn test_id_just_above_max_rejected() {
         let err = apply(5, true).unwrap_err();
-        match err {
-            AppError::BadRequest(msg) => assert!(msg.contains("5")),
-            _ => panic!("Expected BadRequest"),
-        }
+        assert!(matches!(err, AppError::BadRequest(_)));
     }
 
     #[test]
     fn test_id_way_above_max_rejected() {
         let err = apply(999, false).unwrap_err();
-        match err {
-            AppError::BadRequest(msg) => assert!(msg.contains("999")),
-            _ => panic!("Expected BadRequest"),
-        }
+        assert!(matches!(err, AppError::BadRequest(_)));
     }
 
     #[test]

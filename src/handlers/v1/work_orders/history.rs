@@ -134,15 +134,29 @@ pub async fn history(
                     .all(db.as_ref())
                     .await?;
 
+                // Batch-fetch part catalogs to avoid N+1
+                let catalog_ids: Vec<Uuid> = pc_rows.iter()
+                    .filter_map(|(_, part_opt)| part_opt.as_ref().map(|p| p.part_catalog_id))
+                    .collect();
+                let catalog_map: std::collections::HashMap<Uuid, String> = if catalog_ids.is_empty() {
+                    std::collections::HashMap::new()
+                } else {
+                    part_catalog::Entity::find()
+                        .filter(part_catalog::Column::Id.is_in(catalog_ids))
+                        .all(db.as_ref())
+                        .await?
+                        .into_iter()
+                        .map(|c| (c.id, c.part_number))
+                        .collect()
+                };
+
                 let mut entries = Vec::with_capacity(pc_rows.len());
                 for (pc, part_opt) in pc_rows {
                     let (part_number, serial_number) = if let Some(ref part) = part_opt {
-                        let catalog = part_catalog::Entity::find_by_id(part.part_catalog_id)
-                            .one(db.as_ref())
-                            .await?
-                            .map(|c| c.part_number)
+                        let pn = catalog_map.get(&part.part_catalog_id)
+                            .cloned()
                             .unwrap_or_else(|| "Unknown".to_string());
-                        (catalog, part.serial_number.clone())
+                        (pn, part.serial_number.clone())
                     } else {
                         ("Unknown".to_string(), "Unknown".to_string())
                     };

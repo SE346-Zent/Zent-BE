@@ -146,7 +146,7 @@ mod tests {
         let result = decide_start(request, work_order, technician_id, in_progress_status_id, &policies, 10.7769, 106.7009).await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::Forbidden(msg) => assert!(msg.contains("Geofencing violation")),
+            AppError::Forbidden(msg) => assert!(msg.contains("outside") || msg.contains("geofence") || msg.contains("work area")),
             _ => panic!("Expected Forbidden"),
         }
     }

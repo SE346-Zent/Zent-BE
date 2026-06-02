@@ -157,9 +157,9 @@ pub async fn add_parts(
         "province": wo_province,
     });
 
-    let title = format!("New Parts Added: Work Order {}", wo_number);
+    let title = format!("New Parts Added: {}", wo_number);
     let body = format!(
-        "Technician {} added new parts to WO {} in {}",
+        "Technician {} added new parts to {} in {}",
         auth.user.full_name, wo_number, wo_province
     );
 

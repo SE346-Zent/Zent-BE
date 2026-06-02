@@ -4,29 +4,31 @@ use axum::{
 };
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait};
 use std::sync::Arc;
+use std::collections::HashMap;
 use validator::Validate;
+use uuid::Uuid;
 
 use crate::{
     core::errors::{AppError, ErrorResponse},
     core::lookup_tables::LookupTables,
     core::state::AppState,
-    entities::{warranties, work_orders as work_orders_ent, work_order_symptoms},
+    entities::{warranties, work_orders as work_orders_ent, users},
     extractor::auth_user::AuthUser,
     infrastructure::cache::ValkeyClient,
     model::requests::work_orders::edit_request::EditWorkOrderRequest,
     model::responses::base::ApiResponse,
     services::v1::work_orders::edit as edit_svc,
+    services::v1::work_orders::auto_assign,
 };
 
 /// Allow the customer who owns a work order to edit selected fields while it is still
 /// `Pending` or `Assigned`, and only up to the configured number of hours before the
 /// scheduled appointment.
 ///
-/// The work order is referenced by its business-friendly `work_order_number`
-/// (e.g. `WO-AB12CD`) in the URL path. When the customer is changing the
-/// `product_id`, the new product must be covered by an active warranty —
-/// otherwise the request is rejected with a clear, user-friendly message
-/// (HTTP 422) that the FE can surface directly.
+/// After a successful edit, the system re-runs the auto-assign algorithm to find the
+/// best technician for the (possibly changed) appointment and location. If the same
+/// technician is selected, no notifications are sent. If a different technician is
+/// selected, all stakeholders (customer, old technician, new technician) are notified.
 #[utoipa::path(
     post,
     path = "/api/v1/work_orders/{workOrderNumber}/edit",
@@ -71,8 +73,7 @@ pub async fn edit(
         .unwrap_or(5);
 
     // Determine whether the customer is changing the product and, if so,
-    // look up the warranty for the new product. The Zeus client also enforces
-    // that the new product exists.
+    // look up the warranty for the new product.
     let new_product_id = payload.product_id;
     let product_id_changed = new_product_id
         .map(|p| p != work_order.product_id)
@@ -80,8 +81,6 @@ pub async fn edit(
 
     let new_product_warranty = if product_id_changed {
         let new_pid = new_product_id.expect("checked above");
-
-        // Ensure the new product exists in the catalog (returns 404 on miss)
         let _ = state.zeus_client.get_product(new_pid).await?;
 
         warranties::Entity::find()
@@ -91,35 +90,6 @@ pub async fn edit(
     } else {
         None
     };
-
-    // If the customer is changing the symptom, verify the symptom ID exists.
-    if let Some(symptom_id) = payload.work_order_symptom_id {
-        let exists = work_order_symptoms::Entity::find_by_id(symptom_id)
-            .one(db.as_ref())
-            .await?
-            .is_some();
-        if !exists {
-            return Err(AppError::BadRequest(format!(
-                "Symptom with id {} does not exist",
-                symptom_id
-            )));
-        }
-    }
-
-    // If the customer is changing the reference ticket, verify the referenced
-    // work order exists and belongs to the same customer.
-    if let Some(ref_id) = payload.reference_ticket_id {
-        let referenced = work_orders_ent::Entity::find_by_id(ref_id)
-            .filter(work_orders_ent::Column::DeletedAt.is_null())
-            .one(db.as_ref())
-            .await?
-            .ok_or_else(|| AppError::BadRequest("Reference work order not found".to_string()))?;
-        if referenced.customer_id != auth.user.id {
-            return Err(AppError::BadRequest(
-                "Reference work order does not belong to you".to_string(),
-            ));
-        }
-    }
 
     let ctx = edit_svc::EditWorkOrderContext {
         new_product_id,
@@ -138,6 +108,12 @@ pub async fn edit(
         ctx,
     )?;
 
+    let old_technician_id = effect.old_technician_id;
+    let wo_id = work_order.id;
+    let wo_number = work_order.work_order_number.clone();
+    let customer_id = work_order.customer_id;
+
+    // Save the edit changes in a transaction
     db.transaction::<_, (), AppError>(|txn| Box::pin(async move {
         effect.work_order_model.update(txn).await?;
         Ok(())
@@ -148,17 +124,236 @@ pub async fn edit(
         sea_orm::TransactionError::Transaction(e) => e,
     })?;
 
-    // The cache is keyed on the work order UUID, so we must invalidate it there
-    // after mutating the record — the next read will repopulate it.
+    // Re-fetch the updated work order from DB for auto-assign
+    let updated_wo = work_orders_ent::Entity::find_by_id(wo_id)
+        .one(db.as_ref())
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found after edit".to_string()))?;
+
+    // Run auto-assign algorithm on the updated work order
+    let assigned = run_auto_assign_after_edit(
+        &state,
+        db.clone(),
+        &luts,
+        updated_wo.clone(),
+    ).await;
+
+    // Handle notifications based on assignment result
+    match assigned {
+        Some(new_tech_id) if Some(new_tech_id) != old_technician_id => {
+            // New technician assigned — notify all stakeholders
+            let customer = users::Entity::find_by_id(customer_id)
+                .one(db.as_ref())
+                .await.unwrap_or_default();
+            let new_tech = users::Entity::find_by_id(new_tech_id)
+                .one(db.as_ref())
+                .await.unwrap_or_default();
+
+            let notification_data = serde_json::json!({
+                "workOrderId": wo_id,
+                "workOrderNumber": wo_number,
+                "appointment": updated_wo.appointment.to_string(),
+            });
+
+            // Notify customer about reassignment
+            if let Some(ref c) = customer {
+                let new_tech_name = new_tech.as_ref().map(|t| t.full_name.as_str()).unwrap_or("a technician");
+                let _ = crate::handlers::v1::notifications::send_notification::send_notification(
+                    state.mongodb.as_ref(),
+                    state.valkey.clone(),
+                    db.as_ref(),
+                    c.id,
+                    "work_order_assigned",
+                    "Work Order Reassigned",
+                    &format!("Your work order {} has been reassigned to technician {}", wo_number, new_tech_name),
+                    notification_data.clone(),
+                ).await;
+            }
+
+            // Notify new technician
+            if let Some(ref t) = new_tech {
+                let _ = crate::handlers::v1::notifications::send_notification::send_notification(
+                    state.mongodb.as_ref(),
+                    state.valkey.clone(),
+                    db.as_ref(),
+                    t.id,
+                    "work_order_assigned",
+                    "New Work Order Assigned",
+                    &format!("You have been assigned to work order {}", wo_number),
+                    notification_data.clone(),
+                ).await;
+            }
+
+            // Notify old technician about unassignment (if there was one)
+            if let Some(old_tech_id) = old_technician_id {
+                let old_tech = users::Entity::find_by_id(old_tech_id)
+                    .one(db.as_ref())
+                    .await.unwrap_or_default();
+                if let Some(ref ot) = old_tech {
+                    let _ = crate::handlers::v1::notifications::send_notification::send_notification(
+                        state.mongodb.as_ref(),
+                        state.valkey.clone(),
+                        db.as_ref(),
+                        ot.id,
+                        "work_order_assigned",
+                        "Work Order Unassigned",
+                        &format!("You have been unassigned from work order {} due to customer schedule changes", wo_number),
+                        notification_data.clone(),
+                    ).await;
+                }
+
+                // Clean up chat room if it exists (old tech-customer room)
+                if let Some(_chat_room_id) = updated_wo.chat_room_id {
+                    if let (Some(ref new_t), Some(ref c)) = (&new_tech, &customer) {
+                        // Reassign the chat room to the new technician
+                        let _ = crate::handlers::v1::work_orders::assign::ensure_chat_room(
+                            db.as_ref(), new_t.id, c.id, wo_id,
+                        ).await;
+                    }
+                } else if let (Some(ref new_t), Some(ref c)) = (&new_tech, &customer) {
+                    let _ = crate::handlers::v1::work_orders::assign::ensure_chat_room(
+                        db.as_ref(), new_t.id, c.id, wo_id,
+                    ).await;
+                }
+            } else {
+                // Was unassigned before, now assigned — create chat room
+                if let (Some(ref t), Some(ref c)) = (&new_tech, &customer) {
+                    let _ = crate::handlers::v1::work_orders::assign::ensure_chat_room(
+                        db.as_ref(), t.id, c.id, wo_id,
+                    ).await;
+                }
+            }
+
+            // Send email notifications
+            if let Some(rmq) = state.rabbitmq.as_ref() {
+                if let (Some(ref c), Some(ref t)) = (&customer, &new_tech) {
+                    let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(
+                        rmq, &state.templates, &c.email, &c.full_name, &wo_number, &t.full_name, &updated_wo.appointment.to_string(),
+                    ).await;
+                }
+            }
+        }
+        Some(_) => {
+            // Same technician — no notifications needed
+            tracing::info!("Auto-assign after edit for WO {} kept the same technician", wo_number);
+        }
+        None => {
+            // No technician available — if was previously assigned, unassign
+            if old_technician_id.is_some() {
+                tracing::info!("Auto-assign after edit found no technician for WO {} — leaving unassigned", wo_number);
+            }
+        }
+    }
+
+    // Write-through cache: store full WorkOrderDetails in cache and bump list generation
     super::write_through_work_order_cache(
         db.as_ref(),
         valkey_client,
         luts.as_ref(),
-        work_order.id,
+        wo_id,
     )
     .await;
 
     Ok(Json(ApiResponse::message_only(200, "Work order updated successfully")))
+}
+
+/// Run the auto-assign algorithm on an updated work order and persist the result.
+///
+/// Returns the ID of the assigned technician, or `None` if no suitable technician
+/// was found.
+async fn run_auto_assign_after_edit(
+    _state: &AppState,
+    db: Arc<DatabaseConnection>,
+    luts: &LookupTables,
+    wo: work_orders_ent::Model,
+) -> Option<Uuid> {
+    let tech_role_id = match luts.roles_by_name.get("Technician") {
+        Some(id) => *id,
+        None => {
+            tracing::warn!("Technician role not found");
+            return None;
+        }
+    };
+    let policies = &luts.policies;
+    let assigned_status_id = *luts.work_order_statuses_by_name.get("Assigned").unwrap();
+    let done_status_id = *luts.work_order_statuses_by_name.get("Closed").unwrap_or_else(|| luts.work_order_statuses_by_name.get("Pending").unwrap());
+    let cfg = crate::core::config::AppConfig::get();
+    let system_user_id = cfg.system_user_id;
+    let province = wo.province.clone();
+
+    let technicians = match users::Entity::find()
+        .filter(users::Column::RoleId.eq(tech_role_id))
+        .filter(users::Column::Province.eq(&province))
+        .all(db.as_ref())
+        .await
+    {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::warn!("Failed to find technicians: {}", e);
+            return None;
+        }
+    };
+
+    if technicians.is_empty() {
+        tracing::info!("Auto-assign after edit: no technicians in province '{}' for WO {}", province, wo.work_order_number);
+        return None;
+    }
+
+    let tech_ids: Vec<Uuid> = technicians.iter().map(|t| t.id).collect();
+    let agendas = match work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::DeletedAt.is_null())
+        .filter(work_orders_ent::Column::TechnicianId.is_in(tech_ids))
+        .filter(work_orders_ent::Column::WorkOrderStatusId.ne(done_status_id))
+        .all(db.as_ref())
+        .await
+    {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!("Failed to load agendas: {}", e);
+            return None;
+        }
+    };
+
+    let mut technician_agendas: HashMap<Uuid, Vec<work_orders_ent::Model>> = HashMap::new();
+    for a in agendas {
+        if let Some(tid) = a.technician_id {
+            technician_agendas.entry(tid).or_default().push(a);
+        }
+    }
+
+    let effect = match auto_assign::decide_auto_assign(
+        wo.clone(),
+        technicians,
+        technician_agendas,
+        policies,
+        assigned_status_id,
+        done_status_id,
+        system_user_id,
+    ) {
+        Ok(Some(eff)) => eff,
+        Ok(None) => {
+            tracing::info!("Auto-assign after edit: no suitable tech for WO {}", wo.work_order_number);
+            return None;
+        }
+        Err(e) => {
+            tracing::error!("Auto-assign after edit failed for WO {}: {}", wo.work_order_number, e);
+            return None;
+        }
+    };
+
+    let assigned_tech_id = effect.work_order_model.technician_id.clone().unwrap().unwrap();
+
+    if let Err(e) = db.transaction::<_, (), anyhow::Error>(|txn| Box::pin(async move {
+        effect.work_order_model.update(txn).await.map_err(|e| anyhow::anyhow!(e))?;
+        effect.state_history_model.insert(txn).await.map_err(|e| anyhow::anyhow!(e))?;
+        Ok(())
+    })).await {
+        tracing::error!("Auto-assign tx after edit failed for WO {}: {}", wo.work_order_number, e);
+        return None;
+    }
+
+    tracing::info!("Auto-assigned WO {} to {} after customer edit", wo.work_order_number, assigned_tech_id);
+    Some(assigned_tech_id)
 }
 
 /// Lightweight schema alias so utoipa can describe the success body.

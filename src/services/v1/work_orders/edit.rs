@@ -32,6 +32,8 @@ pub struct EditWorkOrderEffect {
     pub work_order_model: work_orders::ActiveModel,
     /// Whether the customer requested a new product.
     pub product_id_changed: bool,
+    /// The technician assigned to the work order before the edit (if any).
+    pub old_technician_id: Option<Uuid>,
 }
 
 /// Pure logic: validate and produce the updated work order model for a customer edit.
@@ -59,28 +61,21 @@ pub fn decide_edit_work_order(
 ) -> Result<EditWorkOrderEffect, AppError> {
     // 1. Ownership check
     if work_order.customer_id != requesting_customer_id {
-        return Err(AppError::Forbidden(
-            "You can only edit your own work orders".to_string(),
-        ));
+        return Err(AppError::Forbidden("NOT_WORK_ORDER_OWNER".to_string()));
     }
 
     // 2. Status check — editing is only allowed while the work is not yet in progress
     if work_order.work_order_status_id != pending_status_id
         && work_order.work_order_status_id != assigned_status_id
     {
-        return Err(AppError::BadRequest(
-            "Work order can only be edited while it is pending or assigned".to_string(),
-        ));
+        return Err(AppError::BadRequest("WORK_ORDER_NOT_EDITABLE".to_string()));
     }
 
     // 3. Edit window check
     let now = ctx.now;
     let edit_cutoff = work_order.appointment - Duration::hours(edit_window_hours);
     if now >= edit_cutoff {
-        return Err(AppError::BadRequest(format!(
-            "Work order can no longer be edited within {} hours of the appointment. Please contact support if you need to make changes.",
-            edit_window_hours
-        )));
+        return Err(AppError::BadRequest("EDIT_WINDOW_EXPIRED".to_string()));
     }
 
     // 4. Warranty validation when the product is changing
@@ -89,42 +84,43 @@ pub fn decide_edit_work_order(
             Some(w) => {
                 let now = ctx.now;
                 if now > w.end_date {
-                    return Err(AppError::WarrantyError(format!(
-                        "The selected product is no longer covered by an active warranty (expired on {}). Please pick a different product that is still under warranty or contact support.",
-                        w.end_date.format("%Y-%m-%d")
-                    )));
+                    return Err(AppError::WarrantyError("PRODUCT_WARRANTY_EXPIRED".to_string()));
                 }
                 let status_lower = w.warranty_status.to_lowercase();
                 if status_lower != "active" {
-                    return Err(AppError::WarrantyError(format!(
-                        "The selected product's warranty is currently '{}' and cannot be used to create a new work order. Please choose a product with an active warranty.",
-                        w.warranty_status
-                    )));
+                    return Err(AppError::WarrantyError("PRODUCT_WARRANTY_NOT_ACTIVE".to_string()));
                 }
             }
             None => {
-                return Err(AppError::WarrantyError(
-                    "The selected product is not registered under any warranty. Please choose a product that is still under warranty or contact support to activate coverage before submitting."
-                        .to_string(),
-                ));
+                return Err(AppError::WarrantyError("PRODUCT_NOT_UNDER_WARRANTY".to_string()));
             }
         }
     }
 
-    // 5. Apply changes — only update fields that were supplied
+    // 5. Parse and validate appointment if changing
+    let parsed_appointment = if let Some(ref appointment_str) = payload.appointment {
+        let parsed = chrono::DateTime::parse_from_rfc3339(appointment_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .or_else(|_| {
+                chrono::NaiveDateTime::parse_from_str(appointment_str, "%Y-%m-%dT%H:%M:%S")
+                    .map(|nd| nd.and_utc())
+            })
+            .map_err(|_| AppError::BadRequest("INVALID_APPOINTMENT_FORMAT".to_string()))?;
+
+        if parsed <= now {
+            return Err(AppError::BadRequest("APPOINTMENT_MUST_BE_IN_FUTURE".to_string()));
+        }
+        Some(parsed)
+    } else {
+        None
+    };
+
+    // 6. Apply changes — only update fields that were supplied
+    let old_technician_id = work_order.technician_id;
     let mut active_wo: work_orders::ActiveModel = work_order.clone().into();
 
     if let Some(new_product) = ctx.new_product_id {
         active_wo.product_id = Set(new_product);
-    }
-    if let Some(new_symptom) = payload.work_order_symptom_id {
-        active_wo.work_order_symptom_id = Set(new_symptom);
-    }
-    if let Some(new_reference) = payload.reference_ticket_id {
-        active_wo.reference_ticket_id = Set(Some(new_reference));
-    }
-    if let Some(new_description) = payload.description {
-        active_wo.description = Set(new_description);
     }
     if let Some(new_ward) = payload.ward {
         active_wo.ward = Set(new_ward);
@@ -135,12 +131,16 @@ pub fn decide_edit_work_order(
     if let Some(new_building) = payload.building {
         active_wo.building = Set(Some(new_building));
     }
+    if let Some(new_appointment) = parsed_appointment {
+        active_wo.appointment = Set(new_appointment);
+    }
 
     active_wo.updated_at = Set(now);
 
     Ok(EditWorkOrderEffect {
         work_order_model: active_wo,
         product_id_changed: ctx.product_id_changed,
+        old_technician_id,
     })
 }
 
@@ -207,24 +207,23 @@ mod tests {
     }
 
     #[test]
-    fn test_edit_description_only() {
+    fn test_edit_ward_only() {
         let customer = Uuid::new_v4();
-        let wo = dummy_work_order(customer, 1); // Pending
+        let wo = dummy_work_order(customer, 1);
         let ctx = empty_ctx(&wo, None, None);
         let payload = EditWorkOrderRequest {
             product_id: None,
-            work_order_symptom_id: None,
-            reference_ticket_id: None,
-            description: Some("New description".to_string()),
-            ward: None,
+            ward: Some("Ward 5".to_string()),
             address: None,
             building: None,
+            appointment: None,
         };
         let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
         assert!(result.is_ok());
         let eff = result.unwrap();
-        assert_eq!(eff.work_order_model.description, Set("New description".to_string()));
+        assert_eq!(eff.work_order_model.ward, Set("Ward 5".to_string()));
         assert!(!eff.product_id_changed);
+        assert!(eff.old_technician_id.is_none());
     }
 
     #[test]
@@ -235,53 +234,55 @@ mod tests {
         let ctx = empty_ctx(&wo, None, None);
         let payload = EditWorkOrderRequest {
             product_id: None,
-            work_order_symptom_id: None,
-            reference_ticket_id: None,
-            description: Some("x".to_string()),
-            ward: None,
+            ward: Some("Ward 2".to_string()),
             address: None,
             building: None,
+            appointment: None,
         };
         let result = decide_edit_work_order(wo, other, 1, 2, 5, payload, ctx);
-        assert!(matches!(result, Err(AppError::Forbidden(_))));
+        match result {
+            Err(AppError::Forbidden(msg)) => assert_eq!(msg, "NOT_WORK_ORDER_OWNER"),
+            other => panic!("Expected Forbidden NOT_WORK_ORDER_OWNER, got {:?}", other),
+        }
     }
 
     #[test]
     fn test_edit_in_progress_is_rejected() {
         let customer = Uuid::new_v4();
-        let wo = dummy_work_order(customer, 3); // InProgress
+        let wo = dummy_work_order(customer, 3);
         let ctx = empty_ctx(&wo, None, None);
         let payload = EditWorkOrderRequest {
             product_id: None,
-            work_order_symptom_id: None,
-            reference_ticket_id: None,
-            description: Some("x".to_string()),
-            ward: None,
+            ward: Some("Ward 2".to_string()),
             address: None,
             building: None,
+            appointment: None,
         };
         let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
-        assert!(matches!(result, Err(AppError::BadRequest(_))));
+        match result {
+            Err(AppError::BadRequest(msg)) => assert_eq!(msg, "WORK_ORDER_NOT_EDITABLE"),
+            other => panic!("Expected BadRequest WORK_ORDER_NOT_EDITABLE, got {:?}", other),
+        }
     }
 
     #[test]
     fn test_edit_within_window_is_rejected() {
         let customer = Uuid::new_v4();
         let mut wo = dummy_work_order(customer, 1);
-        // Appointment is only 1 hour away — within the 5h edit window
         wo.appointment = Utc::now() + Duration::hours(1);
         let ctx = empty_ctx(&wo, None, None);
         let payload = EditWorkOrderRequest {
             product_id: None,
-            work_order_symptom_id: None,
-            reference_ticket_id: None,
-            description: Some("x".to_string()),
-            ward: None,
+            ward: Some("Ward 2".to_string()),
             address: None,
             building: None,
+            appointment: None,
         };
         let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
-        assert!(matches!(result, Err(AppError::BadRequest(_))));
+        match result {
+            Err(AppError::BadRequest(msg)) => assert_eq!(msg, "EDIT_WINDOW_EXPIRED"),
+            other => panic!("Expected BadRequest EDIT_WINDOW_EXPIRED, got {:?}", other),
+        }
     }
 
     #[test]
@@ -292,19 +293,15 @@ mod tests {
         let ctx = empty_ctx(&wo, Some(new_product), None);
         let payload = EditWorkOrderRequest {
             product_id: Some(new_product),
-            work_order_symptom_id: None,
-            reference_ticket_id: None,
-            description: None,
             ward: None,
             address: None,
             building: None,
+            appointment: None,
         };
         let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
         match result {
-            Err(AppError::WarrantyError(msg)) => {
-                assert!(msg.contains("not registered under any warranty"));
-            }
-            other => panic!("Expected WarrantyError, got {:?}", other),
+            Err(AppError::WarrantyError(msg)) => assert_eq!(msg, "PRODUCT_NOT_UNDER_WARRANTY"),
+            other => panic!("Expected WarrantyError PRODUCT_NOT_UNDER_WARRANTY, got {:?}", other),
         }
     }
 
@@ -318,19 +315,15 @@ mod tests {
         let ctx = empty_ctx(&wo, Some(new_product), Some(w));
         let payload = EditWorkOrderRequest {
             product_id: Some(new_product),
-            work_order_symptom_id: None,
-            reference_ticket_id: None,
-            description: None,
             ward: None,
             address: None,
             building: None,
+            appointment: None,
         };
         let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
         match result {
-            Err(AppError::WarrantyError(msg)) => {
-                assert!(msg.contains("expired"));
-            }
-            other => panic!("Expected WarrantyError, got {:?}", other),
+            Err(AppError::WarrantyError(msg)) => assert_eq!(msg, "PRODUCT_WARRANTY_EXPIRED"),
+            other => panic!("Expected WarrantyError PRODUCT_WARRANTY_EXPIRED, got {:?}", other),
         }
     }
 
@@ -344,19 +337,15 @@ mod tests {
         let ctx = empty_ctx(&wo, Some(new_product), Some(w));
         let payload = EditWorkOrderRequest {
             product_id: Some(new_product),
-            work_order_symptom_id: None,
-            reference_ticket_id: None,
-            description: None,
             ward: None,
             address: None,
             building: None,
+            appointment: None,
         };
         let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
         match result {
-            Err(AppError::WarrantyError(msg)) => {
-                assert!(msg.contains("Voided"));
-            }
-            other => panic!("Expected WarrantyError, got {:?}", other),
+            Err(AppError::WarrantyError(msg)) => assert_eq!(msg, "PRODUCT_WARRANTY_NOT_ACTIVE"),
+            other => panic!("Expected WarrantyError PRODUCT_WARRANTY_NOT_ACTIVE, got {:?}", other),
         }
     }
 
@@ -369,19 +358,15 @@ mod tests {
         let ctx = empty_ctx(&wo, Some(new_product), Some(w));
         let payload = EditWorkOrderRequest {
             product_id: Some(new_product),
-            work_order_symptom_id: Some(2),
-            reference_ticket_id: None,
-            description: Some("Updated".to_string()),
             ward: Some("Ward 9".to_string()),
             address: Some("999 New Street".to_string()),
             building: Some("Tower B".to_string()),
+            appointment: None,
         };
         let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
         assert!(result.is_ok());
         let eff = result.unwrap();
         assert_eq!(eff.work_order_model.product_id, Set(new_product));
-        assert_eq!(eff.work_order_model.work_order_symptom_id, Set(2));
-        assert_eq!(eff.work_order_model.description, Set("Updated".to_string()));
         assert_eq!(eff.work_order_model.ward, Set("Ward 9".to_string()));
         assert_eq!(eff.work_order_model.address, Set("999 New Street".to_string()));
         assert_eq!(eff.work_order_model.building, Set(Some("Tower B".to_string())));
@@ -392,18 +377,89 @@ mod tests {
     fn test_edit_same_product_skips_warranty_check() {
         let customer = Uuid::new_v4();
         let wo = dummy_work_order(customer, 1);
-        // Same product, no warranty lookup required (and none provided)
         let ctx = empty_ctx(&wo, Some(wo.product_id), None);
         let payload = EditWorkOrderRequest {
             product_id: Some(wo.product_id),
-            work_order_symptom_id: None,
-            reference_ticket_id: None,
-            description: Some("Just updating description".to_string()),
-            ward: None,
+            ward: Some("Ward 3".to_string()),
             address: None,
             building: None,
+            appointment: None,
         };
         let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_edit_appointment_must_be_future() {
+        let customer = Uuid::new_v4();
+        let wo = dummy_work_order(customer, 1);
+        let ctx = empty_ctx(&wo, None, None);
+        let payload = EditWorkOrderRequest {
+            product_id: None,
+            ward: None,
+            address: None,
+            building: None,
+            appointment: Some("2020-01-01T10:00:00Z".to_string()),
+        };
+        let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
+        match result {
+            Err(AppError::BadRequest(msg)) => assert_eq!(msg, "APPOINTMENT_MUST_BE_IN_FUTURE"),
+            other => panic!("Expected BadRequest APPOINTMENT_MUST_BE_IN_FUTURE, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_edit_invalid_appointment_format() {
+        let customer = Uuid::new_v4();
+        let wo = dummy_work_order(customer, 1);
+        let ctx = empty_ctx(&wo, None, None);
+        let payload = EditWorkOrderRequest {
+            product_id: None,
+            ward: None,
+            address: None,
+            building: None,
+            appointment: Some("not-a-date".to_string()),
+        };
+        let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
+        match result {
+            Err(AppError::BadRequest(msg)) => assert_eq!(msg, "INVALID_APPOINTMENT_FORMAT"),
+            other => panic!("Expected BadRequest INVALID_APPOINTMENT_FORMAT, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_edit_appointment_valid_future_succeeds() {
+        let customer = Uuid::new_v4();
+        let wo = dummy_work_order(customer, 1);
+        let ctx = empty_ctx(&wo, None, None);
+        let future = (Utc::now() + Duration::days(30)).format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let payload = EditWorkOrderRequest {
+            product_id: None,
+            ward: None,
+            address: None,
+            building: None,
+            appointment: Some(future),
+        };
+        let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_edit_preserves_old_technician_id() {
+        let customer = Uuid::new_v4();
+        let mut wo = dummy_work_order(customer, 2);
+        let tech_id = Uuid::new_v4();
+        wo.technician_id = Some(tech_id);
+        let ctx = empty_ctx(&wo, None, None);
+        let payload = EditWorkOrderRequest {
+            product_id: None,
+            ward: Some("Ward 10".to_string()),
+            address: None,
+            building: None,
+            appointment: None,
+        };
+        let result = decide_edit_work_order(wo, customer, 1, 2, 5, payload, ctx);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().old_technician_id, Some(tech_id));
     }
 }

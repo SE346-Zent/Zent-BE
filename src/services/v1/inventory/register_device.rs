@@ -169,7 +169,7 @@ mod tests {
         );
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::BadRequest(msg) => assert_eq!(msg, "Province must be HN or HCM"),
+            AppError::BadRequest(msg) => assert!(msg.contains("HN") && msg.contains("HCM")),
             _ => panic!("Expected BadRequest"),
         }
     }

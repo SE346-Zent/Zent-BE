@@ -122,6 +122,7 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(create))
         .route("/{id}/rate", axum::routing::post(rate))
+        .route("/{workOrderNumber}/edit", axum::routing::post(edit))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Customer]),
@@ -392,26 +393,33 @@ pub(crate) async fn fetch_paginated_work_orders(
         .all(db.as_ref()).await?;
 
     let mut enriched_models = Vec::with_capacity(models_with_related.len());
+
+    // Batch-fetch users to avoid N+1
+    let customer_ids: Vec<Uuid> = models_with_related.iter().map(|(wo, _)| wo.customer_id).collect();
+    let technician_ids: Vec<Uuid> = models_with_related.iter().filter_map(|(wo, _)| wo.technician_id).collect();
+
+    let mut all_user_ids = customer_ids.clone();
+    all_user_ids.extend_from_slice(&technician_ids);
+    all_user_ids.sort();
+    all_user_ids.dedup();
+
+    let user_map: std::collections::HashMap<Uuid, users::Model> = if all_user_ids.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        users::Entity::find()
+            .filter(users::Column::Id.is_in(all_user_ids))
+            .all(db.as_ref())
+            .await?
+            .into_iter()
+            .map(|u| (u.id, u))
+            .collect()
+    };
+
     for (work_order, symptom) in models_with_related {
         let product = load_zeus_product_model(work_order.product_id).await;
 
-        // Fetch customer user record for avatar
-        let customer_user = users::Entity::find_by_id(work_order.customer_id)
-            .one(db.as_ref())
-            .await
-            .ok()
-            .flatten();
-
-        // Fetch technician user record for avatar
-        let technician_user = if let Some(tech_id) = work_order.technician_id {
-            users::Entity::find_by_id(tech_id)
-                .one(db.as_ref())
-                .await
-                .ok()
-                .flatten()
-        } else {
-            None
-        };
+        let customer_user = user_map.get(&work_order.customer_id).cloned();
+        let technician_user = work_order.technician_id.and_then(|tid| user_map.get(&tid).cloned());
 
         enriched_models.push((work_order, product, symptom, customer_user, technician_user));
     }

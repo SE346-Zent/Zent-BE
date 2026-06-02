@@ -97,9 +97,9 @@ pub async fn refuse(
         "province": wo_province,
     });
 
-    let title = format!("Rejection Form: Work Order {}", wo_number);
+    let title = format!("Rejection Form: {}", wo_number);
     let body = format!(
-        "Technician {} submitted a refusal for WO {} in {}: {}",
+        "Technician {} submitted a refusal for {} in {}: {}",
         auth.user.full_name, wo_number, wo_province, reason
     );
 
