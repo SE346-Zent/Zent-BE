@@ -21,6 +21,7 @@ pub fn decide_get_me(user: users::Model) -> GetMeEffect {
         province: user.province,
         account_status_id: user.account_status,
         employee_id: crate::utils::user::get_employee_id(user.role_id, user.id),
+        avatar_image_name: user.avatar_url,
         created_at: user.created_at.to_rfc3339(),
         updated_at: user.updated_at.to_rfc3339(),
     };

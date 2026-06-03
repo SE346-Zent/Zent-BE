@@ -29,6 +29,9 @@ pub struct MeResponseData {
     /// Employee ID (optional).
     pub employee_id: Option<String>,
 
+    /// Avatar image object name for PAR read (optional).
+    pub avatar_image_name: Option<String>,
+
     /// ISO-8601 creation timestamp.
     pub created_at: String,
 

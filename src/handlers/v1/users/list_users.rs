@@ -85,6 +85,7 @@ pub async fn list_users_handler(
             account_status_id: u.account_status,
             employee_id: crate::utils::user::get_employee_id(u.role_id, u.id),
             rating_counts: None,
+            avatar_image_name: u.avatar_url,
             created_at: u.created_at.to_rfc3339(),
             updated_at: u.updated_at.to_rfc3339(),
         }).collect(),
