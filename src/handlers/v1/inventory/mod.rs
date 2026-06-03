@@ -14,6 +14,7 @@ pub mod admin_analytics;
 pub mod new_part_form_list;
 pub mod new_part_form_detail;
 pub mod my_products;
+pub mod create_warranty;
 
 use axum::{Router, middleware};
 use crate::core::state::AppState;
@@ -35,6 +36,7 @@ pub fn router(app_state: AppState) -> Router<AppState> {
         .route("/parts/{id}/accept", axum::routing::post(accept_part::accept_part))
         .route("/parts/{id}/deny", axum::routing::post(deny_part::deny_part))
         .route("/analytics", axum::routing::get(admin_analytics::admin_analytics))
+        .route("/warranties", axum::routing::post(create_warranty::create_warranty))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             require_role::<AppState>(&[Role::Admin]),
