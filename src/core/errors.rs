@@ -31,15 +31,15 @@ pub enum AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, error_message) = match self {
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
-            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
-            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
-            AppError::ValidationError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
-            AppError::WarrantyError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
-            AppError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg),
+        let (status, error_message, error_type) = match self {
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg, "bad_request"),
+            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg, "unauthorized"),
+            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg, "forbidden"),
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg, "not_found"),
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg, "conflict"),
+            AppError::ValidationError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg, "validation"),
+            AppError::WarrantyError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg, "warranty"),
+            AppError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg, "service_unavailable"),
             AppError::Internal(err) => {
                 tracing::error!(
                     error.message = %err,
@@ -49,9 +49,16 @@ impl IntoResponse for AppError {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Internal server error".to_string(),
+                    "internal",
                 )
             }
         };
+
+        // Track error metric (safe: metrics are initialized at startup)
+        crate::infrastructure::metrics::init().app_error_total.add(1, &[
+            opentelemetry::KeyValue::new("type", error_type),
+            opentelemetry::KeyValue::new("status", status.as_u16().to_string()),
+        ]);
 
         let body = Json(json!({
             "statusCode": status.as_u16(),

@@ -10,6 +10,7 @@ use crate::core::config::AppConfig;
 use crate::core::state::AppState;
 use crate::extractor::auth_user::AuthUser;
 use crate::infrastructure::cache::ValkeyClient;
+use crate::infrastructure::metrics;
 use crate::model::requests::work_orders::create_work_order_request::CreateWorkOrderRequest;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::work_orders::create_response::WorkOrderResponseData;
@@ -165,6 +166,8 @@ pub async fn create(
     if let (Some(mut conn), Some(cache_key)) = (conn_opt, cache_key_opt) {
         let _: () = conn.set_ex(&cache_key, json!({"payload":payload,"response":response}).to_string(), cfg.idempotency_final_ttl_seconds).await?;
     }
+
+    metrics::init().wo_created_total.add(1, &[]);
 
     Ok(Json(ApiResponse::success(201, "Work order created successfully", response)))
 }

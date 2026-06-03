@@ -6,6 +6,7 @@ use tracing::{info, error, warn};
 
 use crate::entities::outbox_records;
 use crate::infrastructure::mq::notification::NotificationProducer;
+use crate::infrastructure::metrics;
 
 /// Cron job that relays undelivered outbox records to the notification message queue.
 ///
@@ -25,6 +26,7 @@ pub fn relay_outbox_job(
         let rmq = rabbitmq.clone();
         Box::pin(async move {
             info!("Running outbox relay job...");
+            let start = std::time::Instant::now();
 
             // Fetch all undelivered outbox entries (capped at 100 per run)
             let entries = match outbox_records::Entity::find()
@@ -86,6 +88,9 @@ pub fn relay_outbox_job(
             }
 
             info!("Outbox relay: processed {} entries", entries.len());
+            metrics::init().cron_job_duration.record(start.elapsed().as_secs_f64(), &[
+                opentelemetry::KeyValue::new("job", "outbox_relay"),
+            ]);
         })
     })?;
 

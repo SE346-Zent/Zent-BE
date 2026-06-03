@@ -7,6 +7,7 @@ use crate::services::v1::inventory::ports::{
     ZeusInventoryClient, ZeusPart, ZeusPartCatalog, ZeusProduct, ZeusProductModel,
     ZeusLutCollection,
 };
+use crate::infrastructure::metrics;
 use uuid::Uuid;
 use reqwest::Client;
 
@@ -52,13 +53,20 @@ impl ZeusClient {
         &self,
         req: reqwest::RequestBuilder,
     ) -> Result<ZeusEnvelope<T>, AppError> {
+        let start = std::time::Instant::now();
         let res = req.send().await.map_err(|e| {
+            metrics::init().external_api_errors_total.add(1, &[
+                opentelemetry::KeyValue::new("service", "zeus"),
+            ]);
             AppError::Internal(anyhow::anyhow!("Failed to send request to Zeus: {}", e))
         })?;
 
         let status = res.status();
         if !status.is_success() {
             let err_body = res.text().await.unwrap_or_default();
+            metrics::init().external_api_errors_total.add(1, &[
+                opentelemetry::KeyValue::new("service", "zeus"),
+            ]);
             return Err(AppError::Internal(anyhow::anyhow!(
                 "Zeus API error: {} - {}",
                 status,
@@ -66,9 +74,16 @@ impl ZeusClient {
             )));
         }
 
-        res.json().await.map_err(|e| {
+        let result = res.json().await.map_err(|e| {
             AppError::Internal(anyhow::anyhow!("Failed to parse Zeus response: {}", e))
-        })
+        });
+
+        metrics::init().external_api_duration.record(
+            start.elapsed().as_secs_f64(),
+            &[opentelemetry::KeyValue::new("service", "zeus")],
+        );
+
+        result
     }
 
     async fn send_expect_envelope_or_not_found<T: serde::de::DeserializeOwned>(

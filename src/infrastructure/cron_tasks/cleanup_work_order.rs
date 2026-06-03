@@ -5,6 +5,7 @@ use tracing::{info, error};
 
 use crate::core::lookup_tables::LookupTables;
 use crate::infrastructure::cache::ValkeyClient;
+use crate::infrastructure::metrics;
 
 pub fn clean_up_work_order_job(
     db: DatabaseConnection,
@@ -20,14 +21,22 @@ pub fn clean_up_work_order_job(
         let rabbitmq_clone = rabbitmq.clone();
         Box::pin(async move {
             info!("Running unassigned work order cleanup job...");
-            if let Err(e) = crate::handlers::v1::work_orders::run_cleanup(
+            let start = std::time::Instant::now();
+            let result = crate::handlers::v1::work_orders::run_cleanup(
                 &db_clone,
                 &luts_clone,
                 valkey_clone,
                 &rabbitmq_clone,
             )
-            .await
-            {
+            .await;
+            let duration = start.elapsed().as_secs_f64();
+            metrics::init().cron_job_duration.record(duration, &[
+                opentelemetry::KeyValue::new("job", "auto_assign"),
+            ]);
+            if let Err(e) = result {
+                metrics::init().cron_job_errors_total.add(1, &[
+                    opentelemetry::KeyValue::new("job", "auto_assign"),
+                ]);
                 error!("Error in cleanup job: {:?}", e);
             }
         })

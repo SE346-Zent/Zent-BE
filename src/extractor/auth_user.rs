@@ -17,6 +17,7 @@ use crate::{
     model::jwt_claims::Claims,
     core::errors::AppError,
     infrastructure::cache::ValkeyClient,
+    infrastructure::metrics,
 };
 
 /// Represents an authenticated user with their associated role data, used as an Axum extractor.
@@ -55,11 +56,19 @@ where
                 
                 if let Ok(Some(cached_json)) = conn.get::<_, Option<String>>(&cache_key).await {
                     if let Ok(auth_user) = serde_json::from_str::<AuthUser>(&cached_json) {
+                        metrics::init().cache_hit_total.add(1, &[
+                            opentelemetry::KeyValue::new("cache", "user_profile"),
+                        ]);
                         return Ok(auth_user);
                     }
                 }
             }
         }
+
+        // Cache miss — load from DB
+        metrics::init().cache_miss_total.add(1, &[
+            opentelemetry::KeyValue::new("cache", "user_profile"),
+        ]);
 
         let user_with_role = users::Entity::find_by_id(user_id)
             .find_with_related(roles::Entity)

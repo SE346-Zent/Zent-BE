@@ -13,6 +13,7 @@ use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
 use crate::core::lookup_tables::LookupTables;
 use crate::infrastructure::cache::ValkeyClient;
+use crate::infrastructure::metrics;
 use crate::entities::{login_audit_logs, sessions, users};
 use chrono::Utc;
 use crate::utils::hasher;
@@ -186,6 +187,12 @@ pub async fn google_login_handler(
             tracing::warn!("Valkey unavailable — session whitelist not set");
         }
     }
+
+    // Track successful login
+    metrics::init().auth_login_total.add(1, &[
+        opentelemetry::KeyValue::new("method", "google"),
+        opentelemetry::KeyValue::new("status", "success"),
+    ]);
 
     Ok(Json(ApiResponse::success(200, "Google login successful", response_data)))
 }

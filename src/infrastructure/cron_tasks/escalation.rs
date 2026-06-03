@@ -11,6 +11,7 @@ use crate::core::config::AppConfig;
 use crate::core::lookup_tables::LookupTables;
 use crate::entities::{work_orders, work_order_state_history, work_order_escalations, users};
 use crate::infrastructure::cache::ValkeyClient;
+use crate::infrastructure::metrics;
 
 /// Build a cron job that monitors InProg work orders and escalates when
 /// elapsed time exceeds 110% / 125% / 150% of the configurable baseline.
@@ -31,7 +32,16 @@ pub fn build_escalation_job(
         let valkey = valkey.clone();
         Box::pin(async move {
             info!("Running escalation check job...");
-            if let Err(e) = run_escalation_check(&db, &luts, &mongodb, valkey).await {
+            let start = std::time::Instant::now();
+            let result = run_escalation_check(&db, &luts, &mongodb, valkey).await;
+            let duration = start.elapsed().as_secs_f64();
+            metrics::init().cron_job_duration.record(duration, &[
+                opentelemetry::KeyValue::new("job", "escalation"),
+            ]);
+            if let Err(e) = result {
+                metrics::init().cron_job_errors_total.add(1, &[
+                    opentelemetry::KeyValue::new("job", "escalation"),
+                ]);
                 error!("Escalation check failed: {:?}", e);
             }
         })

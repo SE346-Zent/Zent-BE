@@ -6,6 +6,7 @@ use crate::{
     core::errors::AppError,
     extractor::auth_user::AuthUser,
     infrastructure::cache::ValkeyClient,
+    infrastructure::metrics,
     model::requests::auth::change_password_request::ChangePasswordRequest,
     model::responses::base::ApiResponse,
     services::v1::auth::change_password,
@@ -54,6 +55,8 @@ pub async fn change_password_handler(
             let _: () = conn.del(&cache_key).await.unwrap_or_default();
         }
     }
+
+    metrics::init().auth_password_change_total.add(1, &[]);
 
     Ok(Json(ApiResponse::success(200, "Password changed successful", ())))
 }

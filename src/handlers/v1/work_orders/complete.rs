@@ -85,6 +85,8 @@ pub async fn complete(
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation
     super::write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), id).await;
 
+    super::track_wo_transition("InProg", "Closed");
+
     Ok(Json(ApiResponse::success(200, "Work order completed successfully", ())))
 }
 

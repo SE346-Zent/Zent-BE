@@ -5,6 +5,7 @@ pub mod mq;
 pub mod scheduler;
 pub mod templates;
 pub mod observability;
+pub mod metrics;
 pub mod cron_tasks;
 pub mod ws;
 pub mod clients;

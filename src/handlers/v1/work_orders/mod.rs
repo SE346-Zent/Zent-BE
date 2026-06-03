@@ -86,7 +86,16 @@ use crate::model::requests::pagination::PaginationRequest;
 use crate::services::v1::work_orders::list as list_svc;
 use crate::services::v1::work_orders::technician_stats::{TechnicianStatsInput, TechnicianStatsSnapshot};
 use crate::infrastructure::cache::ValkeyClient;
+use crate::infrastructure::metrics;
 use crate::services::v1::inventory::ports::ZeusInventoryClient;
+
+/// Track a work order state transition metric.
+pub(crate) fn track_wo_transition(from_status: &str, to_status: &str) {
+    metrics::init().wo_state_transition_total.add(1, &[
+        opentelemetry::KeyValue::new("from", from_status.to_string()),
+        opentelemetry::KeyValue::new("to", to_status.to_string()),
+    ]);
+}
 
 /// Sentinel value stored during the idempotency claim window.
 pub(crate) const IDEMPOTENCY_PENDING: &str = "__PENDING__";

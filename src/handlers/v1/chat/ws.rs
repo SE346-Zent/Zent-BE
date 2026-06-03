@@ -17,6 +17,7 @@ use jsonwebtoken::{decode, DecodingKey, Validation};
 use redis::AsyncCommands;
 use crate::core::state::AppState;
 use crate::infrastructure::ws::{WsIncoming, WsOutgoing, ConnectionCommand, ShutdownSignal};
+use crate::infrastructure::metrics;
 
 const MAX_WS_FRAME_BYTES: usize = 1 * 1024 * 1024; // 1 MiB
 use crate::infrastructure::cron_tasks::{ws_heartbeat, ws_expiry};
@@ -58,6 +59,7 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                                     message: "Frame too large".to_string(),
                                 }).unwrap_or_default().into(),
                             )).await;
+                            metrics::init().ws_auth_fail_total.add(1, &[opentelemetry::KeyValue::new("reason", "frame_too_large")]);
                             return;
                         }
                         match serde_json::from_str::<WsIncoming>(&text) {
@@ -75,6 +77,7 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                                                 message: "Invalid or expired token".to_string(),
                                             }).unwrap_or_default().into(),
                                         )).await;
+                                        metrics::init().ws_auth_fail_total.add(1, &[opentelemetry::KeyValue::new("reason", "invalid_token")]);
                                         return;
                                     }
                                 }
@@ -90,6 +93,7 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                                         message: "First frame must be AUTH".to_string(),
                                     }).unwrap_or_default().into(),
                                 )).await;
+                                metrics::init().ws_auth_fail_total.add(1, &[opentelemetry::KeyValue::new("reason", "not_auth_frame")]);
                                 return;
                             }
                             Err(e) => {
@@ -103,6 +107,7 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                                         message: "Invalid JSON in first frame".to_string(),
                                     }).unwrap_or_default().into(),
                                 )).await;
+                                metrics::init().ws_auth_fail_total.add(1, &[opentelemetry::KeyValue::new("reason", "invalid_json")]);
                                 return;
                             }
                         }
@@ -161,6 +166,9 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     let ws_manager = crate::infrastructure::ws::get_ws_manager();
     let user_conn_id = ws_manager.register(user_id, cmd_tx.clone()).await;
     tracing::info!("WebSocket authenticated for user {} (conn {}) from {}", user_id, user_conn_id, addr);
+
+    // Track active connection
+    metrics::init().ws_connections_active.add(1, &[]);
 
     // Heartbeat pong counter — incremented by reader on each protocol-level Pong
     let pong_counter = Arc::new(AtomicU32::new(0));
@@ -322,6 +330,14 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
         handle_leaving(&state, user_id).await;
     }
     ws_manager.unregister(&user_id, user_conn_id).await;
+
+    // Track connection close
+    metrics::init().ws_connections_active.add(-1, &[]);
+    let close_reason = if had_explicit_break { "explicit_close" } else { "stream_ended" };
+    metrics::init().ws_closed_total.add(1, &[
+        opentelemetry::KeyValue::new("reason", close_reason),
+    ]);
+
     tracing::info!(
         "[conn {}] WebSocket disconnected for user {} (cleanup complete, viewing_state_cleared={})",
         user_conn_id, user_id, still_us
@@ -408,7 +424,15 @@ async fn handle_ws_message(
     let col = state.mongodb.collection::<mongodb::bson::Document>("messages");
     let result = match col.insert_one(doc).await {
         Ok(r) => r,
-        Err(_) => return,
+        Err(e) => {
+            tracing::error!(
+                sender_id = %sender_id,
+                room_id = room_id,
+                error = %e,
+                "Failed to insert chat message into MongoDB — message lost"
+            );
+            return;
+        }
     };
 
     let message_id = result.inserted_id.as_object_id()
@@ -460,7 +484,12 @@ async fn handle_ws_message(
                 };
 
                 // Try WebSocket delivery
-                let _ = ws_manager.send_to_user(&member.user_id, &payload).await;
+                let send_result = ws_manager.send_to_user(&member.user_id, &payload).await;
+                if send_result.is_ok() {
+                    metrics::init().ws_messages_sent_total.add(1, &[
+                        opentelemetry::KeyValue::new("type", "chat_message"),
+                    ]);
+                }
 
                 if !is_viewing {
                     // Recipient is not viewing — increment unread + send push notification

@@ -118,6 +118,8 @@ pub async fn assign(
             .await?;
     }
 
+    super::track_wo_transition("Pending", "Assigned");
+
     Ok(Json(ApiResponse::success(200, "Work order assigned successfully", ())))
 }
 

@@ -81,5 +81,7 @@ pub async fn cancel(
         }
     }
 
+    super::track_wo_transition("Any", "Closed");
+
     Ok(Json(ApiResponse::message_only(200, "Work order cancelled successfully")))
 }

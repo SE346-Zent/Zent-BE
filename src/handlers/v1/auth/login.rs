@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
 use crate::infrastructure::cache::ValkeyClient;
+use crate::infrastructure::metrics;
 use crate::entities::{login_audit_logs, sessions, users};
 use chrono::Utc;
 use crate::utils::hasher;
@@ -116,6 +117,12 @@ pub async fn login_handler(
             tracing::warn!("Valkey unavailable — session whitelist not set");
         }
     }
+
+    // Track successful login
+    metrics::init().auth_login_total.add(1, &[
+        opentelemetry::KeyValue::new("method", "password"),
+        opentelemetry::KeyValue::new("status", "success"),
+    ]);
 
     Ok(Json(ApiResponse::success(200, "Login successful", login_effect.response_data)))
 }

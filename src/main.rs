@@ -1,4 +1,4 @@
-use axum::Router;
+use axum::{Router, extract::State};
 use tracing::info;
 use std::sync::Arc;
 use std::collections::HashMap;
@@ -19,6 +19,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Structured JSON logs + OpenTelemetry pipeline
     infrastructure::observability::init_tracing();
+
+    // Initialize business-level metrics (auth, work orders, WS, notifications, cache, etc.)
+    infrastructure::metrics::init();
 
     tracing::info!("Server starting...");
     
@@ -204,6 +207,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build();
 
     let app = Router::new()
+        .route("/health", axum::routing::get(health_check))
         .route("/chat", axum::routing::get(handlers::v1::chat::ws::ws_handler))
         .nest("/api/v1", handlers::v1::router(state.clone()))
         .route_layer(axum::middleware::from_fn(move |req: axum::extract::Request, next: axum::middleware::Next| {
@@ -286,4 +290,50 @@ async fn shutdown_signal() {
             info!("Received SIGTERM, shutting down gracefully...");
         },
     }
+}
+
+/// Liveness / readiness probe.
+///
+/// Returns 200 with a JSON body summarising the health of each dependency.
+/// Used by container orchestrators (Kubernetes, Docker) and uptime monitors.
+async fn health_check(
+    State(state): State<AppState>,
+) -> axum::Json<serde_json::Value> {
+    use sea_orm::ConnectionTrait;
+
+    let mut db_ok = false;
+    let mut valkey_ok = false;
+    let mut mongodb_ok = false;
+
+    // MySQL — try a trivial query through the pool
+    {
+        use sea_orm::ConnectionTrait;
+        db_ok = state.db.ping().await.is_ok();
+    }
+
+    // Valkey ping
+    if let Some(ref vc) = state.valkey {
+        if let Ok(mut conn) = vc.get_connection().await {
+            let pong: Result<String, _> = redis::cmd("PING").query_async(&mut conn).await;
+            valkey_ok = pong.is_ok();
+        }
+    } else {
+        valkey_ok = true; // degraded mode — no valkey is acceptable
+    }
+
+    // MongoDB ping
+    mongodb_ok = state.mongodb.run_command(mongodb::bson::doc! { "ping": 1 }).await.is_ok();
+
+    let all_ok = db_ok && valkey_ok && mongodb_ok;
+    let status_code = if all_ok { 200 } else { 503 };
+
+    axum::Json(serde_json::json!({
+        "status": if all_ok { "ok" } else { "degraded" },
+        "statusCode": status_code,
+        "dependencies": {
+            "mysql": if db_ok { "ok" } else { "down" },
+            "valkey": if valkey_ok { "ok" } else { "down" },
+            "mongodb": if mongodb_ok { "ok" } else { "down" },
+        }
+    }))
 }
