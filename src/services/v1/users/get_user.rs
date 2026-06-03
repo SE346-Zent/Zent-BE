@@ -98,6 +98,7 @@ mod tests {
             role_id,
             province: Some("Ontario".to_string()),
             avatar_url: None,
+            recovery_email: None,
             fcm_token: None,
             installation_id: None,
             created_at: Utc::now(),

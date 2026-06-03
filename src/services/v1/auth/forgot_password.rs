@@ -68,12 +68,14 @@ mod tests {
             fcm_token: None,
             installation_id: None,
             avatar_url: None,
+            recovery_email: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
         };
         let payload = ForgotPasswordRequest {
             email: "john@example.com".to_string(),
+            use_recovery_email: None,
         };
 
         let result = decide_forgot_password(Some(&user_record), payload);
@@ -88,6 +90,7 @@ mod tests {
     fn test_decide_forgot_password_user_missing() {
         let payload = ForgotPasswordRequest {
             email: "missing@example.com".to_string(),
+            use_recovery_email: None,
         };
 
         let result = decide_forgot_password(None, payload);

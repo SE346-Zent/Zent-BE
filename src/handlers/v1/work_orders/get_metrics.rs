@@ -42,7 +42,7 @@ pub async fn get_technician_metrics(
         200,
         "Technician metrics retrieved successfully",
         TechnicianMetricsResponse {
-            active_jobs: snapshot.active_jobs,
+            jobs_done: snapshot.jobs_done,
             overall_rating: snapshot.average_rating(),
         },
     )))

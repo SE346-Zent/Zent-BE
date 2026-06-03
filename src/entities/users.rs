@@ -19,6 +19,7 @@ pub struct Model {
     pub fcm_token: Option<String>,
     pub installation_id: Option<String>,
     pub avatar_url: Option<String>,
+    pub recovery_email: Option<String>,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,

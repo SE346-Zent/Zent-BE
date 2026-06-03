@@ -9,5 +9,7 @@ pub mod reset_password_request;
 pub mod logout_request;
 pub mod change_password_request;
 pub mod google_login_request;
+pub mod set_recovery_email_request;
+pub mod verify_recovery_email_request;
 
 

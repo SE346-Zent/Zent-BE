@@ -463,10 +463,10 @@ pub(crate) async fn get_cached_technician_stats(
         .all(db)
         .await?;
 
-    // Active jobs: work orders whose status is not in the closed set
-    let active_jobs = work_order_rows
+    // Jobs done: work orders whose status is in the closed set
+    let jobs_done = work_order_rows
         .iter()
-        .filter(|wo| !closed_status_ids.contains(&wo.work_order_status_id))
+        .filter(|wo| closed_status_ids.contains(&wo.work_order_status_id))
         .count() as i64;
 
     let total_work_orders = work_order_rows.len() as i64;
@@ -488,7 +488,7 @@ pub(crate) async fn get_cached_technician_stats(
 
     let snapshot = crate::services::v1::work_orders::technician_stats::decide_technician_stats(TechnicianStatsInput {
         total_work_orders,
-        active_jobs,
+        jobs_done,
         rating_sum,
         rating_count,
     });

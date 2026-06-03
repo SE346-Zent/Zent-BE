@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TechnicianStatsInput {
     pub total_work_orders: i64,
-    pub active_jobs: i64,
+    pub jobs_done: i64,
     pub rating_sum: i64,
     pub rating_count: i64,
 }
@@ -11,7 +11,7 @@ pub struct TechnicianStatsInput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TechnicianStatsSnapshot {
     pub total_work_orders: i64,
-    pub active_jobs: i64,
+    pub jobs_done: i64,
     pub rating_sum: i64,
     pub rating_count: i64,
 }
@@ -30,7 +30,7 @@ impl TechnicianStatsSnapshot {
 pub fn decide_technician_stats(input: TechnicianStatsInput) -> TechnicianStatsSnapshot {
     TechnicianStatsSnapshot {
         total_work_orders: input.total_work_orders,
-        active_jobs: input.active_jobs,
+        jobs_done: input.jobs_done,
         rating_sum: input.rating_sum,
         rating_count: input.rating_count,
     }
