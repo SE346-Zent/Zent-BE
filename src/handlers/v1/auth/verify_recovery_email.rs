@@ -1,6 +1,6 @@
 use axum::{extract::State, Json};
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, ActiveModelTrait, EntityTrait, Set};
+use sea_orm::{DatabaseConnection, EntityTrait, Set, QueryFilter, ColumnTrait};
 use validator::Validate;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::entities::users;
@@ -62,10 +62,22 @@ pub async fn verify_recovery_email_handler(
 
     decide_verify_recovery_email(lua_result)?;
 
-    // Update user's recovery_email in DB
-    let mut active: users::ActiveModel = user.into();
-    active.recovery_email = Set(Some(recovery_email));
-    active.update(db.as_ref()).await?;
+    // Targeted update: only set recovery_email and updated_at on the DB row
+    let now = chrono::Utc::now();
+    users::Entity::update_many()
+        .filter(users::Column::Id.eq(user.id))
+        .set(users::ActiveModel {
+            id: Set(user.id), // primary key for WHERE clause
+            recovery_email: Set(Some(recovery_email)),
+            updated_at: Set(now),
+            ..Default::default()
+        })
+        .exec(db.as_ref())
+        .await?;
+
+    // Invalidate the cached user profile so subsequent requests read fresh data
+    let profile_cache_key = format!("user_profile:{}", user.id);
+    let _: () = conn.del(&profile_cache_key).await.unwrap_or_default();
 
     Ok(Json(ApiResponse::message_only(200, "Recovery email verified successfully")))
 }

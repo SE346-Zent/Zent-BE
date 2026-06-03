@@ -323,8 +323,23 @@ pub(crate) async fn write_through_work_order_cache(
             .flatten()
             .and_then(|c| c.avatar_url);
 
+        // Fetch started_at: timestamp when work order transitioned to "In Progress"
+        let in_prog_id = lookup_tables.work_order_statuses_by_name.get("InProg").copied();
+        let started_at = if let Some(in_prog_id) = in_prog_id {
+            work_order_state_history::Entity::find()
+                .filter(work_order_state_history::Column::WorkOrderId.eq(wo_id))
+                .filter(work_order_state_history::Column::ToStatusId.eq(in_prog_id))
+                .one(db)
+                .await
+                .ok()
+                .flatten()
+                .map(|h| crate::utils::time::to_utc7_string(h.changed_at))
+        } else {
+            None
+        };
+
         let details = crate::services::v1::work_orders::get_details::decide_get_details(
-            wo, product, symptom, lookup_tables, Some(warranty_status), technician_name, technician_avatar_name, customer_avatar_name,
+            wo, product, symptom, lookup_tables, Some(warranty_status), technician_name, technician_avatar_name, customer_avatar_name, started_at,
         );
         if let Ok(details_json) = serde_json::to_string(&details) {
             let _: () = conn

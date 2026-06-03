@@ -3,26 +3,45 @@ use crate::{
     entities::users,
 };
 
+use sea_orm::Set;
+
 /// Represents the side-effects for closing a user account.
 #[derive(Debug)]
 pub struct CloseAccountEffect {
-    /// The updated database model with status set to Terminated.
+    /// The updated database model with status set to Terminated and PII anonymized.
     pub user_active_model: users::ActiveModel,
 }
 
 /// Validate and prepare account closure.
 ///
-/// Any role can close their own account.
-pub fn decide_close_account(user: users::Model, terminated_status_id: i32) -> Result<CloseAccountEffect, AppError> {
+/// Only Customers can close their own account. PII is anonymized while
+/// the record is kept for foreign key integrity.
+pub fn decide_close_account(user: users::Model, terminated_status_id: i32, customer_role_id: i32) -> Result<CloseAccountEffect, AppError> {
+    // Only customers can self-close
+    if user.role_id != customer_role_id {
+        return Err(AppError::Forbidden("Only customers can close their own account. Technicians and admins must contact support.".to_string()));
+    }
 
     // Reject if already terminated
     if user.account_status == terminated_status_id {
         return Err(AppError::Conflict("Account is already closed".to_string()));
     }
 
-    let mut user_active_model: users::ActiveModel = user.into();
-    user_active_model.account_status = sea_orm::Set(terminated_status_id);
-    user_active_model.updated_at = sea_orm::Set(chrono::Utc::now());
+    let anonymized_id = &user.id.to_string()[..8];
+    let user_active_model = users::ActiveModel {
+        id: Set(user.id),
+        account_status: Set(terminated_status_id),
+        full_name: Set("Deleted User".to_string()),
+        email: Set(format!("deleted_{}@deleted.local", anonymized_id)),
+        phone_number: Set("0000000000".to_string()),
+        password_hash: Set(String::new()),
+        avatar_url: Set(None),
+        fcm_token: Set(None),
+        installation_id: Set(None),
+        recovery_email: Set(None),
+        updated_at: Set(chrono::Utc::now()),
+        ..Default::default()
+    };
 
     Ok(CloseAccountEffect { user_active_model })
 }
@@ -64,28 +83,33 @@ mod tests {
     }
 
     #[rstest]
-    #[case(ROLE_CUSTOMER, true)]
-    #[case(ROLE_TECHNICIAN, true)]
-    #[case(ROLE_ADMIN, true)]
-    #[case(ROLE_SUPER_ADMIN, true)]
-    fn test_decide_close_account_rbac(#[case] role_id: i32, #[case] expected_ok: bool) {
-        let user = mock_user(role_id);
-        let res = decide_close_account(user, STATUS_TERMINATED);
-        
-        if expected_ok {
-            let effect = res.expect("Should be OK for any role");
-            assert_eq!(effect.user_active_model.account_status, Set(STATUS_TERMINATED));
+    fn test_decide_close_account_customer_ok(mock_user: users::Model) {
+        let res = decide_close_account(mock_user, STATUS_TERMINATED, ROLE_CUSTOMER);
+        let effect = res.expect("Customer should be able to close");
+        assert_eq!(effect.user_active_model.account_status, Set(STATUS_TERMINATED));
+        // Verify PII is anonymized
+        if let Set(ref name) = effect.user_active_model.full_name {
+            assert_eq!(name, "Deleted User");
         } else {
-            assert!(matches!(res, Err(AppError::Forbidden(_))));
+            panic!("full_name should be Set");
         }
+    }
+
+    #[rstest]
+    #[case(ROLE_TECHNICIAN)]
+    #[case(ROLE_ADMIN)]
+    #[case(ROLE_SUPER_ADMIN)]
+    fn test_decide_close_account_non_customer_forbidden(#[case] role_id: i32) {
+        let user = mock_user(role_id);
+        let res = decide_close_account(user, STATUS_TERMINATED, ROLE_CUSTOMER);
+        assert!(matches!(res, Err(AppError::Forbidden(_))));
     }
 
     #[rstest]
     fn test_decide_close_account_already_terminated() {
         let mut user = mock_user(ROLE_CUSTOMER);
         user.account_status = STATUS_TERMINATED;
-        // Logic should decide if it's an error or no-op (ActiveModel with same status)
-        let res = decide_close_account(user, STATUS_TERMINATED);
-        assert!(res.is_err() || res.unwrap().user_active_model.account_status == Set(STATUS_TERMINATED));
+        let res = decide_close_account(user, STATUS_TERMINATED, ROLE_CUSTOMER);
+        assert!(matches!(res, Err(AppError::Conflict(_))));
     }
 }

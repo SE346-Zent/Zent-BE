@@ -12,7 +12,7 @@ use crate::services::v1::work_orders::get_details as get_svc;
 use redis::AsyncCommands;
 use chrono::Utc;
 
-use crate::entities::{work_orders as work_orders_ent, work_order_symptoms, warranties, users};
+use crate::entities::{work_orders as work_orders_ent, work_order_symptoms, work_order_state_history, warranties, users};
 
 /// Retrieve full details for a specific work order, including product and symptom info, with permission checks.
 
@@ -87,7 +87,20 @@ pub async fn get_details(
         .await?
         .and_then(|c| c.avatar_url);
 
-    let details = get_svc::decide_get_details(wo, product, symptom, &lookup_tables, Some(warranty_status), technician_name, technician_avatar_name, customer_avatar_name);
+    // Fetch started_at: timestamp when work order transitioned to "In Progress"
+    let in_prog_id = lookup_tables.work_order_statuses_by_name.get("InProg").copied();
+    let started_at = if let Some(in_prog_id) = in_prog_id {
+        work_order_state_history::Entity::find()
+            .filter(work_order_state_history::Column::WorkOrderId.eq(id))
+            .filter(work_order_state_history::Column::ToStatusId.eq(in_prog_id))
+            .one(db.as_ref())
+            .await?
+            .map(|h| crate::utils::time::to_utc7_string(h.changed_at))
+    } else {
+        None
+    };
+
+    let details = get_svc::decide_get_details(wo, product, symptom, &lookup_tables, Some(warranty_status), technician_name, technician_avatar_name, customer_avatar_name, started_at);
     if let Some(mut conn) = conn_opt {
         if let Ok(cached_val) = serde_json::to_string(&details) { let _: () = conn.set_ex(&cache_key, cached_val, 600).await.unwrap_or_default(); }
     }

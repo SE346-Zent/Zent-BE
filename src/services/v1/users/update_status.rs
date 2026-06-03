@@ -13,8 +13,8 @@ pub struct UpdateStatusEffect {
 /// Validate and prepare status update.
 ///
 /// RBAC rules:
-/// - SuperAdmin: can update any user's status.
-/// - Admin: can only update users in their own province.
+/// - SuperAdmin: can update any Admin or Technician status.
+/// - Admin: can only update Technician users in their own province.
 /// - Others: forbidden.
 pub fn decide_can_update_status(
     current_user: users::Model,
@@ -25,10 +25,20 @@ pub fn decide_can_update_status(
 
     match current_role {
         2 => {
-            // SuperAdmin: can update anyone
+            // SuperAdmin: can update Admin or Technician
+            if target_user.role_id != 1 && target_user.role_id != 4 {
+                return Err(AppError::Forbidden(
+                    "SuperAdmin can only disable Admin or Technician accounts".to_string(),
+                ));
+            }
         }
         1 => {
-            // Admin: must be in the same province (fail-closed if admin has no province)
+            // Admin: must be in the same province and can only target Technician
+            if target_user.role_id != 4 {
+                return Err(AppError::Forbidden(
+                    "Admin can only disable Technician accounts".to_string(),
+                ));
+            }
             let Some(ref admin_province) = current_user.province else {
                 return Err(AppError::Forbidden(
                     "Admin profile missing province assignment".to_string(),
@@ -69,10 +79,11 @@ mod tests {
 
     const ROLE_ADMIN: i32 = 1;
     const ROLE_SUPER_ADMIN: i32 = 2;
+    const ROLE_CUSTOMER: i32 = 3;
     const ROLE_TECHNICIAN: i32 = 4;
 
     #[fixture]
-    fn mock_user(#[default(1)] role_id: i32) -> users::Model {
+    fn mock_user(#[default(ROLE_ADMIN)] role_id: i32) -> users::Model {
         users::Model {
             id: Uuid::new_v4(),
             full_name: "John Doe".to_string(),
@@ -93,15 +104,20 @@ mod tests {
     }
 
     #[rstest]
-    #[case(ROLE_SUPER_ADMIN, 2, "ok")]
-    #[case(ROLE_ADMIN, 3, "ok")]
-    #[case(ROLE_TECHNICIAN, 1, "forbidden")]
-    fn test_decide_can_update_status_rbac(#[case] role_id: i32, #[case] target_status: i32, #[case] expected: &str) {
+    #[case(ROLE_SUPER_ADMIN, ROLE_ADMIN, 4, "ok")]       // SA can disable Admin
+    #[case(ROLE_SUPER_ADMIN, ROLE_TECHNICIAN, 4, "ok")]   // SA can disable Technician
+    #[case(ROLE_ADMIN, ROLE_TECHNICIAN, 4, "ok")]         // Admin can disable Technician (same province)
+    #[case(ROLE_ADMIN, ROLE_ADMIN, 4, "forbidden")]       // Admin cannot disable Admin
+    #[case(ROLE_ADMIN, ROLE_CUSTOMER, 4, "forbidden")]    // Admin cannot disable Customer
+    #[case(ROLE_SUPER_ADMIN, ROLE_CUSTOMER, 4, "forbidden")] // SA cannot disable Customer
+    #[case(ROLE_TECHNICIAN, ROLE_TECHNICIAN, 4, "forbidden")] // Technician cannot update anyone
+    fn test_decide_can_update_status_rbac(#[case] role_id: i32, #[case] target_role_id: i32, #[case] target_status: i32, #[case] expected: &str) {
         let current_user = mock_user(role_id);
-        let target_user = mock_user(ROLE_TECHNICIAN);
+        let mut target_user = mock_user(target_role_id);
+        target_user.province = Some("Ontario".to_string()); // same province
         let req = UserStatusUpdateRequest { account_status_id: target_status };
         let res = decide_can_update_status(current_user, target_user, req);
-        
+
         match expected {
             "ok" => {
                 let effect = res.expect("Should be OK");
@@ -110,5 +126,15 @@ mod tests {
             "forbidden" => assert!(matches!(res, Err(AppError::Forbidden(_)))),
             _ => panic!(),
         }
+    }
+
+    #[rstest]
+    fn test_admin_different_province_forbidden() {
+        let current_user = mock_user(ROLE_ADMIN);
+        let mut target_user = mock_user(ROLE_TECHNICIAN);
+        target_user.province = Some("Quebec".to_string()); // different province
+        let req = UserStatusUpdateRequest { account_status_id: 4 };
+        let res = decide_can_update_status(current_user, target_user, req);
+        assert!(matches!(res, Err(AppError::Forbidden(_))));
     }
 }

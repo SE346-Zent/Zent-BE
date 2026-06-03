@@ -17,6 +17,7 @@ pub fn map_to_details(
     technician_name: Option<String>,
     technician_avatar_name: Option<String>,
     customer_avatar_name: Option<String>,
+    started_at: Option<String>,
 ) -> WorkOrderDetails {
     WorkOrderDetails {
         id: work_order.id,
@@ -46,6 +47,7 @@ pub fn map_to_details(
         created_at: crate::utils::time::to_utc7_string(work_order.created_at),
         updated_at: crate::utils::time::to_utc7_string(work_order.updated_at),
         warranty_status,
+        started_at,
     }
 }
 
@@ -67,13 +69,14 @@ pub fn decide_get_details(
     technician_name: Option<String>,
     technician_avatar_name: Option<String>,
     customer_avatar_name: Option<String>,
+    started_at: Option<String>,
 ) -> WorkOrderDetails {
     let status_name = lookup_tables.work_order_statuses.get(&work_order.work_order_status_id).cloned();
     let status = status_name.map(|name| work_order_statuses::Model {
         id: work_order.work_order_status_id,
         name,
     });
-    map_to_details(work_order, product, symptom, status, warranty_status, technician_name, technician_avatar_name, customer_avatar_name)
+    map_to_details(work_order, product, symptom, status, warranty_status, technician_name, technician_avatar_name, customer_avatar_name, started_at)
 }
 
 #[cfg(test)]
@@ -144,7 +147,7 @@ mod tests {
         let symptom = dummy_symptom();
         let status = work_order_statuses::Model { id: 1, name: "Pending".to_string() };
 
-        let details = map_to_details(work_order, Some(product), Some(symptom), Some(status), Some("active".to_string()), None, None, None);
+        let details = map_to_details(work_order, Some(product), Some(symptom), Some(status), Some("active".to_string()), None, None, None, None);
         assert_eq!(details.work_order_number, "WO-999");
         assert_eq!(details.customer_name, "Jane Smith");
         assert_eq!(details.product_name, "Super Widget");
@@ -152,16 +155,18 @@ mod tests {
         assert_eq!(details.status, "Pending");
         assert!(details.technician_id.is_none());
         assert_eq!(details.warranty_status, Some("active".to_string()));
+        assert!(details.started_at.is_none());
     }
 
     #[test]
     fn test_map_to_details_missing_relations() {
         let work_order = dummy_work_order();
-        let details = map_to_details(work_order, None, None, None, None, None, None, None);
+        let details = map_to_details(work_order, None, None, None, None, None, None, None, None);
         assert_eq!(details.product_name, "Unknown Product");
         assert_eq!(details.symptom_name, "General Service");
         assert_eq!(details.status, "Unknown");
         assert!(details.warranty_status.is_none());
+        assert!(details.started_at.is_none());
     }
 
     #[test]
@@ -170,11 +175,12 @@ mod tests {
         luts.work_order_statuses.insert(1, "Pending".to_string());
 
         let work_order = dummy_work_order();
-        let details = decide_get_details(work_order, None, None, &luts, Some("expired".to_string()), None, None, None);
+        let details = decide_get_details(work_order, None, None, &luts, Some("expired".to_string()), None, None, None, Some("2026-06-03 10:30:00".to_string()));
 
         assert_eq!(details.status, "Pending");
         assert_eq!(details.product_name, "Unknown Product");
         assert_eq!(details.symptom_name, "General Service");
         assert_eq!(details.warranty_status, Some("expired".to_string()));
+        assert_eq!(details.started_at, Some("2026-06-03 10:30:00".to_string()));
     }
 }
