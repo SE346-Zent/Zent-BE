@@ -13,6 +13,7 @@ pub mod deny_part;
 pub mod admin_analytics;
 pub mod new_part_form_list;
 pub mod new_part_form_detail;
+pub mod my_products;
 
 use axum::{Router, middleware};
 use crate::core::state::AppState;
@@ -40,6 +41,7 @@ pub fn router(app_state: AppState) -> Router<AppState> {
         ));
 
     Router::new()
+        .route("/products/mine", axum::routing::get(my_products::my_products))
         .route("/products/{id}", axum::routing::get(get_detail_product::get_detail_product))
         .route("/products/check-warranty", axum::routing::post(check_warranty::check_warranty))
         .route("/products/verify", axum::routing::post(verify_product::verify_product))
