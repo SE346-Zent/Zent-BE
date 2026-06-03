@@ -232,6 +232,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
             GeofenceCheckRequest,
             GeofenceCheckResponse,
             EditWorkOrderRequest,
+            crate::handlers::v1::work_orders::reassign::ReassignResponse,
             crate::model::responses::work_orders::technician_metrics_response::TechnicianMetricsResponse,
             crate::model::responses::inventory::my_products_response::MyProductItem,
             crate::model::responses::inventory::my_products_response::MyProductWarranty,

@@ -33,6 +33,7 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/", axum::routing::post(work_orders::create))
         .route("/{id}/rate", axum::routing::post(work_orders::rate))
         .route("/{work_order_number}/edit", axum::routing::post(work_orders::edit))
+        .route("/{id}/cancel", axum::routing::post(work_orders::cancel))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Customer]),
@@ -50,7 +51,6 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
 
     let admin_routes = Router::new()
         .route("/{id}/assign", axum::routing::post(work_orders::assign))
-        .route("/{id}/cancel", axum::routing::post(work_orders::cancel))
         .route("/{id}/refusal/approve", axum::routing::post(work_orders::approve_refusal))
         .route("/{id}/refusal/deny", axum::routing::post(work_orders::deny_refusal))
         .route("/{id}/reassign", axum::routing::post(work_orders::reassign))

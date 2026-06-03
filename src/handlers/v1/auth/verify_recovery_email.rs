@@ -41,6 +41,17 @@ pub async fn verify_recovery_email_handler(
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Script hash missing")))?;
 
     let cache_key = format!("recovery_email_verify:{}", user.id);
+
+    // Read cached data BEFORE the Lua script, because the script deletes the key on success
+    let cached: Option<String> = conn.get(&cache_key).await.ok().flatten();
+    let recovery_email = cached
+        .and_then(|json_str| {
+            serde_json::from_str::<serde_json::Value>(&json_str).ok()
+        })
+        .and_then(|v| v["email"].as_str().map(|s| s.to_string()))
+        .ok_or_else(|| AppError::BadRequest("OTP session expired or not found. Please request a new OTP".to_string()))?;
+
+    // Now run the Lua script (this will delete the key on success)
     let lua_result: i32 = redis::cmd("EVALSHA")
         .arg(verify_otp_hash)
         .arg(1)
@@ -50,17 +61,6 @@ pub async fn verify_recovery_email_handler(
         .await?;
 
     decide_verify_recovery_email(lua_result)?;
-
-    // OTP verified — read the cached recovery email
-    let cached: Option<String> = conn.get(&cache_key).await.ok().flatten();
-    let recovery_email = if let Some(json_str) = cached {
-        serde_json::from_str::<serde_json::Value>(&json_str)
-            .ok()
-            .and_then(|v| v["email"].as_str().map(|s| s.to_string()))
-            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to parse cached recovery email")))?
-    } else {
-        return Err(AppError::BadRequest("OTP session expired. Please try again".to_string()));
-    };
 
     // Update user's recovery_email in DB
     let mut active: users::ActiveModel = user.into();

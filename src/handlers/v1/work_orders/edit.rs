@@ -261,7 +261,7 @@ pub async fn edit(
 ///
 /// Returns the ID of the assigned technician, or `None` if no suitable technician
 /// was found.
-async fn run_auto_assign_after_edit(
+pub(super) async fn run_auto_assign_after_edit(
     _state: &AppState,
     db: Arc<DatabaseConnection>,
     luts: &LookupTables,

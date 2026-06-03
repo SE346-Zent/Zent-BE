@@ -126,6 +126,7 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/", axum::routing::post(create))
         .route("/{id}/rate", axum::routing::post(rate))
         .route("/{workOrderNumber}/edit", axum::routing::post(edit))
+        .route("/cancel", axum::routing::post(cancel))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Customer]),
@@ -161,7 +162,6 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/{id}", axum::routing::get(get_details))
         .route("/{id}/history", axum::routing::get(history))
-        .route("/cancel", axum::routing::post(cancel))
         .merge(list_route)
         .merge(customer_routes)
         .merge(tech_routes)

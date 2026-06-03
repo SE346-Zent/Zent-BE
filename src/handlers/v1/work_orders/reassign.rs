@@ -4,6 +4,7 @@ use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, TransactionTrai
 use uuid::Uuid;
 use validator::Validate;
 use sea_orm::{QueryFilter, ColumnTrait};
+use serde::Serialize;
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
@@ -11,6 +12,16 @@ use crate::infrastructure::cache::ValkeyClient;
 use crate::model::requests::work_orders::reassign_request::ReassignWorkOrderRequest;
 use crate::model::responses::base::ApiResponse;
 use crate::entities::{work_orders as work_orders_ent, users};
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReassignResponse {
+    pub work_order_id: Uuid,
+    pub work_order_number: String,
+    pub new_technician_id: Uuid,
+    pub new_technician_name: String,
+    pub status: String,
+}
 
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/reassign", request_body = ReassignWorkOrderRequest,
@@ -34,7 +45,7 @@ pub async fn reassign(
     State(templates): State<Arc<std::collections::HashMap<String, String>>>,
     Path(id): Path<Uuid>,
     Json(payload): Json<ReassignWorkOrderRequest>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
+) -> Result<Json<ApiResponse<ReassignResponse>>, AppError> {
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
     let work_order = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
@@ -145,14 +156,56 @@ pub async fn reassign(
 
     // Send email notification to customer about reassignment
     if let Some(rmq) = rabbitmq_opt.as_ref() {
-        if let (Some(nt), Some(c)) = (new_tech, cust) {
+        if let (Some(nt), Some(c)) = (new_tech.as_ref(), cust.as_ref()) {
             let _ = crate::services::v1::core::email_service::send_work_order_reassigned_email(
                 rmq, &templates, &c.email, &c.full_name,
                 &work_order.work_order_number, &nt.full_name,
                 &work_order.appointment.to_string(),
             ).await;
         }
+
+        // Send email to new technician about the assignment
+        if let Some(nt) = new_tech.as_ref() {
+            let _ = crate::services::v1::core::email_service::send_work_order_assigned_email(
+                rmq, &templates, &nt.email, &nt.full_name,
+                &work_order.work_order_number, &nt.full_name,
+                &work_order.appointment.to_string(),
+            ).await;
+        }
     }
 
-    Ok(Json(ApiResponse::success(200, "Work order reassigned successfully", ())))
+    // Notify the admin who performed the reassignment
+    let admin_notification_data = serde_json::json!({
+        "workOrderId": work_order.id,
+        "workOrderNumber": work_order.work_order_number,
+        "newTechnicianId": payload.technician_id,
+        "oldTechnicianId": old_tech_id,
+    });
+    let new_tech_name = new_tech.as_ref().map(|t| t.full_name.as_str()).unwrap_or("Unknown");
+    let _ = crate::handlers::v1::notifications::send_notification::send_notification(
+        mongodb.as_ref(),
+        valkey_client.clone(),
+        db.as_ref(),
+        auth.user.id,
+        "work_order_assigned",
+        "Work Order Reassigned",
+        &format!("Work order {} has been reassigned to {}", work_order.work_order_number, new_tech_name),
+        admin_notification_data,
+    ).await;
+
+    // Build response with updated data so FE can update its view
+    let status_name = luts.work_order_statuses
+        .get(&assigned_status_id)
+        .cloned()
+        .unwrap_or_else(|| "Assigned".to_string());
+    let new_tech_name_final = new_tech.as_ref().map(|t| t.full_name.clone()).unwrap_or_else(|| "Unknown".to_string());
+    let new_tech_id_final = payload.technician_id;
+
+    Ok(Json(ApiResponse::success(200, "Work order reassigned successfully", ReassignResponse {
+        work_order_id: work_order.id,
+        work_order_number: work_order.work_order_number,
+        new_technician_id: new_tech_id_final,
+        new_technician_name: new_tech_name_final,
+        status: status_name,
+    })))
 }
