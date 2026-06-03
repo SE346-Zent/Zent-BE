@@ -32,9 +32,8 @@ impl IntoResponse for AppError {
                 tracing::warn!(
                     code = %StatusCode::BAD_REQUEST.as_u16(),
                     error.message = "BadRequest",
-                    error.details = "",
-                    message = %msg,
-                    "Endpoint returned bad request"
+                    error.details = %msg,
+                    "HTTP Bad Request response dispatched"
                 );
                 (StatusCode::BAD_REQUEST, msg)
             }
@@ -42,9 +41,8 @@ impl IntoResponse for AppError {
                 tracing::warn!(
                     code = %StatusCode::UNAUTHORIZED.as_u16(),
                     error.message = "Unauthorized",
-                    error.details = "",
-                    message = %msg,
-                    "Authentication failed or missing"
+                    error.details = %msg,
+                    "HTTP Unauthorized response dispatched"
                 );
                 (StatusCode::UNAUTHORIZED, msg)
             }
@@ -52,9 +50,8 @@ impl IntoResponse for AppError {
                 tracing::warn!(
                     code = %StatusCode::FORBIDDEN.as_u16(),
                     error.message = "Forbidden",
-                    error.details = "",
-                    message = %msg,
-                    "User lacks permission"
+                    error.details = %msg,
+                    "HTTP Forbidden response dispatched"
                 );
                 (StatusCode::FORBIDDEN, msg)
             }
@@ -62,9 +59,8 @@ impl IntoResponse for AppError {
                 tracing::warn!(
                     code = %StatusCode::NOT_FOUND.as_u16(),
                     error.message = "NotFound",
-                    error.details = "",
-                    message = %msg,
-                    "Resource not found"
+                    error.details = %msg,
+                    "HTTP Not Found response dispatched"
                 );
                 (StatusCode::NOT_FOUND, msg)
             }
@@ -72,9 +68,8 @@ impl IntoResponse for AppError {
                 tracing::warn!(
                     code = %StatusCode::CONFLICT.as_u16(),
                     error.message = "Conflict",
-                    error.details = "",
-                    message = %msg,
-                    "State conflict occurred"
+                    error.details = %msg,
+                    "HTTP Conflict response dispatched"
                 );
                 (StatusCode::CONFLICT, msg)
             }
@@ -82,9 +77,8 @@ impl IntoResponse for AppError {
                 tracing::warn!(
                     code = %StatusCode::UNPROCESSABLE_ENTITY.as_u16(),
                     error.message = "ValidationError",
-                    error.details = "",
-                    message = %msg,
-                    "Validation failed"
+                    error.details = %msg,
+                    "HTTP Validation Error response dispatched"
                 );
                 (StatusCode::UNPROCESSABLE_ENTITY, msg)
             }
@@ -92,19 +86,18 @@ impl IntoResponse for AppError {
                 tracing::error!(
                     code = %StatusCode::SERVICE_UNAVAILABLE.as_u16(),
                     error.message = "ServiceUnavailable",
-                    error.details = "",
-                    message = %msg,
-                    "Required dependency is unavailable"
+                    error.details = %msg,
+                    "HTTP Service Unavailable response dispatched"
                 );
                 (StatusCode::SERVICE_UNAVAILABLE, msg)
             }
             AppError::Internal(err) => {
                 tracing::error!(
                     code = %StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
-                    message = "Internal server error",
-                    error.message = %err,
-                    error.details = ?err,
-                    "Internal server error occurred"
+                    error.message = "InternalError",
+                    error.details = %err,
+                    error.details_debug = ?err,
+                    "HTTP Internal Server Error response dispatched"
                 );
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
