@@ -20,6 +20,7 @@ pub mod reject_form_list;
 pub mod reject_form_detail;
 pub mod check_geofence;
 pub mod edit;
+pub mod get_metrics;
 
 pub use change_appointment::change_appointment;
 pub use rate::rate;
@@ -39,6 +40,7 @@ pub use reject_form_list::reject_form_list;
 pub use reject_form_detail::reject_form_detail;
 pub use check_geofence::check_geofence;
 pub use edit::edit;
+pub use get_metrics::get_technician_metrics;
 
 // Re-export __path_* items for utoipa OpenApi derive
 pub use create::__path_create;
@@ -59,6 +61,7 @@ pub use reject_form_list::__path_reject_form_list;
 pub use reject_form_detail::__path_reject_form_detail;
 pub use check_geofence::__path_check_geofence;
 pub use edit::__path_edit;
+pub use get_metrics::__path_get_technician_metrics;
 
 
 use axum::{Router, middleware};
@@ -133,6 +136,7 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/refuse", axum::routing::post(refuse))
         .route("/{id}/complete", axum::routing::post(complete))
         .route("/{id}/geofence", axum::routing::post(check_geofence))
+        .route("/technician/metrics", axum::routing::get(get_technician_metrics))
 
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -439,6 +443,7 @@ pub(crate) async fn get_cached_technician_stats(
     db: &DatabaseConnection,
     valkey_client: &Option<Arc<ValkeyClient>>,
     technician_id: Uuid,
+    closed_status_ids: &[i32],
 ) -> Result<TechnicianStatsSnapshot, AppError> {
     let cache_key = format!("cache:technician_stats:{}", technician_id);
 
@@ -457,6 +462,12 @@ pub(crate) async fn get_cached_technician_stats(
         .filter(work_orders_ent::Column::TechnicianId.eq(technician_id))
         .all(db)
         .await?;
+
+    // Active jobs: work orders whose status is not in the closed set
+    let active_jobs = work_order_rows
+        .iter()
+        .filter(|wo| !closed_status_ids.contains(&wo.work_order_status_id))
+        .count() as i64;
 
     let total_work_orders = work_order_rows.len() as i64;
     let work_order_ids: Vec<Uuid> = work_order_rows.into_iter().map(|wo| wo.id).collect();
@@ -477,6 +488,7 @@ pub(crate) async fn get_cached_technician_stats(
 
     let snapshot = crate::services::v1::work_orders::technician_stats::decide_technician_stats(TechnicianStatsInput {
         total_work_orders,
+        active_jobs,
         rating_sum,
         rating_count,
     });
@@ -496,8 +508,9 @@ pub(crate) async fn refresh_technician_stats_cache(
     db: &DatabaseConnection,
     valkey_client: &Option<Arc<ValkeyClient>>,
     technician_id: Uuid,
+    closed_status_ids: &[i32],
 ) {
-    let _ = get_cached_technician_stats(db, valkey_client, technician_id).await;
+    let _ = get_cached_technician_stats(db, valkey_client, technician_id, closed_status_ids).await;
 }
 
 /// Periodically clean up unassigned work orders that have exceeded the allowed wait window.

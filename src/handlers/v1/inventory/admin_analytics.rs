@@ -50,6 +50,7 @@ pub async fn admin_analytics(
     let closed_status_id = luts.work_order_statuses_by_name.get("Closed")
         .copied()
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
+    let closed_status_ids = vec![closed_status_id];
 
     let current_orders: Vec<chrono::DateTime<Utc>> = work_orders_ent::Entity::find()
         .filter(work_orders_ent::Column::DeletedAt.is_null())
@@ -157,6 +158,7 @@ pub async fn admin_analytics(
             db.as_ref(),
             &valkey_client,
             tech.id,
+            &closed_status_ids,
         ).await?;
 
         technician_performance.push(TechnicianPerformanceEntry {

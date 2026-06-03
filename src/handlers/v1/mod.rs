@@ -42,6 +42,7 @@ fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/start", axum::routing::post(work_orders::start))
         .route("/{id}/refuse", axum::routing::post(work_orders::refuse))
         .route("/{id}/complete", axum::routing::post(work_orders::complete))
+        .route("/technician/metrics", axum::routing::get(work_orders::get_technician_metrics))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Technician]),
