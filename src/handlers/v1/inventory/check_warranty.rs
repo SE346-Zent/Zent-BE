@@ -30,7 +30,7 @@ pub async fn check_warranty(
     payload.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
 
     let zeus_prod = state.zeus_client.find_product_by_serial(&payload.serial_number).await?
-        .ok_or_else(|| AppError::BadRequest(format!("Serial number '{}' not found in product catalog", payload.serial_number)))?;
+        .ok_or_else(|| AppError::NotFound("Product not found in catalog".to_string()))?;
 
     let existing_warranty = warranties::Entity::find()
         .filter(warranties::Column::ProductId.eq(zeus_prod.id))

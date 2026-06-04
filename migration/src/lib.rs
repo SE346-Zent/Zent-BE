@@ -47,6 +47,10 @@ mod m20260531_100000_add_registered_devices;
 mod m20260531_110000_rename_city_to_ward;
 mod m20260531_120000_drop_product_fk_from_registered_devices;
 mod m20260601_100000_add_cancel_reason;
+mod m20260602_100000_add_new_part_request_statuses;
+mod m20260603_100000_add_recovery_email;
+mod m20260604_100000_drop_remaining_scm_fks;
+mod m20260604_110000_add_profile_update_audit_log;
 
 
 pub struct Migrator;
@@ -102,6 +106,10 @@ impl MigratorTrait for Migrator {
             Box::new(m20260531_110000_rename_city_to_ward::Migration),
             Box::new(m20260531_120000_drop_product_fk_from_registered_devices::Migration),
             Box::new(m20260601_100000_add_cancel_reason::Migration),
+            Box::new(m20260602_100000_add_new_part_request_statuses::Migration),
+            Box::new(m20260603_100000_add_recovery_email::Migration),
+            Box::new(m20260604_100000_drop_remaining_scm_fks::Migration),
+            Box::new(m20260604_110000_add_profile_update_audit_log::Migration),
         ]
     }
 }

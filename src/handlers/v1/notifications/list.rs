@@ -44,11 +44,11 @@ pub async fn list(
 
     // page and limit are Option<u32> — reject explicit zero, allow None (defaults apply)
     if list_query.page == Some(0) {
-        return Err(AppError::BadRequest("Page must be greater than 0".to_string()));
+        return Err(AppError::BadRequest("Page number must be greater than 0".to_string()));
     }
 
     if list_query.limit == Some(0) {
-        return Err(AppError::BadRequest("Limit must be greater than 0".to_string()));
+        return Err(AppError::BadRequest("Page size must be greater than 0".to_string()));
     }
 
     // 1. Fetch all notifications for this user from MongoDB

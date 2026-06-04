@@ -13,6 +13,7 @@ use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
 use crate::core::lookup_tables::LookupTables;
 use crate::infrastructure::cache::ValkeyClient;
+use crate::infrastructure::metrics;
 use crate::entities::{login_audit_logs, sessions, users};
 use chrono::Utc;
 use crate::utils::hasher;
@@ -20,6 +21,7 @@ use crate::services::v1::auth::google_login;
 use crate::model::requests::auth::google_login_request::GoogleLoginRequest;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::auth::login_response::LoginResponseData;
+use redis::AsyncCommands;
 
 #[utoipa::path(
     post,
@@ -139,7 +141,46 @@ pub async fn google_login_handler(
         sea_orm::TransactionError::Transaction(e) => e,
     })?;
 
-    // 7. Save active session
+    // 7. Enforce 10-device session limit: evict the oldest session if at capacity
+    const MAX_SESSIONS: u64 = 10;
+    let active_count = sessions::Entity::find()
+        .filter(sessions::Column::UserId.eq(user_id))
+        .filter(sessions::Column::RevokedAt.is_null())
+        .filter(sessions::Column::ExpiresAt.gt(Utc::now()))
+        .count(db.as_ref())
+        .await?;
+
+    if active_count >= MAX_SESSIONS {
+        if let Some(oldest) = sessions::Entity::find()
+            .filter(sessions::Column::UserId.eq(user_id))
+            .filter(sessions::Column::RevokedAt.is_null())
+            .filter(sessions::Column::ExpiresAt.gt(Utc::now()))
+            .order_by_asc(sessions::Column::CreatedAt)
+            .one(db.as_ref())
+            .await?
+        {
+            tracing::info!(
+                "Session limit reached for user {} — evicting oldest session {} (device: {})",
+                user_id, oldest.id, oldest.device_fingerprint
+            );
+
+            let mut active: sessions::ActiveModel = oldest.clone().into();
+            active.revoked_at = Set(Some(Utc::now()));
+            active.update(db.as_ref()).await?;
+
+            if let Some(ref client) = valkey_client {
+                if let Ok(mut conn) = client.get_connection().await {
+                    let whitelist_key = format!("whitelist:session:{}", oldest.id);
+                    let _: () = conn.del(&whitelist_key).await.unwrap_or_default();
+                }
+            }
+
+            let ws_manager = crate::infrastructure::ws::get_ws_manager();
+            ws_manager.close_session_connections(&user_id, &oldest.id).await;
+        }
+    }
+
+    // 8. Save active session
     let active_session = sessions::ActiveModel {
         id: Set(session_id),
         user_id: Set(user_id),
@@ -186,6 +227,12 @@ pub async fn google_login_handler(
             tracing::warn!("Valkey unavailable — session whitelist not set");
         }
     }
+
+    // Track successful login
+    metrics::init().auth_login_total.add(1, &[
+        opentelemetry::KeyValue::new("method", "google"),
+        opentelemetry::KeyValue::new("status", "success"),
+    ]);
 
     Ok(Json(ApiResponse::success(200, "Google login successful", response_data)))
 }

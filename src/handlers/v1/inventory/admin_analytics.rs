@@ -32,13 +32,13 @@ pub async fn admin_analytics(
 ) -> Result<Json<ApiResponse<AdminAnalyticsResponse>>, AppError> {
     match auth.role.name.as_str() {
         "Admin" | "SuperAdmin" => {},
-        _ => return Err(AppError::Forbidden("Only admins can view analytics".to_string())),
+        _ => return Err(AppError::Forbidden("Only administrators can view analytics".to_string())),
     }
 
     let period = match query.mode.to_lowercase().as_str() {
         "weekly" | "7d" => AnalyticsPeriod::Weekly,
         "monthly" | "30d" => AnalyticsPeriod::Monthly,
-        other => return Err(AppError::BadRequest(format!("Invalid mode '{}'. Use 'weekly' or 'monthly'", other))),
+        _ => return Err(AppError::BadRequest("Invalid analytics mode. Use 'weekly' or 'monthly'".to_string())),
     };
 
     let period_days = period.window_days();
@@ -50,6 +50,7 @@ pub async fn admin_analytics(
     let closed_status_id = luts.work_order_statuses_by_name.get("Closed")
         .copied()
         .ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
+    let closed_status_ids = vec![closed_status_id];
 
     let current_orders: Vec<chrono::DateTime<Utc>> = work_orders_ent::Entity::find()
         .filter(work_orders_ent::Column::DeletedAt.is_null())
@@ -157,6 +158,7 @@ pub async fn admin_analytics(
             db.as_ref(),
             &valkey_client,
             tech.id,
+            &closed_status_ids,
         ).await?;
 
         technician_performance.push(TechnicianPerformanceEntry {

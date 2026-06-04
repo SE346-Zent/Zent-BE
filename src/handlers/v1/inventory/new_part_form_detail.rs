@@ -3,7 +3,7 @@ use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use std::sync::Arc;
 
 use crate::core::errors::{AppError, ErrorResponse};
-use crate::entities::{images, new_part_audit_log, new_part_form_image_links, new_part_forms, part_types};
+use crate::entities::{images, new_part_audit_log, new_part_form_image_links, new_part_forms, part_types, users};
 use crate::extractor::auth_user::AuthUser;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::inventory::new_part_form_detail_response::NewPartFormDetailResponse;
@@ -49,18 +49,48 @@ pub async fn new_part_form_detail(
         .map(|image| image.object_name)
         .collect::<Vec<_>>();
 
-    let rejection_reason = if form.status.eq_ignore_ascii_case("rejected") {
-        new_part_audit_log::Entity::find()
+    // Determine status-based extra fields from audit log
+    let normalized_status = form.status.to_lowercase();
+    let is_rejected = normalized_status == "rejected" || normalized_status == "denied";
+    let is_approved = normalized_status == "approved";
+
+    let (approver_name, approved_at, rejected_at, rejection_reason) = if is_approved || is_rejected {
+        let action_filter = if is_approved { "approved" } else { "denied" };
+        let audit = new_part_audit_log::Entity::find()
             .filter(new_part_audit_log::Column::NewPartFormId.eq(form.id))
-            .filter(new_part_audit_log::Column::Action.eq("denied"))
+            .filter(new_part_audit_log::Column::Action.eq(action_filter))
             .one(db.as_ref())
-            .await?
-            .and_then(|audit| audit.reason)
+            .await?;
+
+        if let Some(audit_entry) = audit {
+            let admin_name = users::Entity::find_by_id(audit_entry.admin_id)
+                .one(db.as_ref())
+                .await?
+                .map(|u| u.full_name);
+
+            let timestamp = Some(crate::utils::time::to_utc7_string(audit_entry.created_at));
+
+            if is_approved {
+                (admin_name, timestamp, None, None)
+            } else {
+                (admin_name, None, timestamp, audit_entry.reason)
+            }
+        } else {
+            (None, None, None, None)
+        }
     } else {
-        None
+        (None, None, None, None)
     };
 
-    let detail = new_part_forms_service::map_detail_response(form, part_type_name, photo_urls, rejection_reason);
+    let detail = new_part_forms_service::map_detail_response(
+        form,
+        part_type_name,
+        photo_urls,
+        approver_name,
+        approved_at,
+        rejected_at,
+        rejection_reason,
+    );
 
     Ok(Json(ApiResponse::success(
         200,

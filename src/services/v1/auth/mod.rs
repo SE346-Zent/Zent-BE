@@ -16,4 +16,6 @@ pub mod logout;
 pub mod change_password;
 pub mod google_login;
 pub mod login_history;
+pub mod set_recovery_email;
+pub mod verify_recovery_email;
 

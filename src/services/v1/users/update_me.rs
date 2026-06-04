@@ -14,6 +14,18 @@ pub struct UpdateMeEffect {
     pub user_active_model: users::ActiveModel,
     /// The updated profile data to be returned in the API response.
     pub response_data: MeResponseData,
+    /// Snapshot of the trackable field values before the update.
+    pub old_values: ProfileSnapshot,
+    /// Snapshot of the trackable field values after the update.
+    pub new_values: ProfileSnapshot,
+}
+
+/// Lightweight snapshot of profile fields that are tracked in the audit log.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ProfileSnapshot {
+    pub full_name: String,
+    pub email: String,
+    pub phone_number: String,
 }
 
 /// Validate and prepare the profile update.
@@ -24,7 +36,7 @@ pub struct UpdateMeEffect {
 pub fn decide_update_me(user: users::Model, req: ProfileUpdateRequest) -> Result<UpdateMeEffect, AppError> {
     // Reject deleted accounts
     if user.deleted_at.is_some() {
-        return Err(AppError::Unauthorized("Account is deactivated".to_string()));
+        return Err(AppError::Unauthorized("Account is inactive".to_string()));
     }
 
     let new_name = req.full_name.unwrap_or_else(|| user.full_name.clone());
@@ -32,6 +44,19 @@ pub fn decide_update_me(user: users::Model, req: ProfileUpdateRequest) -> Result
     let new_phone = req.phone.unwrap_or_else(|| user.phone_number.clone());
 
     let now = chrono::Utc::now();
+
+    // Capture old values before the user model is partially consumed
+    let old_values = ProfileSnapshot {
+        full_name: user.full_name.clone(),
+        email: user.email.clone(),
+        phone_number: user.phone_number.clone(),
+    };
+
+    let new_values = ProfileSnapshot {
+        full_name: new_name.clone(),
+        email: new_email.clone(),
+        phone_number: new_phone.clone(),
+    };
 
     let user_active_model = users::ActiveModel {
         id: sea_orm::Set(user.id),
@@ -51,11 +76,17 @@ pub fn decide_update_me(user: users::Model, req: ProfileUpdateRequest) -> Result
         province: user.province,
         account_status_id: user.account_status,
         employee_id: crate::utils::user::get_employee_id(user.role_id, user.id),
+        avatar_image_name: user.avatar_url,
         created_at: user.created_at.to_rfc3339(),
         updated_at: now.to_rfc3339(),
     };
 
-    Ok(UpdateMeEffect { user_active_model, response_data })
+    Ok(UpdateMeEffect {
+        user_active_model,
+        response_data,
+        old_values,
+        new_values,
+    })
 }
 
 #[cfg(test)]
@@ -78,6 +109,7 @@ mod tests {
             role_id: 3,
             province: None,
             avatar_url: None,
+            recovery_email: None,
             fcm_token: None,
             installation_id: None,
             created_at: Utc::now(),

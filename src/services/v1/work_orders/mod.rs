@@ -22,3 +22,4 @@ pub mod deny_refusal;
 pub mod change_appointment;
 pub mod reject_forms;
 pub mod technician_stats;
+pub mod edit;

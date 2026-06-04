@@ -19,6 +19,8 @@ pub mod change_appointment;
 pub mod reject_form_list;
 pub mod reject_form_detail;
 pub mod check_geofence;
+pub mod edit;
+pub mod get_metrics;
 
 pub use change_appointment::change_appointment;
 pub use rate::rate;
@@ -37,6 +39,8 @@ pub use cancel::cancel;
 pub use reject_form_list::reject_form_list;
 pub use reject_form_detail::reject_form_detail;
 pub use check_geofence::check_geofence;
+pub use edit::edit;
+pub use get_metrics::get_technician_metrics;
 
 // Re-export __path_* items for utoipa OpenApi derive
 pub use create::__path_create;
@@ -56,12 +60,14 @@ pub use change_appointment::__path_change_appointment;
 pub use reject_form_list::__path_reject_form_list;
 pub use reject_form_detail::__path_reject_form_detail;
 pub use check_geofence::__path_check_geofence;
+pub use edit::__path_edit;
+pub use get_metrics::__path_get_technician_metrics;
 
 
 use axum::{Router, middleware};
 use std::collections::HashMap;
 use std::sync::Arc;
-use chrono::Utc;
+use chrono::{Utc, Datelike};
 use redis::AsyncCommands;
 use sea_orm::{DatabaseConnection, prelude::Uuid, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, ColumnTrait, TransactionTrait, ActiveModelTrait, Set};
 use tracing::{info, error};
@@ -80,7 +86,16 @@ use crate::model::requests::pagination::PaginationRequest;
 use crate::services::v1::work_orders::list as list_svc;
 use crate::services::v1::work_orders::technician_stats::{TechnicianStatsInput, TechnicianStatsSnapshot};
 use crate::infrastructure::cache::ValkeyClient;
+use crate::infrastructure::metrics;
 use crate::services::v1::inventory::ports::ZeusInventoryClient;
+
+/// Track a work order state transition metric.
+pub(crate) fn track_wo_transition(from_status: &str, to_status: &str) {
+    metrics::init().wo_state_transition_total.add(1, &[
+        opentelemetry::KeyValue::new("from", from_status.to_string()),
+        opentelemetry::KeyValue::new("to", to_status.to_string()),
+    ]);
+}
 
 /// Sentinel value stored during the idempotency claim window.
 pub(crate) const IDEMPOTENCY_PENDING: &str = "__PENDING__";
@@ -119,6 +134,8 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
     let customer_routes = Router::new()
         .route("/", axum::routing::post(create))
         .route("/{id}/rate", axum::routing::post(rate))
+        .route("/{workOrderNumber}/edit", axum::routing::post(edit))
+        .route("/cancel", axum::routing::post(cancel))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_role::<AppState>(&[Role::Customer]),
@@ -129,6 +146,7 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
         .route("/{id}/refuse", axum::routing::post(refuse))
         .route("/{id}/complete", axum::routing::post(complete))
         .route("/{id}/geofence", axum::routing::post(check_geofence))
+        .route("/technician/metrics", axum::routing::get(get_technician_metrics))
 
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -153,7 +171,6 @@ pub fn work_orders_router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/{id}", axum::routing::get(get_details))
         .route("/{id}/history", axum::routing::get(history))
-        .route("/cancel", axum::routing::post(cancel))
         .merge(list_route)
         .merge(customer_routes)
         .merge(tech_routes)
@@ -212,6 +229,29 @@ pub(crate) async fn get_cached_work_order_model(
         }
     }
 
+    Ok(model)
+}
+
+/// Load a work order by its business-friendly `work_order_number` (e.g. `WO-AB12CD`).
+///
+/// `work_order_number` has a unique index in MySQL, so the DB lookup is O(log n) and
+/// we intentionally skip the cache here: customers typically reference a work order by
+/// its number a small number of times, and keeping the cache key aligned with the
+/// primary identifier (`id`) avoids a second cache-invalidation path.
+pub(crate) async fn get_work_order_by_number(
+    db: &DatabaseConnection,
+    work_order_number: &str,
+) -> Result<work_orders_ent::Model, AppError> {
+    let trimmed = work_order_number.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::BadRequest("Work order number is required".to_string()));
+    }
+    let model = work_orders_ent::Entity::find()
+        .filter(work_orders_ent::Column::WorkOrderNumber.eq(trimmed))
+        .filter(work_orders_ent::Column::DeletedAt.is_null())
+        .one(db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Work order not found".to_string()))?;
     Ok(model)
 }
 
@@ -292,8 +332,23 @@ pub(crate) async fn write_through_work_order_cache(
             .flatten()
             .and_then(|c| c.avatar_url);
 
+        // Fetch started_at: timestamp when work order transitioned to "In Progress"
+        let in_prog_id = lookup_tables.work_order_statuses_by_name.get("InProg").copied();
+        let started_at = if let Some(in_prog_id) = in_prog_id {
+            work_order_state_history::Entity::find()
+                .filter(work_order_state_history::Column::WorkOrderId.eq(wo_id))
+                .filter(work_order_state_history::Column::ToStatusId.eq(in_prog_id))
+                .one(db)
+                .await
+                .ok()
+                .flatten()
+                .map(|h| crate::utils::time::to_utc7_string(h.changed_at))
+        } else {
+            None
+        };
+
         let details = crate::services::v1::work_orders::get_details::decide_get_details(
-            wo, product, symptom, lookup_tables, Some(warranty_status), technician_name, technician_avatar_name, customer_avatar_name,
+            wo, product, symptom, lookup_tables, Some(warranty_status), technician_name, technician_avatar_name, customer_avatar_name, started_at,
         );
         if let Ok(details_json) = serde_json::to_string(&details) {
             let _: () = conn
@@ -366,26 +421,33 @@ pub(crate) async fn fetch_paginated_work_orders(
         .all(db.as_ref()).await?;
 
     let mut enriched_models = Vec::with_capacity(models_with_related.len());
+
+    // Batch-fetch users to avoid N+1
+    let customer_ids: Vec<Uuid> = models_with_related.iter().map(|(wo, _)| wo.customer_id).collect();
+    let technician_ids: Vec<Uuid> = models_with_related.iter().filter_map(|(wo, _)| wo.technician_id).collect();
+
+    let mut all_user_ids = customer_ids.clone();
+    all_user_ids.extend_from_slice(&technician_ids);
+    all_user_ids.sort();
+    all_user_ids.dedup();
+
+    let user_map: std::collections::HashMap<Uuid, users::Model> = if all_user_ids.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        users::Entity::find()
+            .filter(users::Column::Id.is_in(all_user_ids))
+            .all(db.as_ref())
+            .await?
+            .into_iter()
+            .map(|u| (u.id, u))
+            .collect()
+    };
+
     for (work_order, symptom) in models_with_related {
         let product = load_zeus_product_model(work_order.product_id).await;
 
-        // Fetch customer user record for avatar
-        let customer_user = users::Entity::find_by_id(work_order.customer_id)
-            .one(db.as_ref())
-            .await
-            .ok()
-            .flatten();
-
-        // Fetch technician user record for avatar
-        let technician_user = if let Some(tech_id) = work_order.technician_id {
-            users::Entity::find_by_id(tech_id)
-                .one(db.as_ref())
-                .await
-                .ok()
-                .flatten()
-        } else {
-            None
-        };
+        let customer_user = user_map.get(&work_order.customer_id).cloned();
+        let technician_user = work_order.technician_id.and_then(|tid| user_map.get(&tid).cloned());
 
         enriched_models.push((work_order, product, symptom, customer_user, technician_user));
     }
@@ -405,6 +467,7 @@ pub(crate) async fn get_cached_technician_stats(
     db: &DatabaseConnection,
     valkey_client: &Option<Arc<ValkeyClient>>,
     technician_id: Uuid,
+    closed_status_ids: &[i32],
 ) -> Result<TechnicianStatsSnapshot, AppError> {
     let cache_key = format!("cache:technician_stats:{}", technician_id);
 
@@ -423,6 +486,12 @@ pub(crate) async fn get_cached_technician_stats(
         .filter(work_orders_ent::Column::TechnicianId.eq(technician_id))
         .all(db)
         .await?;
+
+    // Jobs done: work orders whose status is in the closed set
+    let jobs_done = work_order_rows
+        .iter()
+        .filter(|wo| closed_status_ids.contains(&wo.work_order_status_id))
+        .count() as i64;
 
     let total_work_orders = work_order_rows.len() as i64;
     let work_order_ids: Vec<Uuid> = work_order_rows.into_iter().map(|wo| wo.id).collect();
@@ -443,6 +512,7 @@ pub(crate) async fn get_cached_technician_stats(
 
     let snapshot = crate::services::v1::work_orders::technician_stats::decide_technician_stats(TechnicianStatsInput {
         total_work_orders,
+        jobs_done,
         rating_sum,
         rating_count,
     });
@@ -462,8 +532,102 @@ pub(crate) async fn refresh_technician_stats_cache(
     db: &DatabaseConnection,
     valkey_client: &Option<Arc<ValkeyClient>>,
     technician_id: Uuid,
+    closed_status_ids: &[i32],
 ) {
-    let _ = get_cached_technician_stats(db, valkey_client, technician_id).await;
+    let _ = get_cached_technician_stats(db, valkey_client, technician_id, closed_status_ids).await;
+}
+
+// ── Technician Workload Cache ───────────────────────────────────────
+// Cache key: `cache:tech_workload:{tech_id}` → i64 (count of active work orders)
+// "Active" = not Closed, not Rejected, not soft-deleted, assigned to the technician.
+
+const TECH_WORKLOAD_TTL: u64 = 600; // 10 minutes
+
+/// Get the cached workload for a technician for the current month.
+/// On cache miss, queries the DB and populates the cache.
+pub(crate) async fn get_technician_workload(
+    db: &DatabaseConnection,
+    valkey_client: &Option<Arc<ValkeyClient>>,
+    technician_id: Uuid,
+    terminal_status_ids: &[i32],
+) -> i64 {
+    let now = Utc::now();
+    let month_start = now.date_naive().with_day(1).unwrap().and_hms_opt(0, 0, 0).unwrap().and_utc();
+
+    let cache_key = format!("cache:tech_workload:{}:{}", technician_id, now.format("%Y-%m"));
+
+    // Try cache first
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            if let Ok(Some(val)) = conn.get::<_, Option<i64>>(&cache_key).await {
+                return val;
+            }
+        }
+    }
+
+    // Cache miss — query DB: count active work orders assigned to this tech this month
+    let count = if terminal_status_ids.is_empty() {
+        work_orders_ent::Entity::find()
+            .filter(work_orders_ent::Column::DeletedAt.is_null())
+            .filter(work_orders_ent::Column::TechnicianId.eq(technician_id))
+            .filter(work_orders_ent::Column::CreatedAt.gte(month_start))
+            .count(db)
+            .await
+            .unwrap_or(0) as i64
+    } else {
+        let owned_ids: Vec<i32> = terminal_status_ids.to_vec();
+        work_orders_ent::Entity::find()
+            .filter(work_orders_ent::Column::DeletedAt.is_null())
+            .filter(work_orders_ent::Column::TechnicianId.eq(technician_id))
+            .filter(work_orders_ent::Column::WorkOrderStatusId.is_not_in(owned_ids))
+            .filter(work_orders_ent::Column::CreatedAt.gte(month_start))
+            .count(db)
+            .await
+            .unwrap_or(0) as i64
+    };
+
+    // Populate cache
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            let _: () = conn.set_ex(&cache_key, count, TECH_WORKLOAD_TTL).await.unwrap_or_default();
+        }
+    }
+
+    count
+}
+
+/// Increment the workload counter for a technician in the cache (current month).
+/// If the key does not exist, it is initialised to 1.
+pub(crate) async fn increment_technician_workload(
+    valkey_client: &Option<Arc<ValkeyClient>>,
+    technician_id: Uuid,
+) {
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            let key = format!("cache:tech_workload:{}:{}", technician_id, Utc::now().format("%Y-%m"));
+            let _: i64 = conn.incr(&key, 1).await.unwrap_or(1);
+            let _: () = conn.expire(&key, TECH_WORKLOAD_TTL as i64).await.unwrap_or_default();
+        }
+    }
+}
+
+/// Decrement the workload counter for a technician in the cache (floored at 0, current month).
+/// If the key does not exist, this is a no-op.
+pub(crate) async fn decrement_technician_workload(
+    valkey_client: &Option<Arc<ValkeyClient>>,
+    technician_id: Uuid,
+) {
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            let key = format!("cache:tech_workload:{}:{}", technician_id, Utc::now().format("%Y-%m"));
+            // Decrement, but floor at 0
+            let current: i64 = conn.get(&key).await.unwrap_or(0);
+            if current > 0 {
+                let _: i64 = conn.decr(&key, 1).await.unwrap_or(0);
+            }
+            let _: () = conn.expire(&key, TECH_WORKLOAD_TTL as i64).await.unwrap_or_default();
+        }
+    }
 }
 
 /// Periodically clean up unassigned work orders that have exceeded the allowed wait window.

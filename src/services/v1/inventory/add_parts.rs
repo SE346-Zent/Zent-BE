@@ -58,6 +58,7 @@ pub fn decide_add_parts(
         work_order_id: Set(work_order_record.id),
         work_order_number: Set(work_order_record.work_order_number),
         status: Set("pending".to_string()),
+        new_part_request_status_id: Set(1), // pending
         created_at: Set(current_timestamp),
         updated_at: Set(current_timestamp),
         deleted_at: Set(None),

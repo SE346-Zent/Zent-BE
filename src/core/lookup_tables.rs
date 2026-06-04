@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::core::errors::AppError;
 use crate::services::v1::inventory::ports::ZeusInventoryClient;
-use crate::entities::{account_status, roles, work_order_statuses, policy, warranty_statuses};
+use crate::entities::{account_status, roles, work_order_statuses, policy, warranty_statuses, new_part_request_statuses};
 
 /// In-memory lookup tables (LUT) loaded once at server startup.
 ///
@@ -46,6 +46,11 @@ pub struct LookupTables {
     /// `part_mfg_statuses.name` → `part_mfg_statuses.id`
     pub part_mfg_statuses_by_name: HashMap<String, i32>,
 
+    /// `new_part_request_statuses.id` → `new_part_request_statuses.name`
+    pub new_part_request_statuses: HashMap<i32, String>,
+    /// `new_part_request_statuses.name` → `new_part_request_statuses.id`
+    pub new_part_request_statuses_by_name: HashMap<String, i32>,
+
     /// `policy.policy_name` → `policy.policy_value`
     pub policies: HashMap<String, String>,
 
@@ -63,6 +68,7 @@ impl LookupTables {
         let account_statuses_list = account_status::Entity::find().all(db).await?;
         let work_order_statuses_list = work_order_statuses::Entity::find().all(db).await?;
         let warranty_statuses_list = warranty_statuses::Entity::find().all(db).await?;
+        let new_part_request_statuses_list = new_part_request_statuses::Entity::find().all(db).await?;
         let policies_list = policy::Entity::find().all(db).await?;
 
         // Fetch LUTs from SCM
@@ -89,6 +95,9 @@ impl LookupTables {
         let part_mfg_statuses: HashMap<i32, String> = zeus_luts.part_mfg_statuses.iter().map(|p| (p.id, p.name.clone())).collect();
         let part_mfg_statuses_by_name: HashMap<String, i32> = zeus_luts.part_mfg_statuses.iter().map(|p| (p.name.clone(), p.id)).collect();
 
+        let new_part_request_statuses: HashMap<i32, String> = new_part_request_statuses_list.iter().map(|s| (s.id, s.name.clone())).collect();
+        let new_part_request_statuses_by_name: HashMap<String, i32> = new_part_request_statuses_list.iter().map(|s| (s.name.clone(), s.id)).collect();
+
         let policies: HashMap<String, String> = policies_list.iter().map(|p| (p.policy_name.clone(), p.policy_value.clone())).collect();
 
         tracing::info!(
@@ -99,6 +108,7 @@ impl LookupTables {
             work_order_statuses = work_order_statuses.len(),
             warranty_statuses = warranty_statuses.len(),
             part_mfg_statuses = part_mfg_statuses.len(),
+            new_part_request_statuses = new_part_request_statuses.len(),
             policies = policies.len(),
             "Lookup tables loaded into memory"
         );
@@ -126,6 +136,8 @@ impl LookupTables {
             warranty_statuses_by_name,
             part_mfg_statuses,
             part_mfg_statuses_by_name,
+            new_part_request_statuses,
+            new_part_request_statuses_by_name,
             policies,
             notification_categories_by_role,
         })
@@ -148,6 +160,8 @@ impl LookupTables {
             warranty_statuses_by_name: HashMap::new(),
             part_mfg_statuses: HashMap::new(),
             part_mfg_statuses_by_name: HashMap::new(),
+            new_part_request_statuses: HashMap::new(),
+            new_part_request_statuses_by_name: HashMap::new(),
             policies: HashMap::new(),
             notification_categories_by_role: HashMap::new(),
         }

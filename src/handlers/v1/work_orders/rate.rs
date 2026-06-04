@@ -86,9 +86,11 @@ pub async fn rate(
     // Write-through cache update for work order itself if needed (though work order did not change, let's keep consistency)
     super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), id).await;
 
-    // Refresh cached technician analytics so average rating and work order totals stay current.
+    // Refresh cached technician analytics so active jobs and rating stay current.
     if let Some(tech_id) = work_order.technician_id {
-        super::refresh_technician_stats_cache(db.as_ref(), &valkey_client, tech_id).await;
+        let closed_id = *luts.work_order_statuses_by_name.get("Closed")
+            .expect("'Closed' status missing from lookup tables");
+        super::refresh_technician_stats_cache(db.as_ref(), &valkey_client, tech_id, &[closed_id]).await;
     }
 
     Ok(Json(ApiResponse::message_only(200, "Rating submitted successfully")))

@@ -49,30 +49,36 @@ pub fn init_tracing() {
     };
 
     // 4. Build OTLP meter provider
-    if let Some(meter_provider) = build_otlp_meter_provider(&agent_endpoint, resource.clone()) {
-        global::set_meter_provider(meter_provider.clone());
-        if let Err(_) = METER_PROVIDER.set(meter_provider) {
-            println!("Warning: METER_PROVIDER already set");
+    match build_otlp_meter_provider(&agent_endpoint, resource.clone()) {
+        Some(meter_provider) => {
+            global::set_meter_provider(meter_provider.clone());
+            let _ = METER_PROVIDER.set(meter_provider);
+            println!("Observability: OTLP meter provider initialized → {}/v1/metrics", agent_endpoint);
         }
-    } else {
-        println!("Warning: Failed to initialize OTLP meter provider");
+        None => {
+            eprintln!("WARNING: Failed to initialize OTLP meter provider. Metrics will NOT be exported to Grafana. Check OTEL_EXPORTER_OTLP_ENDPOINT (current: {})", agent_endpoint);
+        }
     }
 
     // 5. Build OTLP logger provider and tracing layer
-    let otel_log_layer = if let Some(logger_provider) = build_otlp_logger_provider(&agent_endpoint, resource) {
-        let layer = opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge::new(&logger_provider);
-        if let Err(_) = LOGGER_PROVIDER.set(logger_provider) {
-            println!("Warning: LOGGER_PROVIDER already set");
+    let otel_log_layer = match build_otlp_logger_provider(&agent_endpoint, resource) {
+        Some(logger_provider) => {
+            let layer = opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge::new(&logger_provider);
+            let _ = LOGGER_PROVIDER.set(logger_provider);
+            println!("Observability: OTLP logger provider initialized → {}/v1/logs", agent_endpoint);
+            Some(layer)
         }
-        Some(layer)
-    } else {
-        println!("Warning: Failed to initialize OTLP logger provider");
-        None
+        None => {
+            eprintln!("WARNING: Failed to initialize OTLP logger provider. Logs will NOT be exported to Grafana.");
+            None
+        }
     };
 
     // 6. Configure EnvFilter
+    // OTel SDK errors MUST be visible — if export fails, you need to see why.
+    // Debug/Info from OTel is still suppressed to avoid noise.
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        "info,zent_be=debug,hyper_util=info,reqwest=info,opentelemetry=off,opentelemetry_sdk=off,opentelemetry_otlp=off".into()
+        "info,zent_be=debug,hyper_util=info,reqwest=info,opentelemetry=error,opentelemetry_sdk=error,opentelemetry_otlp=error".into()
     });
 
     // 7. Configure Console JSON layer
@@ -98,6 +104,23 @@ pub fn init_tracing() {
     set_panic_hook();
 
     println!("Observability: Pipeline initialized successfully.");
+
+    // Log diagnostics through the now-active tracing subscriber so they
+    // appear in the OTLP log pipeline (not just container stdout).
+    tracing::info!(
+        otel_endpoint = %agent_endpoint,
+        meter_provider_initialized = METER_PROVIDER.get().is_some(),
+        logger_provider_initialized = LOGGER_PROVIDER.get().is_some(),
+        "Observability pipeline initialized"
+    );
+
+    if METER_PROVIDER.get().is_none() {
+        tracing::error!(
+            otel_endpoint = %agent_endpoint,
+            "OTLP meter provider FAILED to initialize — metrics will NOT reach Grafana. \
+             Verify OTEL_EXPORTER_OTLP_ENDPOINT is set and the Alloy agent is reachable."
+        );
+    }
 }
 
 fn set_panic_hook() {
@@ -128,11 +151,16 @@ fn build_otlp_tracer_provider(base_endpoint: &str, resource: Resource) -> Option
         format!("{}/v1/traces", base_endpoint)
     };
 
-    let exporter = SpanExporter::builder()
+    let exporter = match SpanExporter::builder()
         .with_http()
-        .with_endpoint(endpoint)
-        .build()
-        .ok()?;
+        .with_endpoint(&endpoint)
+        .build() {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("OTLP trace exporter build failed (endpoint: {}): {:?}", endpoint, e);
+                return None;
+            }
+        };
 
     let batch_processor = BatchSpanProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio).build();
 
@@ -152,11 +180,16 @@ fn build_otlp_meter_provider(base_endpoint: &str, resource: Resource) -> Option<
         format!("{}/v1/metrics", base_endpoint)
     };
 
-    let exporter = MetricExporter::builder()
+    let exporter = match MetricExporter::builder()
         .with_http()
-        .with_endpoint(endpoint)
-        .build()
-        .ok()?;
+        .with_endpoint(&endpoint)
+        .build() {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("OTLP metric exporter build failed (endpoint: {}): {:?}", endpoint, e);
+                return None;
+            }
+        };
 
     let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
         .with_interval(Duration::from_secs(30))
@@ -178,11 +211,16 @@ fn build_otlp_logger_provider(base_endpoint: &str, resource: Resource) -> Option
         format!("{}/v1/logs", base_endpoint)
     };
 
-    let exporter = LogExporter::builder()
+    let exporter = match LogExporter::builder()
         .with_http()
-        .with_endpoint(endpoint)
-        .build()
-        .ok()?;
+        .with_endpoint(&endpoint)
+        .build() {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!("OTLP log exporter build failed (endpoint: {}): {:?}", endpoint, e);
+                return None;
+            }
+        };
 
     let batch_processor = BatchLogProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio).build();
 

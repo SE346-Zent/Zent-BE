@@ -55,7 +55,7 @@ pub fn decide_register(
     if let Some(user) = existing_user_record {
         if user.account_status != pending_status_id {
             return Err(AppError::Conflict(
-                "Email already registered and active".to_string(),
+                "An account with this email already exists".to_string(),
             ));
         }
     }
@@ -115,6 +115,7 @@ mod tests {
             fcm_token: None,
             installation_id: None,
             avatar_url: None,
+            recovery_email: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,

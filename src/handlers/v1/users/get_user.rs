@@ -3,7 +3,7 @@ use std::sync::Arc;
 use sea_orm::{DatabaseConnection, EntityTrait};
 use uuid::Uuid;
 use crate::{
-    core::errors::AppError,
+    core::errors::{AppError, ErrorResponse},
     entities::users,
     extractor::auth_user::AuthUser,
     model::responses::base::ApiResponse,
@@ -17,13 +17,16 @@ use redis::AsyncCommands;
     get,
     path = "/api/v1/users/{id}",
     tag = "users",
+    params(
+        ("id" = Uuid, Path, description = "The unique identifier of the user")
+    ),
     responses(
         (status = 200, description = "Retrieve user successful", body = ApiResponse<UserResponseData>),
-        (status = 403, description = "Forbidden"),
-        (status = 404, description = "Not Found"),
-        (status = 500, description = "Internal Server Error")
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Not Found", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
-    security(("jwt" = []))
+    security(("bearer_auth" = []))
 )]
 pub async fn get_user_handler(
     State(db): State<Arc<DatabaseConnection>>,
@@ -34,7 +37,7 @@ pub async fn get_user_handler(
     let target_user = users::Entity::find_by_id(id)
         .one(db.as_ref())
         .await?
-        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+        .ok_or_else(|| AppError::NotFound("User account not found".to_string()))?;
 
     let effect = get_user::decide_get_user(current_user, target_user.clone())?;
     let mut response_data = effect.response_data;

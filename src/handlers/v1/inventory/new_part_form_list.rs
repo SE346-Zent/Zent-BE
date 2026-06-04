@@ -55,7 +55,7 @@ pub async fn new_part_form_list(
 
     if let Some(status) = query.status.as_deref() {
         let normalized = normalize_status_filter(status)
-            .ok_or_else(|| AppError::BadRequest(format!("Invalid status '{}'; expected pending, approved, or rejected", status)))?;
+            .ok_or_else(|| AppError::BadRequest("Invalid status filter. Expected: pending, approved, or rejected".to_string()))?;
         base_query = base_query.filter(status_condition(normalized));
     }
 

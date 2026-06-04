@@ -9,6 +9,7 @@ use tracing::{info, warn};
 use crate::core::errors::AppError;
 use crate::entities::outbox_records;
 use crate::infrastructure::cache::ValkeyClient;
+use crate::infrastructure::metrics;
 
 /// Dispatch a notification to a specific user.
 ///
@@ -98,6 +99,11 @@ pub async fn send_notification(
         .insert(db_connection)
         .await
         .map_err(|err| AppError::Internal(anyhow::anyhow!("Failed to insert outbox record: {}", err)))?;
+
+    metrics::init().notification_sent_total.add(1, &[
+        opentelemetry::KeyValue::new("channel", "fcm"),
+        opentelemetry::KeyValue::new("category", category_slug.to_string()),
+    ]);
 
     Ok(())
 }

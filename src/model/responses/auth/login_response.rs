@@ -57,4 +57,6 @@ pub struct LoginResponseData {
     pub access_token: String,
     /// Refresh token used to refresh access token
     pub refresh_token: String,
+    /// Session ID — use this for WebSocket AUTH and session management
+    pub session_id: String,
 }

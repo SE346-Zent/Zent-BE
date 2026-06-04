@@ -38,6 +38,7 @@ use crate::model::{
             change_appointment_request::ChangeAppointmentRequest,
             reject_form_query::RejectFormQuery,
             geofence_check_request::GeofenceCheckRequest,
+            edit_request::EditWorkOrderRequest,
         },
         notifications::{
             list_query::NotificationListQuery,
@@ -78,7 +79,7 @@ use crate::model::{
 
 use crate::core::errors::ErrorResponse;
 
-use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, chat, users};
+use crate::handlers::v1::{auth, work_orders, media, inventory, seeding, notifications, chat, users};
 
 // API Documentation Service (v1)
 //
@@ -108,6 +109,8 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
         auth::reset_password_handler,
         auth::change_password_handler,
         auth::google_login_handler,
+        auth::set_recovery_email_handler,
+        auth::verify_recovery_email_handler,
         work_orders::create,
         work_orders::list,
         work_orders::get_details,
@@ -124,6 +127,8 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
         inventory::new_part_form_list::new_part_form_list,
         inventory::new_part_form_detail::new_part_form_detail,
         inventory::admin_analytics::admin_analytics,
+        inventory::my_products::my_products,
+        seeding::create_warranty::create_warranty,
         work_orders::approve_refusal,
         work_orders::deny_refusal,
         work_orders::history,
@@ -134,6 +139,8 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
         work_orders::reject_form_list,
         work_orders::reject_form_detail,
         work_orders::check_geofence,
+        work_orders::edit,
+        work_orders::get_technician_metrics,
         notifications::list::list,
         notifications::get_preferences::get_preferences,
         notifications::update_preferences::update_preferences,
@@ -158,6 +165,8 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
             LogoutRequest,
             ChangePasswordRequest,
             GoogleLoginRequest,
+            crate::model::requests::auth::set_recovery_email_request::SetRecoveryEmailRequest,
+            crate::model::requests::auth::verify_recovery_email_request::VerifyRecoveryEmailRequest,
             CreateWorkOrderRequest,
             WorkOrderQuery,
             crate::model::requests::work_orders::assign_request::AssignWorkOrderRequest,
@@ -185,14 +194,13 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
             crate::model::requests::inventory::check_warranty_request::CheckWarrantyRequest,
             crate::model::responses::inventory::warranty_check_response::WarrantyCheckResponse,
             crate::model::requests::inventory::register_device_request::RegisterDeviceRequest,
-            crate::model::responses::inventory::register_device_response::RegisterDeviceResponse,
-            crate::model::requests::inventory::deny_part_request::DenyPartRequest,
             crate::model::responses::inventory::admin_analytics_response::AdminAnalyticsResponse,
             crate::model::responses::inventory::new_part_form_list_response::NewPartFormListItem,
             crate::model::responses::inventory::new_part_form_list_response::NewPartFormListResponse,
             crate::model::responses::inventory::new_part_form_list_response::NewPartFormStatusSummary,
             crate::model::responses::inventory::new_part_form_detail_response::NewPartFormDetailResponse,
             crate::model::requests::inventory::analytics_query::AnalyticsQuery,
+            crate::model::requests::seeding::create_warranty_request::CreateWarrantyRequest,
             crate::model::responses::inventory::admin_analytics_response::TotalMetric,
             crate::model::responses::inventory::admin_analytics_response::JobCompletionTrend,
             crate::model::responses::inventory::admin_analytics_response::PartCategoryEntry,
@@ -221,6 +229,11 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
             users::change_avatar::ChangeAvatarResponse,
             GeofenceCheckRequest,
             GeofenceCheckResponse,
+            EditWorkOrderRequest,
+            crate::handlers::v1::work_orders::reassign::ReassignResponse,
+            crate::model::responses::work_orders::technician_metrics_response::TechnicianMetricsResponse,
+            crate::model::responses::inventory::my_products_response::MyProductItem,
+            crate::model::responses::inventory::my_products_response::MyProductWarranty,
         )
     ),
     modifiers(&SecurityAddon, &EndpointPathTitles),
@@ -228,6 +241,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
         (name = "auth", description = "Authentication endpoints"),
         (name = "work_orders", description = "Work order management"),
         (name = "inventory", description = "Inventory management"),
+        (name = "seeding", description = "Seeding and warranty management"),
         (name = "notifications", description = "Notification management"),
         (name = "media", description = "Media/OCI endpoints"),
         (name = "chat", description = "Chat & messaging endpoints"),

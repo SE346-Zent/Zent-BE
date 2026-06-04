@@ -15,6 +15,10 @@ use crate::model::requests::media::confirm_update_request::ConfirmUpdateRequest;
     patch,
     path = "/api/v1/media/work_orders/{id}/closing_form/photos/{image_id}",
     request_body(content_type = "multipart/form-data", description = "New image file and metadata (latitude, longitude)"),
+    params(
+        ("id" = Uuid, Path, description = "The unique identifier of the work order"),
+        ("image_id" = Uuid, Path, description = "The unique identifier of the image to update")
+    ),
     responses(
         (status = 200, description = "Photo updated successfully"),
         (status = 400, description = "Bad Request"),
@@ -77,10 +81,10 @@ pub async fn update_closing_form_photo(
         }
     }
 
-    let file_bytes = uploaded_file_data.ok_or_else(|| AppError::BadRequest("File is missing".to_string()))?;
-    let latitude = device_latitude.ok_or_else(|| AppError::BadRequest("Latitude is missing".to_string()))?;
-    let longitude = device_longitude.ok_or_else(|| AppError::BadRequest("Longitude is missing".to_string()))?;
-    let internet_time = device_internet_time.ok_or_else(|| AppError::BadRequest("internet_time is missing".to_string()))?;
+    let file_bytes = uploaded_file_data.ok_or_else(|| AppError::BadRequest("Please select a file to upload".to_string()))?;
+    let latitude = device_latitude.ok_or_else(|| AppError::BadRequest("Location latitude is required".to_string()))?;
+    let longitude = device_longitude.ok_or_else(|| AppError::BadRequest("Location longitude is required".to_string()))?;
+    let internet_time = device_internet_time.ok_or_else(|| AppError::BadRequest("Device internet time is required".to_string()))?;
 
     let work_order_record = work_orders::Entity::find_by_id(work_order_id)
         .one(db_connection.as_ref()).await?

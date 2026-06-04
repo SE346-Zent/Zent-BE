@@ -23,7 +23,11 @@ pub struct GetMessagesQuery {
 fn default_limit() -> i64 { 50 }
 
 #[utoipa::path(
-    get, path = "/api/v1/chat/rooms/{id}/messages", params(GetMessagesQuery),
+    get, path = "/api/v1/chat/rooms/{id}/messages",
+    params(
+        ("id" = String, Path, description = "The unique identifier of the chat room"),
+        GetMessagesQuery
+    ),
     responses(
         (status = 200, description = "Paginated message history", body = ApiResponse<Vec<MessageResponse>>),
         (status = 403, description = "Forbidden", body = ErrorResponse),
@@ -45,7 +49,7 @@ pub async fn get_messages(
 
     // Verify the authenticated user is a member of this room
     let room_uuid = Uuid::parse_str(&room_id)
-        .map_err(|_| AppError::BadRequest("Invalid room_id format".to_string()))?;
+        .map_err(|_| AppError::BadRequest("Invalid room ID".to_string()))?;
     let is_member = chat_room_members::Entity::find()
         .filter(chat_room_members::Column::RoomId.eq(room_uuid))
         .filter(chat_room_members::Column::UserId.eq(user_id))
@@ -53,7 +57,7 @@ pub async fn get_messages(
         .await?
         .is_some();
     if !is_member {
-        return Err(AppError::Forbidden("You are not a member of this room".to_string()));
+        return Err(AppError::Forbidden("You do not have access to this chat room".to_string()));
     }
 
     // Reset unread count to 0 in Valkey when user opens this chat

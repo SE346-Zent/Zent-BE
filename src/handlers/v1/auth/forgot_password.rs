@@ -53,12 +53,27 @@ pub async fn forgot_password_handler(
         .filter(users::Column::Email.eq(&forgot_password_payload.email))
         .one(db_connection.as_ref()).await?;
 
+    let use_recovery_email = forgot_password_payload.use_recovery_email;
+    let primary_email = forgot_password_payload.email.clone();
+
     let forgot_password_effect = forgot_password::decide_forgot_password(user_record.as_ref(), forgot_password_payload)?;
 
-    if let Some(effect) = forgot_password_effect {
+    if let Some(mut effect) = forgot_password_effect {
+        // If user requested recovery email, redirect OTP to their verified recovery address
+        if use_recovery_email == Some(true) {
+            if let Some(user) = user_record.as_ref() {
+                if let Some(ref recovery) = user.recovery_email {
+                    effect.email_address = recovery.clone();
+                } else {
+                    return Err(AppError::BadRequest("No recovery email set for this account".to_string()));
+                }
+            }
+        }
+
         if let Some(client) = valkey_client {
             if let Ok(mut conn) = client.get_connection().await {
-                let valkey_key = format!("forgot_password_verification:{}", effect.email_address);
+                // Always cache under the primary email so verify_forgot_password_otp can find it
+                let valkey_key = format!("forgot_password_verification:{}", primary_email);
                 let valkey_data = serde_json::json!({ "code": effect.recovery_otp, "attempts": 5 }).to_string();
                 let _ = conn.set_ex::<_, _, ()>(&valkey_key, valkey_data, 600).await;
             } else {

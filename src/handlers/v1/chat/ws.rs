@@ -16,7 +16,10 @@ use uuid::Uuid;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use redis::AsyncCommands;
 use crate::core::state::AppState;
-use crate::infrastructure::ws::{WsIncoming, WsOutgoing, ConnectionCommand};
+use crate::infrastructure::ws::{WsIncoming, WsOutgoing, ConnectionCommand, ShutdownSignal};
+use crate::infrastructure::metrics;
+
+const MAX_WS_FRAME_BYTES: usize = 1 * 1024 * 1024; // 1 MiB
 use crate::infrastructure::cron_tasks::{ws_heartbeat, ws_expiry};
 use crate::model::jwt_claims::Claims;
 
@@ -30,47 +33,147 @@ pub async fn ws_handler(
 }
 
 async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
+    // Local connection ID used for tracing the whole connection lifetime.
+    // Distinct from `user_conn_id` (assigned by the manager) so we can also
+    // trace pre-auth activity.
+    let trace_id = Uuid::new_v4();
+
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<ConnectionCommand>();
 
-    // Phase 1: Wait for AUTH frame
-    let user_id = loop {
-        match ws_receiver.next().await {
-            Some(Ok(Message::Text(text))) => {
-                match serde_json::from_str::<WsIncoming>(&text) {
-                    Ok(WsIncoming::Auth { token }) => {
-                        match validate_ws_token(&token, &state.decoding_key) {
-                            Ok(uid) => break uid,
-                            Err(_) => {
+    // Phase 1: Wait for AUTH frame (with timeout)
+    let auth_deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    let (user_id, session_id) = loop {
+        tokio::select! {
+            msg = ws_receiver.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        if text.len() > MAX_WS_FRAME_BYTES {
+                            tracing::warn!(
+                                "[trace {}] WebSocket auth FAILED from {} — first frame is {} bytes, exceeds limit of {} bytes (code 4013)",
+                                trace_id, addr, text.len(), MAX_WS_FRAME_BYTES
+                            );
+                            let _ = ws_sender.send(Message::Text(
+                                serde_json::to_string(&WsOutgoing::Error {
+                                    code: 4013,
+                                    message: "Frame too large".to_string(),
+                                }).unwrap_or_default().into(),
+                            )).await;
+                            metrics::init().ws_auth_fail_total.add(1, &[opentelemetry::KeyValue::new("reason", "frame_too_large")]);
+                            return;
+                        }
+                        match serde_json::from_str::<WsIncoming>(&text) {
+                            Ok(WsIncoming::Auth { token, session_id }) => {
+                                match validate_ws_token(&token, &state.decoding_key) {
+                                    Ok(uid) => {
+                                        let sid = session_id
+                                            .and_then(|s| Uuid::parse_str(&s).ok())
+                                            .unwrap_or_else(Uuid::new_v4);
+                                        break (uid, sid);
+                                    }
+                                    Err(reason) => {
+                                        tracing::warn!(
+                                            "[trace {}] WebSocket auth FAILED from {} — reason: {} (code 4001)",
+                                            trace_id, addr, reason
+                                        );
+                                        let _ = ws_sender.send(Message::Text(
+                                            serde_json::to_string(&WsOutgoing::Error {
+                                                code: 4001,
+                                                message: "Invalid or expired token".to_string(),
+                                            }).unwrap_or_default().into(),
+                                        )).await;
+                                        metrics::init().ws_auth_fail_total.add(1, &[opentelemetry::KeyValue::new("reason", "invalid_token")]);
+                                        return;
+                                    }
+                                }
+                            }
+                            Ok(other) => {
+                                tracing::warn!(
+                                    "[trace {}] WebSocket auth FAILED from {} — first frame was not AUTH, got: {:?} (code 4000)",
+                                    trace_id, addr, other
+                                );
                                 let _ = ws_sender.send(Message::Text(
                                     serde_json::to_string(&WsOutgoing::Error {
-                                        code: 4001,
-                                        message: "Invalid or expired token".to_string(),
+                                        code: 4000,
+                                        message: "First frame must be AUTH".to_string(),
                                     }).unwrap_or_default().into(),
                                 )).await;
+                                metrics::init().ws_auth_fail_total.add(1, &[opentelemetry::KeyValue::new("reason", "not_auth_frame")]);
+                                return;
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "[trace {}] WebSocket auth FAILED from {} — first frame is not valid JSON: {} (code 4002)",
+                                    trace_id, addr, e
+                                );
+                                let _ = ws_sender.send(Message::Text(
+                                    serde_json::to_string(&WsOutgoing::Error {
+                                        code: 4002,
+                                        message: "Invalid JSON in first frame".to_string(),
+                                    }).unwrap_or_default().into(),
+                                )).await;
+                                metrics::init().ws_auth_fail_total.add(1, &[opentelemetry::KeyValue::new("reason", "invalid_json")]);
                                 return;
                             }
                         }
                     }
-                    _ => {
-                        let _ = ws_sender.send(Message::Text(
-                            serde_json::to_string(&WsOutgoing::Error {
-                                code: 4000,
-                                message: "First frame must be AUTH".to_string(),
-                            }).unwrap_or_default().into(),
-                        )).await;
+                    Some(Ok(Message::Close(close_frame))) => {
+                        tracing::info!(
+                            "[trace {}] WebSocket client at {} closed connection before AUTH (close frame: {:?})",
+                            trace_id, addr, close_frame
+                        );
+                        return;
+                    }
+                    Some(Ok(other)) => {
+                        // Non-text, non-Close frames (Binary, Ping, Pong) before AUTH —
+                        // log at debug level since clients may probe with Pings early.
+                        tracing::debug!(
+                            "[trace {}] WebSocket from {} received non-AUTH frame during auth (frame: {:?}), waiting for AUTH",
+                            trace_id, addr, other
+                        );
+                        continue;
+                    }
+                    Some(Err(e)) => {
+                        tracing::warn!(
+                            "[trace {}] WebSocket transport ERROR during auth from {}: {} — connection will be closed",
+                            trace_id, addr, e
+                        );
+                        return;
+                    }
+                    None => {
+                        tracing::warn!(
+                            "[trace {}] WebSocket client at {} DISCONNECTED before sending AUTH frame (stream ended) — possible client bug, network drop, or proxy timeout",
+                            trace_id, addr
+                        );
                         return;
                     }
                 }
             }
-            Some(Ok(_)) => continue,
-            _ => return,
+            _ = tokio::time::sleep_until(auth_deadline) => {
+                tracing::warn!(
+                    "[trace {}] WebSocket auth TIMEOUT from {} — client connected but never sent AUTH within 30s. \
+                     This usually means: (1) client bug, (2) proxy/NAT keeping the TCP socket open, \
+                     or (3) client did not receive the WebSocket upgrade response. Closing with code 4008.",
+                    trace_id, addr
+                );
+                let _ = ws_sender.send(Message::Text(
+                    serde_json::to_string(&WsOutgoing::Error {
+                        code: 4008,
+                        message: "Authentication timeout".to_string(),
+                    }).unwrap_or_default().into(),
+                )).await;
+                let _ = ws_sender.send(Message::Close(None)).await;
+                return;
+            }
         }
     };
 
     let ws_manager = crate::infrastructure::ws::get_ws_manager();
-    ws_manager.register(user_id, cmd_tx.clone()).await;
-    tracing::info!("WebSocket authenticated for user {} from {}", user_id, addr);
+    let user_conn_id = ws_manager.register(user_id, session_id, cmd_tx.clone()).await;
+    tracing::info!("WebSocket authenticated for user {} (conn {}, session {}) from {}", user_id, user_conn_id, session_id, addr);
+
+    // Track active connection
+    metrics::init().ws_connections_active.add(1, &[]);
 
     // Heartbeat pong counter — incremented by reader on each protocol-level Pong
     let pong_counter = Arc::new(AtomicU32::new(0));
@@ -79,35 +182,55 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     let initial_deadline = Instant::now() + Duration::from_secs(state.access_token_ttl.0 as u64);
     let (deadline_tx, deadline_rx) = tokio::sync::watch::channel(initial_deadline);
 
+    // Cooperative shutdown signal — old-connection tasks stop when a new
+    // connection registers for the same user.
+    let shutdown = ShutdownSignal::new();
+
     // Spawn heartbeat + expiry from cron_tasks
     let hb_user = user_id;
     let hb_mgr = ws_manager.clone();
     let hb_tx = cmd_tx.clone();
     let hb_pong = pong_counter.clone();
-    tokio::spawn(async move { ws_heartbeat::run_heartbeat(hb_user, hb_mgr, hb_tx, hb_pong).await });
+    let hb_shutdown = shutdown.receiver();
+    tokio::spawn(async move { ws_heartbeat::run_heartbeat(hb_user, hb_mgr, hb_tx, hb_pong, user_conn_id, hb_shutdown).await });
 
     let ex_user = user_id;
     let ex_mgr = ws_manager.clone();
     let ex_tx = cmd_tx.clone();
     let ttl = state.access_token_ttl.0;
-    tokio::spawn(async move { ws_expiry::run_expiry_enforcer(ex_user, ex_mgr, ex_tx, ttl, deadline_rx).await });
+    let ex_shutdown = shutdown.receiver();
+    tokio::spawn(async move { ws_expiry::run_expiry_enforcer(ex_user, ex_mgr, ex_tx, ttl, deadline_rx, user_conn_id, ex_shutdown).await });
 
     // Writer task
+    let writer_user_id = user_id;
+    let writer_conn_id = user_conn_id;
     let mut writer_sender = ws_sender;
     tokio::spawn(async move {
         while let Some(cmd) = cmd_rx.recv().await {
             match cmd {
                 ConnectionCommand::Send(text) => {
                     if writer_sender.send(Message::Text(text.into())).await.is_err() {
+                        tracing::warn!(
+                            "[conn {}] Writer task: failed to send text message to user {} — client socket is broken, exiting writer loop",
+                            writer_conn_id, writer_user_id
+                        );
                         break;
                     }
                 }
                 ConnectionCommand::Ping(data) => {
                     if writer_sender.send(Message::Ping(data.into())).await.is_err() {
+                        tracing::info!(
+                            "[conn {}] Writer task: failed to send Ping to user {} — socket broken, exiting writer loop",
+                            writer_conn_id, writer_user_id
+                        );
                         break;
                     }
                 }
                 ConnectionCommand::Close { code, reason } => {
+                    tracing::info!(
+                        "[conn {}] Writer task: sending Close frame (code={}, reason={:?}) to user {}",
+                        writer_conn_id, code, reason, writer_user_id
+                    );
                     let _ = writer_sender.send(Message::Close(Some(axum::extract::ws::CloseFrame {
                         code,
                         reason: reason.into(),
@@ -116,19 +239,34 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                 }
             }
         }
+        tracing::debug!("[conn {}] Writer task exited for user {}", writer_conn_id, writer_user_id);
     });
 
-    // Main read loop
+    // Main read loop. `had_explicit_break` distinguishes between
+    // a loop that exited via `break` (Close frame or transport error)
+    // versus a loop that ended because `next()` returned `None`
+    // (client disconnected without sending a Close frame).
+    let mut had_explicit_break = false;
     while let Some(msg) = ws_receiver.next().await {
         match msg {
             Ok(Message::Text(text)) => {
+                if text.len() > MAX_WS_FRAME_BYTES {
+                    tracing::warn!("Oversized frame ({} bytes) from user {}", text.len(), user_id);
+                    let _ = cmd_tx.send(ConnectionCommand::Send(
+                        serde_json::to_string(&WsOutgoing::Error {
+                            code: 4013,
+                            message: "Frame too large".to_string(),
+                        }).unwrap_or_default(),
+                    ));
+                    break;
+                }
                 if let Ok(incoming) = serde_json::from_str::<WsIncoming>(&text) {
                     match incoming {
                         WsIncoming::Viewing { room_id } => {
-                            handle_viewing(&state, user_id, &room_id).await;
+                            handle_viewing(&state, session_id, &room_id).await;
                         }
                         WsIncoming::Leaving => {
-                            handle_leaving(&state, user_id).await;
+                            handle_leaving(&state, session_id).await;
                         }
                         WsIncoming::Message { room_id, content, image_url, reply_to } => {
                             handle_ws_message(&state, user_id, &room_id, content, image_url, reply_to).await;
@@ -155,44 +293,97 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                 // Protocol-level Pong from client — increment heartbeat counter
                 pong_counter.fetch_add(1, Ordering::Release);
             }
-            Ok(Message::Close(_)) => break,
+            Ok(Message::Close(close_frame)) => {
+                tracing::info!(
+                    "[conn {}] WebSocket closed by client for user {} — close frame: {:?}",
+                    user_conn_id, user_id, close_frame
+                );
+                had_explicit_break = true;
+                break;
+            }
             Err(e) => {
-                tracing::warn!("WebSocket error for user {}: {}", user_id, e);
+                tracing::warn!(
+                    "[conn {}] WebSocket TRANSPORT ERROR for user {}: {} — dropping connection",
+                    user_conn_id, user_id, e
+                );
+                had_explicit_break = true;
                 break;
             }
             _ => {}
         }
     }
 
-    // Cleanup
-    handle_leaving(&state, user_id).await;
-    ws_manager.unregister(&user_id).await;
-    tracing::info!("WebSocket disconnected for user {}", user_id);
+    // Detect whether the read loop exited because the client sent a Close frame,
+    // a transport error happened, or the client just disappeared (no Close frame).
+    // We infer "no Close frame" by checking the last entry into the loop after
+    // the explicit `break`s above — if we get here, the stream ended.
+    if !had_explicit_break {
+        tracing::warn!(
+            "[conn {}] WebSocket stream ended WITHOUT a Close frame for user {} — \
+             client likely disconnected abruptly (network drop, app killed, NAT timeout, \
+             or proxy closed the connection). No graceful close handshake received.",
+            user_conn_id, user_id
+        );
+    }
+
+    // Cleanup — stop spawned tasks and unregister this connection.
+    // Always clear viewing state for this session since the connection is closing.
+    shutdown.shutdown();
+    handle_leaving(&state, session_id).await;
+    ws_manager.unregister(&user_id, user_conn_id).await;
+
+    // Track connection close
+    metrics::init().ws_connections_active.add(-1, &[]);
+    let close_reason = if had_explicit_break { "explicit_close" } else { "stream_ended" };
+    metrics::init().ws_closed_total.add(1, &[
+        opentelemetry::KeyValue::new("reason", close_reason),
+    ]);
+
+    tracing::info!(
+        "[conn {}] WebSocket disconnected for user {} session {} (cleanup complete)",
+        user_conn_id, user_id, session_id
+    );
 }
 
-fn validate_ws_token(token: &str, decoding_key: &DecodingKey) -> Result<Uuid, ()> {
-    let data = decode::<Claims>(token, decoding_key, &Validation::default()).map_err(|_| ())?;
-    Uuid::parse_str(&data.claims.sub).map_err(|_| ())
+fn validate_ws_token(token: &str, decoding_key: &DecodingKey) -> Result<Uuid, &'static str> {
+    use jsonwebtoken::errors::ErrorKind;
+    let data = decode::<Claims>(token, decoding_key, &Validation::default())
+        .map_err(|e| match e.kind() {
+            ErrorKind::ExpiredSignature => "token expired",
+            ErrorKind::InvalidSignature => "invalid signature",
+            ErrorKind::InvalidToken => "malformed token",
+            ErrorKind::InvalidSubject => "invalid 'sub' claim",
+            ErrorKind::InvalidIssuer => "invalid 'iss' claim",
+            ErrorKind::InvalidAudience => "invalid 'aud' claim",
+            ErrorKind::ImmatureSignature => "token not yet valid (nbf)",
+            ErrorKind::MissingRequiredClaim(_) => "missing required claim",
+            ErrorKind::Base64(_) => "base64 decode error in token",
+            ErrorKind::Json(_) => "JSON error in token payload",
+            ErrorKind::Utf8(_) => "UTF-8 error in token payload",
+            _ => "invalid token",
+        })?;
+    Uuid::parse_str(&data.claims.sub).map_err(|_| "subject 'sub' is not a valid UUID")
 }
 
-/// Mark user as viewing a room: set chat:viewing:{uid} and reset unread.
-async fn handle_viewing(state: &AppState, user_id: Uuid, room_id: &str) {
+/// Mark session as viewing a room: set chat:viewing:{session_id} and reset unread.
+async fn handle_viewing(state: &AppState, session_id: Uuid, room_id: &str) {
     if let Some(ref vc) = state.valkey {
         if let Ok(mut conn) = vc.get_connection().await {
-            let viewing_key = format!("chat:viewing:{}", user_id);
-            let unread_key = format!("chat:unread:{}:{}", room_id, user_id);
+            let viewing_key = format!("chat:viewing:{}", session_id);
+            let unread_key = format!("chat:unread:{}:{}", room_id, session_id);
             let _: () = conn.set(&viewing_key, room_id).await.unwrap_or_default();
+            let _: () = conn.expire(&viewing_key, 86400).await.unwrap_or_default();
             let _: () = conn.set(&unread_key, 0u64).await.unwrap_or_default();
             let _: () = conn.expire(&unread_key, 86400).await.unwrap_or_default();
         }
     }
 }
 
-/// Clear viewing state when user leaves a chat.
-async fn handle_leaving(state: &AppState, user_id: Uuid) {
+/// Clear viewing state when a session leaves a chat.
+async fn handle_leaving(state: &AppState, session_id: Uuid) {
     if let Some(ref vc) = state.valkey {
         if let Ok(mut conn) = vc.get_connection().await {
-            let viewing_key = format!("chat:viewing:{}", user_id);
+            let viewing_key = format!("chat:viewing:{}", session_id);
             let _: () = conn.del(&viewing_key).await.unwrap_or_default();
         }
     }
@@ -235,7 +426,15 @@ async fn handle_ws_message(
     let col = state.mongodb.collection::<mongodb::bson::Document>("messages");
     let result = match col.insert_one(doc).await {
         Ok(r) => r,
-        Err(_) => return,
+        Err(e) => {
+            tracing::error!(
+                sender_id = %sender_id,
+                room_id = room_id,
+                error = %e,
+                "Failed to insert chat message into MongoDB — message lost"
+            );
+            return;
+        }
     };
 
     let message_id = result.inserted_id.as_object_id()
@@ -273,12 +472,21 @@ async fn handle_ws_message(
                     continue;
                 }
 
-                // Check if recipient is viewing this room
+                // Check if ANY of the recipient's sessions is viewing this room
                 let is_viewing = if let Some(ref vc) = state.valkey {
                     if let Ok(mut conn) = vc.get_connection().await {
-                        let viewing_key = format!("chat:viewing:{}", member.user_id);
-                        let viewing_room: Option<String> = conn.get(&viewing_key).await.unwrap_or(None);
-                        viewing_room.as_deref() == Some(room_id)
+                        let ws_mgr = crate::infrastructure::ws::get_ws_manager();
+                        let session_ids = ws_mgr.get_user_session_ids(&member.user_id).await;
+                        let mut viewing = false;
+                        for sid in session_ids {
+                            let viewing_key = format!("chat:viewing:{}", sid);
+                            let viewing_room: Option<String> = conn.get(&viewing_key).await.unwrap_or(None);
+                            if viewing_room.as_deref() == Some(room_id) {
+                                viewing = true;
+                                break;
+                            }
+                        }
+                        viewing
                     } else {
                         false
                     }
@@ -287,7 +495,12 @@ async fn handle_ws_message(
                 };
 
                 // Try WebSocket delivery
-                let _ = ws_manager.send_to_user(&member.user_id, &payload).await;
+                let send_result = ws_manager.send_to_user(&member.user_id, &payload).await;
+                if send_result.is_ok() {
+                    metrics::init().ws_messages_sent_total.add(1, &[
+                        opentelemetry::KeyValue::new("type", "chat_message"),
+                    ]);
+                }
 
                 if !is_viewing {
                     // Recipient is not viewing — increment unread + send push notification

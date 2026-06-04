@@ -6,6 +6,7 @@ use jsonwebtoken::EncodingKey;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::state::AccessTokenDefaultTTLSeconds;
 use crate::infrastructure::cache::ValkeyClient;
+use crate::infrastructure::metrics;
 use crate::entities::{users, sessions};
 use crate::services::v1::auth::refresh_token;
 use crate::services::v1::core::token_service;
@@ -79,8 +80,14 @@ pub async fn refresh_token_handler(
                 return Err(AppError::Unauthorized("Refresh token is no longer valid".to_string()));
             }
             let _: () = valkey_conn.set_ex(&whitelist_key, &token_bundle.refresh_token_hash, remaining_session_ttl).await?;
+
+            metrics::init().auth_token_refresh_total.add(1, &[
+                opentelemetry::KeyValue::new("status", "success"),
+            ]);
+
             Ok(Json(ApiResponse::success(200, "Refreshed", LoginResponseData {
                 user: user_info, access_token: token_bundle.access_token, refresh_token: token_bundle.refresh_token,
+                session_id: session_id.to_string(),
             })))
         }
         refresh_token::RefreshTokenEffect::ReuseAttackDetected { session_id } => {
@@ -88,6 +95,16 @@ pub async fn refresh_token_handler(
                 .col_expr(sessions::Column::RevokedAt, Expr::value(chrono::Utc::now()))
                 .filter(sessions::Column::Id.eq(session_id))
                 .exec(db_connection.as_ref()).await?;
+
+            metrics::init().auth_token_refresh_total.add(1, &[
+                opentelemetry::KeyValue::new("status", "reuse_attack"),
+            ]);
+
+            tracing::warn!(
+                session_id = %session_id,
+                "Refresh token reuse attack detected — session revoked"
+            );
+
             Err(AppError::Unauthorized("Refresh token reuse detected. Please sign in again".to_string()))
         }
     }

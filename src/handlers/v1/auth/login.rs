@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::state::{AccessTokenDefaultTTLSeconds, SessionDefaultTTLSeconds};
 use crate::infrastructure::cache::ValkeyClient;
+use crate::infrastructure::metrics;
 use crate::entities::{login_audit_logs, sessions, users};
 use chrono::Utc;
 use crate::utils::hasher;
@@ -19,6 +20,7 @@ use crate::services::v1::auth::login;
 use crate::model::requests::auth::user_login_request::UserLoginRequest;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::auth::login_response::LoginResponseData;
+use redis::AsyncCommands;
 
 #[utoipa::path(
     post,
@@ -71,6 +73,49 @@ pub async fn login_handler(
     let is_password_valid = hasher::verify_password(payload.password, user_record.password_hash.clone()).await?;
     let login_effect = login::decide_login(&user_record, is_password_valid, access_token_ttl, session_ttl, &encoding_key)?;
 
+    // Enforce 10-device session limit: evict the oldest session if at capacity
+    const MAX_SESSIONS: u64 = 10;
+    let active_count = sessions::Entity::find()
+        .filter(sessions::Column::UserId.eq(login_effect.user_id))
+        .filter(sessions::Column::RevokedAt.is_null())
+        .filter(sessions::Column::ExpiresAt.gt(Utc::now()))
+        .count(db.as_ref())
+        .await?;
+
+    if active_count >= MAX_SESSIONS {
+        // Find the oldest active session
+        if let Some(oldest) = sessions::Entity::find()
+            .filter(sessions::Column::UserId.eq(login_effect.user_id))
+            .filter(sessions::Column::RevokedAt.is_null())
+            .filter(sessions::Column::ExpiresAt.gt(Utc::now()))
+            .order_by_asc(sessions::Column::CreatedAt)
+            .one(db.as_ref())
+            .await?
+        {
+            tracing::info!(
+                "Session limit reached for user {} — evicting oldest session {} (device: {})",
+                login_effect.user_id, oldest.id, oldest.device_fingerprint
+            );
+
+            // Revoke the session in DB
+            let mut active: sessions::ActiveModel = oldest.clone().into();
+            active.revoked_at = Set(Some(Utc::now()));
+            active.update(db.as_ref()).await?;
+
+            // Remove from Valkey whitelist
+            if let Some(ref client) = valkey_client {
+                if let Ok(mut conn) = client.get_connection().await {
+                    let whitelist_key = format!("whitelist:session:{}", oldest.id);
+                    let _: () = conn.del(&whitelist_key).await.unwrap_or_default();
+                }
+            }
+
+            // Close any WebSocket connections for the evicted session
+            let ws_manager = crate::infrastructure::ws::get_ws_manager();
+            ws_manager.close_session_connections(&login_effect.user_id, &oldest.id).await;
+        }
+    }
+
     if let Some(fcm_token) = payload.fcm_token {
         let mut user_active: users::ActiveModel = user_record.into();
         user_active.fcm_token = Set(Some(fcm_token));
@@ -116,6 +161,12 @@ pub async fn login_handler(
             tracing::warn!("Valkey unavailable — session whitelist not set");
         }
     }
+
+    // Track successful login
+    metrics::init().auth_login_total.add(1, &[
+        opentelemetry::KeyValue::new("method", "password"),
+        opentelemetry::KeyValue::new("status", "success"),
+    ]);
 
     Ok(Json(ApiResponse::success(200, "Login successful", login_effect.response_data)))
 }

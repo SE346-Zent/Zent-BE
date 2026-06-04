@@ -1,9 +1,9 @@
 name: Publish Docker Image to GHCR
 
 on:
-  push:
+  pull_request:
     branches: ["main"]
-    tags: [ 'v*.*.*' ]
+    types: [closed]
   workflow_dispatch:
 
 env:
@@ -11,7 +11,8 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push-image:
+  build-and-push:
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -25,7 +26,6 @@ jobs:
 
       - name: Bump version and push tag
         id: tag_version
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: anothrNick/github-tag-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

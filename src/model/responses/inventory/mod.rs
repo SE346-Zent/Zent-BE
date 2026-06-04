@@ -6,3 +6,4 @@ pub mod verify_product_response;
 pub mod admin_analytics_response;
 pub mod new_part_form_list_response;
 pub mod new_part_form_detail_response;
+pub mod my_products_response;

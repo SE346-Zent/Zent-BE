@@ -15,6 +15,9 @@ use crate::model::requests::media::confirm_upload_request::ConfirmUploadRequest;
     post,
     path = "/api/v1/media/work_orders/{id}/closing_form/photos",
     request_body(content_type = "multipart/form-data", description = "Image file and metadata (latitude, longitude, phase)"),
+    params(
+        ("id" = Uuid, Path, description = "The unique identifier of the work order")
+    ),
     responses(
         (status = 200, description = "Photo uploaded successfully"),
         (status = 400, description = "Bad Request"),
@@ -81,17 +84,17 @@ pub async fn upload_closing_form_photo(
         }
     }
 
-    let file_bytes = uploaded_file_data.ok_or_else(|| AppError::BadRequest("File is missing".to_string()))?;
-    let latitude = device_latitude.ok_or_else(|| AppError::BadRequest("Latitude is missing".to_string()))?;
-    let longitude = device_longitude.ok_or_else(|| AppError::BadRequest("Longitude is missing".to_string()))?;
-    let internet_time = device_internet_time.ok_or_else(|| AppError::BadRequest("Internet time is missing".to_string()))?;
+    let file_bytes = uploaded_file_data.ok_or_else(|| AppError::BadRequest("Please select a file to upload".to_string()))?;
+    let latitude = device_latitude.ok_or_else(|| AppError::BadRequest("Location latitude is required".to_string()))?;
+    let longitude = device_longitude.ok_or_else(|| AppError::BadRequest("Location longitude is required".to_string()))?;
+    let internet_time = device_internet_time.ok_or_else(|| AppError::BadRequest("Device internet time is required".to_string()))?;
 
     if service_phase.is_empty() {
-        return Err(AppError::BadRequest("Phase is missing".to_string()));
+        return Err(AppError::BadRequest("Service phase is required".to_string()));
     }
 
     if internet_time.is_negative() {
-        return Err(AppError::BadRequest("Internet time must be a positive integer".to_string()));
+        return Err(AppError::BadRequest("Device internet time must be a valid timestamp".to_string()));
     }
 
     let work_order_record = work_orders::Entity::find_by_id(work_order_id)

@@ -53,7 +53,7 @@ pub fn decide_refresh_token(
 ) -> Result<RefreshTokenEffect, AppError> {
     if session_record.revoked_at.is_some() || session_record.expires_at < Utc::now() {
         return Err(AppError::Unauthorized(
-            "Session invalid or expired".to_string(),
+            "Session is invalid or has expired".to_string(),
         ));
     }
 
@@ -113,6 +113,7 @@ mod tests {
             fcm_token: None,
             installation_id: None,
             avatar_url: None,
+            recovery_email: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,

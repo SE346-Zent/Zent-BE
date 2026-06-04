@@ -7,6 +7,7 @@ use crate::services::v1::inventory::ports::{
     ZeusInventoryClient, ZeusPart, ZeusPartCatalog, ZeusProduct, ZeusProductModel,
     ZeusLutCollection,
 };
+use crate::infrastructure::metrics;
 use uuid::Uuid;
 use reqwest::Client;
 
@@ -52,23 +53,67 @@ impl ZeusClient {
         &self,
         req: reqwest::RequestBuilder,
     ) -> Result<ZeusEnvelope<T>, AppError> {
+        let start = std::time::Instant::now();
         let res = req.send().await.map_err(|e| {
-            AppError::Internal(anyhow::anyhow!("Failed to send request to Zeus: {}", e))
+            metrics::init().external_api_errors_total.add(1, &[
+                opentelemetry::KeyValue::new("service", "zeus"),
+            ]);
+            AppError::ServiceUnavailable(format!("Cannot reach inventory service: {}", e))
         })?;
 
         let status = res.status();
         if !status.is_success() {
             let err_body = res.text().await.unwrap_or_default();
-            return Err(AppError::Internal(anyhow::anyhow!(
-                "Zeus API error: {} - {}",
-                status,
-                err_body
-            )));
+            metrics::init().external_api_errors_total.add(1, &[
+                opentelemetry::KeyValue::new("service", "zeus"),
+                opentelemetry::KeyValue::new("status", status.as_u16().to_string()),
+            ]);
+            tracing::warn!(
+                status = %status,
+                body = %err_body,
+                "Zeus API returned error"
+            );
+            return Err(match status.as_u16() {
+                400 => AppError::BadRequest(format!("Inventory service: {}", Self::extract_error_message(&err_body))),
+                404 => AppError::NotFound(format!("Inventory service: {}", Self::extract_error_message(&err_body))),
+                409 => AppError::Conflict(format!("Inventory service: {}", Self::extract_error_message(&err_body))),
+                422 => AppError::ValidationError(format!("Inventory service: {}", Self::extract_error_message(&err_body))),
+                _ => AppError::Internal(anyhow::anyhow!(
+                    "Inventory service error (HTTP {}): {}",
+                    status,
+                    Self::extract_error_message(&err_body)
+                )),
+            });
         }
 
-        res.json().await.map_err(|e| {
-            AppError::Internal(anyhow::anyhow!("Failed to parse Zeus response: {}", e))
-        })
+        let result = res.json().await.map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to parse inventory service response: {}", e))
+        });
+
+        metrics::init().external_api_duration.record(
+            start.elapsed().as_secs_f64(),
+            &[opentelemetry::KeyValue::new("service", "zeus")],
+        );
+
+        result
+    }
+
+    /// Extract a human-readable error message from a Zeus/SCM JSON error body.
+    /// Falls back to the raw body if parsing fails.
+    fn extract_error_message(body: &str) -> String {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(body) {
+            if let Some(msg) = val.get("error").and_then(|v| v.as_str()) {
+                return msg.to_string();
+            }
+            if let Some(msg) = val.get("message").and_then(|v| v.as_str()) {
+                return msg.to_string();
+            }
+        }
+        if body.len() > 200 {
+            format!("{}...", &body[..200])
+        } else {
+            body.to_string()
+        }
     }
 
     async fn send_expect_envelope_or_not_found<T: serde::de::DeserializeOwned>(
@@ -78,27 +123,27 @@ impl ZeusClient {
         id: Uuid,
     ) -> Result<ZeusEnvelope<T>, AppError> {
         let res = req.send().await.map_err(|e| {
-            AppError::Internal(anyhow::anyhow!("Failed to send request to Zeus: {}", e))
+            AppError::ServiceUnavailable(format!("Cannot reach inventory service: {}", e))
         })?;
 
         let status = res.status();
         if status == reqwest::StatusCode::NOT_FOUND {
             return Err(AppError::NotFound(format!(
-                "{} with ID {} not found in Zeus",
+                "{} with ID {} not found in inventory system",
                 entity_label, id
             )));
         }
         if !status.is_success() {
             let err_body = res.text().await.unwrap_or_default();
             return Err(AppError::Internal(anyhow::anyhow!(
-                "Zeus API error: {} - {}",
+                "Inventory service error (HTTP {}): {}",
                 status,
-                err_body
+                Self::extract_error_message(&err_body)
             )));
         }
 
         res.json().await.map_err(|e| {
-            AppError::Internal(anyhow::anyhow!("Failed to parse Zeus response: {}", e))
+            AppError::Internal(anyhow::anyhow!("Failed to parse inventory service response: {}", e))
         })
     }
 }

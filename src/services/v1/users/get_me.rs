@@ -21,6 +21,7 @@ pub fn decide_get_me(user: users::Model) -> GetMeEffect {
         province: user.province,
         account_status_id: user.account_status,
         employee_id: crate::utils::user::get_employee_id(user.role_id, user.id),
+        avatar_image_name: user.avatar_url,
         created_at: user.created_at.to_rfc3339(),
         updated_at: user.updated_at.to_rfc3339(),
     };
@@ -50,6 +51,7 @@ mod tests {
             role_id: 3,
             province: None,
             avatar_url: None,
+            recovery_email: None,
             fcm_token: None,
             installation_id: None,
             created_at: Utc.with_ymd_and_hms(2026, 5, 17, 12, 0, 0).unwrap(),

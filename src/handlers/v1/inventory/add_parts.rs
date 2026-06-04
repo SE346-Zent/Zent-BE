@@ -7,7 +7,7 @@ use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::AppError;
 use crate::extractor::auth_user::AuthUser;
 use crate::infrastructure::cache::ValkeyClient;
-use crate::model::responses::base::ApiResponse;
+use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 use crate::entities::{work_orders as work_orders_ent, users};
 use crate::utils::oci;
 
@@ -16,8 +16,11 @@ use crate::utils::oci;
     path = "/api/v1/inventory/work_orders/{id}/parts",
     request_body(content_type = "multipart/form-data", description = "Part metadata and image files"),
     tag = "inventory",
+    params(
+        ("id" = Uuid, Path, description = "The unique identifier of the work order")
+    ),
     responses(
-        (status = 200, description = "Parts added successfully", body = ApiResponse<String>),
+        (status = 200, description = "Parts added successfully", body = MessageOnlyResponse),
         (status = 400, description = "Bad Request"),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Work order not found"),
@@ -86,15 +89,15 @@ pub async fn add_parts(
     }
 
     // Validate required fields
-    let part_number = part_number.ok_or_else(|| AppError::BadRequest("partNumber is required".to_string()))?;
-    let part_types_id = part_types_id.ok_or_else(|| AppError::BadRequest("partTypesId is required".to_string()))?;
-    let serial_number = serial_number.ok_or_else(|| AppError::BadRequest("serialNumber is required".to_string()))?;
+    let part_number = part_number.ok_or_else(|| AppError::BadRequest("Part number is required".to_string()))?;
+    let part_types_id = part_types_id.ok_or_else(|| AppError::BadRequest("Part type is required".to_string()))?;
+    let serial_number = serial_number.ok_or_else(|| AppError::BadRequest("Serial number is required".to_string()))?;
 
     if part_number.is_empty() {
-        return Err(AppError::BadRequest("partNumber cannot be empty".to_string()));
+        return Err(AppError::BadRequest("Part number cannot be empty".to_string()));
     }
     if serial_number.is_empty() {
-        return Err(AppError::BadRequest("serialNumber cannot be empty".to_string()));
+        return Err(AppError::BadRequest("Serial number cannot be empty".to_string()));
     }
     if photo_files.len() > 5 {
         return Err(AppError::BadRequest("Maximum 5 photos allowed".to_string()));
@@ -157,9 +160,9 @@ pub async fn add_parts(
         "province": wo_province,
     });
 
-    let title = format!("New Parts Added: Work Order {}", wo_number);
+    let title = format!("New Parts Added: {}", wo_number);
     let body = format!(
-        "Technician {} added new parts to WO {} in {}",
+        "Technician {} added new parts to {} in {}",
         auth.user.full_name, wo_number, wo_province
     );
 

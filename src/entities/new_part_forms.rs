@@ -15,6 +15,7 @@ pub struct Model {
     pub work_order_id: Uuid,
     pub work_order_number: String,
     pub status: String,
+    pub new_part_request_status_id: i32,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub deleted_at: Option<DateTimeUtc>,
@@ -24,6 +25,14 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::new_part_form_image_links::Entity")]
     NewPartFormImageLinks,
+    #[sea_orm(
+        belongs_to = "super::new_part_request_statuses::Entity",
+        from = "Column::NewPartRequestStatusId",
+        to = "super::new_part_request_statuses::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Restrict"
+    )]
+    NewPartRequestStatuses,
     #[sea_orm(
         belongs_to = "super::part_types::Entity",
         from = "Column::PartTypesId",
@@ -53,6 +62,12 @@ pub enum Relation {
 impl Related<super::new_part_form_image_links::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::NewPartFormImageLinks.def()
+    }
+}
+
+impl Related<super::new_part_request_statuses::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::NewPartRequestStatuses.def()
     }
 }
 

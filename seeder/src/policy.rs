@@ -17,7 +17,8 @@ pub async fn seed_policies(db: &DatabaseConnection) -> Result<HashMap<String, St
         ("geofencing_radius", "2000"),
         ("auto_assign_threshold_hours", "3"),
         ("unassigned_cleanup_threshold_hours", "3"),
-        ("internet_time_drift_minutes", "30")
+        ("internet_time_drift_minutes", "30"),
+        ("customer_edit_window_hours", "5")
     ];
 
     for (name, value) in policies {

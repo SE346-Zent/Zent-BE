@@ -73,7 +73,7 @@ pub fn decide_register_device(
     // Validate province (must be HN or HCM)
     let province = registration_payload.province.to_uppercase();
     if province != "HN" && province != "HCM" {
-        return Err(AppError::BadRequest("Province must be HN or HCM".to_string()));
+        return Err(AppError::BadRequest("Registration is only available in Hanoi (HN) or Ho Chi Minh City (HCM)".to_string()));
     }
 
     // Country is always Vietnam
@@ -169,7 +169,7 @@ mod tests {
         );
         assert!(result.is_err());
         match result.unwrap_err() {
-            AppError::BadRequest(msg) => assert_eq!(msg, "Province must be HN or HCM"),
+            AppError::BadRequest(msg) => assert!(msg.contains("HN") && msg.contains("HCM")),
             _ => panic!("Expected BadRequest"),
         }
     }

@@ -7,7 +7,7 @@ use seeder::{
     seed_random_products, seed_random_warranties, seed_random_work_orders, seed_roles,
     seed_system_user, seed_users, seed_work_order_closing_forms, seed_work_order_statuses,
     seed_part_statuses, seed_work_order_symptoms, seed_part_conditions,
-    seed_policies, seed_warranty_statuses
+    seed_policies, seed_warranty_statuses, seed_admin_technician_chat_rooms,
 };
 use serde_json::to_string_pretty;
 use std::path::PathBuf;
@@ -209,6 +209,13 @@ async fn main() -> Result<()> {
             }
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Step 3.5: seed admin-technician chat rooms (idempotent)
+    // -----------------------------------------------------------------------
+    println!("\n--- Seeding Admin-Technician Chat Rooms ---");
+    let rooms_created = seed_admin_technician_chat_rooms(&db).await?;
+    println!("  Created {} new chat rooms", rooms_created);
 
     // -----------------------------------------------------------------------
     // Step 4: seed products (needs users, product_status, product_models)

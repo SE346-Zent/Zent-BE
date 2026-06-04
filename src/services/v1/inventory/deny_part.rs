@@ -34,13 +34,13 @@ pub fn decide_deny_part(
 ) -> Result<DenyPartEffect, AppError> {
     let trimmed_reason = denial_reason.trim();
     if trimmed_reason.len() < 10 {
-        return Err(AppError::BadRequest(format!("Denial reason must be at least 10 characters; got {}", trimmed_reason.len())));
+        return Err(AppError::BadRequest("Denial reason must be at least 10 characters".to_string()));
     }
     if trimmed_reason.len() > 2000 {
-        return Err(AppError::BadRequest(format!("Denial reason must not exceed 2000 characters; got {}", trimmed_reason.len())));
+        return Err(AppError::BadRequest("Denial reason must not exceed 2000 characters".to_string()));
     }
     if current_form_status.to_lowercase() != "pending" {
-        return Err(AppError::BadRequest(format!("Cannot deny part with status '{}'; must be 'pending'", current_form_status)));
+        return Err(AppError::BadRequest("Only pending parts can be denied".to_string()));
     }
     Ok(DenyPartEffect {
         target_part_form_id,

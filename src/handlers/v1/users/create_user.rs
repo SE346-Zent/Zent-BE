@@ -75,6 +75,9 @@ pub async fn create_user_handler(
         account_status_id: user_model.account_status,
         employee_id: crate::utils::user::get_employee_id(user_model.role_id, user_model.id),
         rating_counts: None,
+        average_rating: None,
+        workload: None,
+        avatar_image_name: user_model.avatar_url,
         created_at: user_model.created_at.to_rfc3339(),
         updated_at: user_model.updated_at.to_rfc3339(),
     })))

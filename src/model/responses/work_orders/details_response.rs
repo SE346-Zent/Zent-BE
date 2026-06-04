@@ -59,4 +59,6 @@ pub struct WorkOrderDetails {
     pub updated_at: String,
     /// Warranty status of the product (active, expired, none).
     pub warranty_status: Option<String>,
+    /// Timestamp when the work order transitioned to "In Progress" (GMT+7), or null if not started.
+    pub started_at: Option<String>,
 }

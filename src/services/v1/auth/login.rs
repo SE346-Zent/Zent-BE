@@ -54,12 +54,12 @@ pub fn decide_login(
 ) -> Result<LoginEffect, AppError> {
     // 1. Check if user is deleted
     if user_record.deleted_at.is_some() {
-        return Err(AppError::Unauthorized("Invalid credentials".to_string()));
+        return Err(AppError::Unauthorized("Invalid email or password".to_string()));
     }
 
     // 2. Verify password (passed in)
     if !is_password_valid {
-        return Err(AppError::Unauthorized("Invalid credentials".to_string()));
+        return Err(AppError::Unauthorized("Invalid email or password".to_string()));
     }
 
     // 3. Verify account status
@@ -72,7 +72,7 @@ pub fn decide_login(
             ));
         }
         _ => {
-            return Err(AppError::Forbidden(format!("Account is {:?}", account_status)));
+            return Err(AppError::Forbidden("Account is not active".to_string()));
         }
     }
 
@@ -103,6 +103,7 @@ pub fn decide_login(
             },
             access_token: token_bundle.access_token,
             refresh_token: token_bundle.refresh_token,
+            session_id: session_id.to_string(),
         },
     })
 }
@@ -138,6 +139,7 @@ mod tests {
             fcm_token: None,
             installation_id: None,
             avatar_url: None,
+            recovery_email: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: if deleted { Some(Utc::now()) } else { None },

@@ -36,7 +36,7 @@ pub async fn verify_product(
 
     // Find product in Zeus SCM by serial number
     let zeus_prod = state.zeus_client.find_product_by_serial(&payload.serial_number).await?
-        .ok_or_else(|| AppError::NotFound(format!("Serial number '{}' not found in product catalog", payload.serial_number)))?;
+        .ok_or_else(|| AppError::NotFound("Product not found in catalog".to_string()))?;
 
     // Check if device is already registered by any customer
     let existing_registration = registered_devices::Entity::find()
@@ -65,7 +65,7 @@ pub async fn verify_product(
     // Reject if warranty is expired or not available
     if res.warranty_status != "active" {
         return Err(AppError::BadRequest(
-            format!("Product '{}' cannot be verified: warranty is {}", payload.serial_number, res.warranty_status)
+            "Product cannot be verified: warranty is expired or not available".to_string()
         ));
     }
 

@@ -46,7 +46,7 @@ pub async fn register_device(
             )
         }
         None => {
-            return Err(AppError::BadRequest(format!("Serial number '{}' not found in product catalog", payload.serial_number)));
+            return Err(AppError::NotFound("Product not found in catalog".to_string()));
         }
     };
 

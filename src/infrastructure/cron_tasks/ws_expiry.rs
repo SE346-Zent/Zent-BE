@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
 use uuid::Uuid;
 use crate::infrastructure::ws::{ConnectionManager, ConnectionCommand, WsOutgoing};
@@ -16,7 +16,9 @@ pub async fn run_expiry_enforcer(
     manager: Arc<ConnectionManager>,
     tx: mpsc::UnboundedSender<ConnectionCommand>,
     ttl_seconds: i64,
-    mut reset_rx: tokio::sync::watch::Receiver<Instant>,
+    mut reset_rx: watch::Receiver<Instant>,
+    conn_id: u64,
+    mut shutdown_rx: watch::Receiver<bool>,
 ) {
     let ttl = Duration::from_secs(ttl_seconds as u64);
 
@@ -36,25 +38,35 @@ pub async fn run_expiry_enforcer(
                         }
                     }
                     _ = reset_rx.changed() => { continue; }
+                    _ = shutdown_rx.changed() => { break; }
                 }
             }
             // else: less than 300s remain — skip warning, go straight to expiry
         }
 
-        // Wait for expiry (or a reset)
+        // Wait for expiry (or a reset or shutdown)
         tokio::select! {
             _ = tokio::time::sleep_until(deadline) => {
                 if manager.is_connected(&user_id).await {
-                    tracing::info!("Token expired for user {}, closing WebSocket", user_id);
-                    manager.unregister(&user_id).await;
+                    tracing::info!(
+                        "[conn {}] Token EXPIRED for user {} (TTL {}s reached without RefreshToken) — closing WebSocket with code 4001",
+                        conn_id, user_id, ttl_seconds
+                    );
+                    manager.unregister(&user_id, conn_id).await;
                     let _ = tx.send(ConnectionCommand::Close {
                         code: 4001,
                         reason: "Token expired".to_string(),
                     });
+                } else {
+                    tracing::debug!(
+                        "[conn {}] Token expiry fired for user {} but user already disconnected — nothing to do",
+                        conn_id, user_id
+                    );
                 }
                 break;
             }
             _ = reset_rx.changed() => { continue; }
+            _ = shutdown_rx.changed() => { break; }
         }
     }
 }
