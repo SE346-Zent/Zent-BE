@@ -14,6 +14,18 @@ pub struct UpdateMeEffect {
     pub user_active_model: users::ActiveModel,
     /// The updated profile data to be returned in the API response.
     pub response_data: MeResponseData,
+    /// Snapshot of the trackable field values before the update.
+    pub old_values: ProfileSnapshot,
+    /// Snapshot of the trackable field values after the update.
+    pub new_values: ProfileSnapshot,
+}
+
+/// Lightweight snapshot of profile fields that are tracked in the audit log.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ProfileSnapshot {
+    pub full_name: String,
+    pub email: String,
+    pub phone_number: String,
 }
 
 /// Validate and prepare the profile update.
@@ -32,6 +44,19 @@ pub fn decide_update_me(user: users::Model, req: ProfileUpdateRequest) -> Result
     let new_phone = req.phone.unwrap_or_else(|| user.phone_number.clone());
 
     let now = chrono::Utc::now();
+
+    // Capture old values before the user model is partially consumed
+    let old_values = ProfileSnapshot {
+        full_name: user.full_name.clone(),
+        email: user.email.clone(),
+        phone_number: user.phone_number.clone(),
+    };
+
+    let new_values = ProfileSnapshot {
+        full_name: new_name.clone(),
+        email: new_email.clone(),
+        phone_number: new_phone.clone(),
+    };
 
     let user_active_model = users::ActiveModel {
         id: sea_orm::Set(user.id),
@@ -56,7 +81,12 @@ pub fn decide_update_me(user: users::Model, req: ProfileUpdateRequest) -> Result
         updated_at: now.to_rfc3339(),
     };
 
-    Ok(UpdateMeEffect { user_active_model, response_data })
+    Ok(UpdateMeEffect {
+        user_active_model,
+        response_data,
+        old_values,
+        new_values,
+    })
 }
 
 #[cfg(test)]

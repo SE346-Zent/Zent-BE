@@ -36,4 +36,5 @@ pub use super::work_orders::Entity as WorkOrders;
 pub use super::work_order_appointment_changes::Entity as WorkOrderAppointmentChanges;
 pub use super::work_order_ratings::Entity as WorkOrderRatings;
 pub use super::registered_devices::Entity as RegisteredDevices;
+pub use super::profile_update_audit_logs::Entity as ProfileUpdateAuditLogs;
 
