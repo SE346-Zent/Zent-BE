@@ -51,13 +51,17 @@ pub fn decide_cancel_work_order(
     }
 
     let current_timestamp = Utc::now();
-    let cancellation_cutoff = work_order.appointment - Duration::hours(cancel_window_hours);
 
-    if current_timestamp >= cancellation_cutoff {
-        return Err(AppError::BadRequest(format!(
-            "Cannot cancel within {} hours of the appointment. Please contact support for assistance.",
-            cancel_window_hours
-        )));
+    // Allow cancellation if the appointment has already passed
+    if current_timestamp < work_order.appointment {
+        let cancellation_cutoff = work_order.appointment - Duration::hours(cancel_window_hours);
+
+        if current_timestamp >= cancellation_cutoff {
+            return Err(AppError::BadRequest(format!(
+                "Cannot cancel within {} hours of the appointment. Please contact support for assistance.",
+                cancel_window_hours
+            )));
+        }
     }
 
     let mut work_order_active_model: work_orders::ActiveModel = work_order.clone().into();
@@ -181,6 +185,18 @@ mod tests {
         work_order.appointment = Utc::now() + chrono::Duration::hours(25);
 
         let result = decide_cancel_work_order(work_order, 4, customer_id, 24, "Reason".to_string(), Some("Extra details".to_string()));
+        assert!(result.is_ok());
+    }
+
+    #[ignore]
+    #[test]
+    fn test_decide_cancel_appointment_passed() {
+        let customer_id = Uuid::new_v4();
+        let mut work_order = dummy_work_order(customer_id, 1);
+        // Appointment was 2 hours ago — should be allowed even though within the 24h window
+        work_order.appointment = Utc::now() - chrono::Duration::hours(2);
+
+        let result = decide_cancel_work_order(work_order, 4, customer_id, 24, "Reason".to_string(), None);
         assert!(result.is_ok());
     }
 }

@@ -61,6 +61,9 @@ pub async fn assign(
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation
     super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), id).await;
 
+    // Update technician workload cache (+1)
+    super::increment_technician_workload(&valkey_client, payload.technician_id).await;
+
     let tech = users::Entity::find_by_id(payload.technician_id).one(db.as_ref()).await?;
     let cust = users::Entity::find_by_id(work_order.customer_id).one(db.as_ref()).await?;
 

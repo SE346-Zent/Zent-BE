@@ -30,6 +30,7 @@ pub async fn approve_refusal(
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     // Write-through: use the cache for individual work order instead of querying DB
     let wo = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
+    let wo_technician_id = wo.technician_id;
 
     // Province check: only regular Admins are province-scoped; SuperAdmin can manage any
     let admin_role_id = *luts.roles_by_name.get("Admin")
@@ -47,7 +48,12 @@ pub async fn approve_refusal(
         .await.map_err(|e| match e { sea_orm::TransactionError::Connection(e) => AppError::Internal(anyhow::anyhow!("DB Error: {}", e)), sea_orm::TransactionError::Transaction(e) => e })?;
 
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation
-    super::write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), id).await;
+    super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), id).await;
+
+    // Decrement technician workload cache if a tech was assigned (work order moved to Rejected)
+    if let Some(tech_id) = wo_technician_id {
+        super::decrement_technician_workload(&valkey_client, tech_id).await;
+    }
 
     Ok(Json(ApiResponse::message_only(200, "Refusal approved successfully, work order is now Rejected")))
 }

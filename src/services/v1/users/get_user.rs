@@ -68,6 +68,8 @@ pub fn decide_get_user(
         account_status_id: target_user.account_status,
         employee_id: crate::utils::user::get_employee_id(target_user.role_id, target_user.id),
         rating_counts: None,
+        average_rating: None,
+        workload: None,
         avatar_image_name: target_user.avatar_url,
         created_at: target_user.created_at.to_rfc3339(),
         updated_at: target_user.updated_at.to_rfc3339(),

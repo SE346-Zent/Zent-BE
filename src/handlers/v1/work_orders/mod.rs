@@ -67,7 +67,7 @@ pub use get_metrics::__path_get_technician_metrics;
 use axum::{Router, middleware};
 use std::collections::HashMap;
 use std::sync::Arc;
-use chrono::Utc;
+use chrono::{Utc, Datelike};
 use redis::AsyncCommands;
 use sea_orm::{DatabaseConnection, prelude::Uuid, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, ColumnTrait, TransactionTrait, ActiveModelTrait, Set};
 use tracing::{info, error};
@@ -535,6 +535,99 @@ pub(crate) async fn refresh_technician_stats_cache(
     closed_status_ids: &[i32],
 ) {
     let _ = get_cached_technician_stats(db, valkey_client, technician_id, closed_status_ids).await;
+}
+
+// ── Technician Workload Cache ───────────────────────────────────────
+// Cache key: `cache:tech_workload:{tech_id}` → i64 (count of active work orders)
+// "Active" = not Closed, not Rejected, not soft-deleted, assigned to the technician.
+
+const TECH_WORKLOAD_TTL: u64 = 600; // 10 minutes
+
+/// Get the cached workload for a technician for the current month.
+/// On cache miss, queries the DB and populates the cache.
+pub(crate) async fn get_technician_workload(
+    db: &DatabaseConnection,
+    valkey_client: &Option<Arc<ValkeyClient>>,
+    technician_id: Uuid,
+    terminal_status_ids: &[i32],
+) -> i64 {
+    let now = Utc::now();
+    let month_start = now.date_naive().with_day(1).unwrap().and_hms_opt(0, 0, 0).unwrap().and_utc();
+
+    let cache_key = format!("cache:tech_workload:{}:{}", technician_id, now.format("%Y-%m"));
+
+    // Try cache first
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            if let Ok(Some(val)) = conn.get::<_, Option<i64>>(&cache_key).await {
+                return val;
+            }
+        }
+    }
+
+    // Cache miss — query DB: count active work orders assigned to this tech this month
+    let count = if terminal_status_ids.is_empty() {
+        work_orders_ent::Entity::find()
+            .filter(work_orders_ent::Column::DeletedAt.is_null())
+            .filter(work_orders_ent::Column::TechnicianId.eq(technician_id))
+            .filter(work_orders_ent::Column::CreatedAt.gte(month_start))
+            .count(db)
+            .await
+            .unwrap_or(0) as i64
+    } else {
+        let owned_ids: Vec<i32> = terminal_status_ids.to_vec();
+        work_orders_ent::Entity::find()
+            .filter(work_orders_ent::Column::DeletedAt.is_null())
+            .filter(work_orders_ent::Column::TechnicianId.eq(technician_id))
+            .filter(work_orders_ent::Column::WorkOrderStatusId.is_not_in(owned_ids))
+            .filter(work_orders_ent::Column::CreatedAt.gte(month_start))
+            .count(db)
+            .await
+            .unwrap_or(0) as i64
+    };
+
+    // Populate cache
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            let _: () = conn.set_ex(&cache_key, count, TECH_WORKLOAD_TTL).await.unwrap_or_default();
+        }
+    }
+
+    count
+}
+
+/// Increment the workload counter for a technician in the cache (current month).
+/// If the key does not exist, it is initialised to 1.
+pub(crate) async fn increment_technician_workload(
+    valkey_client: &Option<Arc<ValkeyClient>>,
+    technician_id: Uuid,
+) {
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            let key = format!("cache:tech_workload:{}:{}", technician_id, Utc::now().format("%Y-%m"));
+            let _: i64 = conn.incr(&key, 1).await.unwrap_or(1);
+            let _: () = conn.expire(&key, TECH_WORKLOAD_TTL as i64).await.unwrap_or_default();
+        }
+    }
+}
+
+/// Decrement the workload counter for a technician in the cache (floored at 0, current month).
+/// If the key does not exist, this is a no-op.
+pub(crate) async fn decrement_technician_workload(
+    valkey_client: &Option<Arc<ValkeyClient>>,
+    technician_id: Uuid,
+) {
+    if let Some(client) = valkey_client.as_ref() {
+        if let Ok(mut conn) = client.get_connection().await {
+            let key = format!("cache:tech_workload:{}:{}", technician_id, Utc::now().format("%Y-%m"));
+            // Decrement, but floor at 0
+            let current: i64 = conn.get(&key).await.unwrap_or(0);
+            if current > 0 {
+                let _: i64 = conn.decr(&key, 1).await.unwrap_or(0);
+            }
+            let _: () = conn.expire(&key, TECH_WORKLOAD_TTL as i64).await.unwrap_or_default();
+        }
+    }
 }
 
 /// Periodically clean up unassigned work orders that have exceeded the allowed wait window.

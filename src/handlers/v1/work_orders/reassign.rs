@@ -93,6 +93,12 @@ pub async fn reassign(
 
     super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), id).await;
 
+    // Update technician workload cache: -1 for old tech, +1 for new tech
+    if let Some(old_tid) = old_tech_id {
+        super::decrement_technician_workload(&valkey_client, old_tid).await;
+    }
+    super::increment_technician_workload(&valkey_client, payload.technician_id).await;
+
     let new_tech = users::Entity::find_by_id(payload.technician_id).one(db.as_ref()).await?;
     let old_tech = if let Some(otid) = old_tech_id {
         users::Entity::find_by_id(otid).one(db.as_ref()).await?

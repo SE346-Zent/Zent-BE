@@ -66,7 +66,12 @@ pub async fn cancel(
     })?;
 
     // Write-through cache update
-    super::write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), id).await;
+    super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), id).await;
+
+    // Decrement technician workload cache if a tech was assigned (work order moved to Closed)
+    if let Some(tech_id) = work_order.technician_id {
+        super::decrement_technician_workload(&valkey_client, tech_id).await;
+    }
 
     // Send cancellation email to the customer
     if let Some(rmq) = rabbitmq_opt.as_ref() {

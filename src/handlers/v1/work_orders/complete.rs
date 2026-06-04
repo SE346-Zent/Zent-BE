@@ -38,6 +38,7 @@ pub async fn complete(
     // Write-through: use the cache for individual work order instead of querying DB
     let wo = super::get_cached_work_order_model(db.as_ref(), &valkey_client, id).await?;
     let work_order_product_id = wo.product_id;
+    let wo_technician_id = wo.technician_id;
 
     let zeus_client = load_zeus_client()?;
 
@@ -83,7 +84,12 @@ pub async fn complete(
     }
 
     // Write-through cache: store full WorkOrderDetails in cache and bump list generation
-    super::write_through_work_order_cache(db.as_ref(), valkey_client, luts.as_ref(), id).await;
+    super::write_through_work_order_cache(db.as_ref(), valkey_client.clone(), luts.as_ref(), id).await;
+
+    // Decrement technician workload cache (work order moved to Closed)
+    if let Some(tech_id) = wo_technician_id {
+        super::decrement_technician_workload(&valkey_client, tech_id).await;
+    }
 
     super::track_wo_transition("InProg", "Closed");
 
