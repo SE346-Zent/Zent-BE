@@ -1,10 +1,11 @@
 use axum::{extract::{State, Path}, Json, Extension};
 use std::sync::Arc;
-use sea_orm::{DatabaseConnection, ActiveModelTrait, TransactionTrait};
+use sea_orm::{DatabaseConnection, ActiveModelTrait, TransactionTrait, EntityTrait, Set};
 use uuid::Uuid;
 use validator::Validate;
 use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::{AppError, ErrorResponse};
+use crate::entities::parts as parts_entity;
 use crate::extractor::auth_user::AuthUser;
 use crate::infrastructure::cache::ValkeyClient;
 use crate::infrastructure::clients::zeus::ZeusClient;
@@ -53,15 +54,92 @@ pub async fn complete(
     let completed_id = *luts.work_order_statuses_by_name.get("Closed").ok_or_else(|| AppError::Internal(anyhow::anyhow!("'Closed' status missing")))?;
     let effect = crate::services::v1::work_orders::complete::decide_complete_work_order(payload, wo, completed_id, auth.user.id)?;
 
-    for part_change in part_changes {
-        match part_change.change_type.as_str() {
+    for part_change in &part_changes {
+        let result = match part_change.change_type.as_str() {
             "installed" => {
-                zeus_client.install_part(part_change.part_id, work_order_product_id).await?;
+                zeus_client.install_part(part_change.part_id, work_order_product_id).await
             }
             "uninstalled" => {
-                zeus_client.remove_part(part_change.part_id).await?;
+                zeus_client.remove_part(part_change.part_id).await
             }
-            other => return Err(AppError::BadRequest(format!("Unsupported part change type: {}", other))),
+            other => return Err(AppError::BadRequest(format!(
+                "Invalid part change type '{}' for part {}. Must be 'installed' or 'uninstalled'.",
+                other, part_change.part_id
+            ))),
+        };
+
+        if let Err(e) = result {
+            let action = part_change.change_type.as_str();
+            tracing::error!(
+                part_id = %part_change.part_id,
+                change_type = action,
+                error = %e,
+                "Part operation failed during work order completion"
+            );
+            return Err(match e {
+                AppError::NotFound(_) => AppError::BadRequest(format!(
+                    "Cannot {} part {}: the part was not found in the inventory system. \
+                     Verify the part ID is correct and the part exists.",
+                    action, part_change.part_id
+                )),
+                AppError::BadRequest(msg) => AppError::BadRequest(format!(
+                    "Cannot {} part {}: {}",
+                    action, part_change.part_id, msg
+                )),
+                other => AppError::Internal(anyhow::anyhow!(
+                    "Failed to {} part {} in inventory system: {}",
+                    action, part_change.part_id, other
+                )),
+            });
+        }
+    }
+
+    // Sync parts from SCM to local DB before inserting part_changes.
+    // part_changes has a FK to parts(id) in Zent-BE's local MySQL, but parts
+    // are managed in SCM's separate database. We must ensure each part row
+    // exists locally before the transaction can succeed.
+    for pc in &part_changes {
+        let local_exists = parts_entity::Entity::find_by_id(pc.part_id)
+            .one(db.as_ref())
+            .await?
+            .is_some();
+
+        if !local_exists {
+            match zeus_client.get_part(pc.part_id).await {
+                Ok(scm_part) => {
+                    let local_part = parts_entity::ActiveModel {
+                        id: Set(scm_part.id),
+                        part_catalog_id: Set(scm_part.part_catalog_id),
+                        product_id: Set(scm_part.product_id),
+                        serial_number: Set(scm_part.serial_number),
+                        part_condition_id: Set(scm_part.part_condition_id),
+                        manufactured_date: Set(scm_part.manufactured_date),
+                        installation_date: Set(scm_part.installation_date),
+                        removal_date: Set(scm_part.removal_date),
+                        scrapped_date: Set(scm_part.scrapped_date),
+                        created_at: Set(scm_part.created_at),
+                        updated_at: Set(scm_part.updated_at),
+                        ..Default::default()
+                    };
+                    local_part.insert(db.as_ref()).await?;
+                    tracing::info!(
+                        part_id = %pc.part_id,
+                        "Synced part from SCM to local DB for work order completion"
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(
+                        part_id = %pc.part_id,
+                        error = %e,
+                        "Failed to fetch part from SCM for local sync"
+                    );
+                    return Err(AppError::BadRequest(format!(
+                        "Cannot process part {}: the part could not be found in the inventory system. \
+                         Verify the part ID is correct.",
+                        pc.part_id
+                    )));
+                }
+            }
         }
     }
 
