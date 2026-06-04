@@ -4,9 +4,9 @@ use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait, Set};
 
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::core::state::AppState;
-use crate::entities::{warranties, warranty_statuses};
+use crate::entities::warranties;
 use crate::extractor::auth_user::AuthUser;
-use crate::model::requests::inventory::create_warranty_request::CreateWarrantyRequest;
+use crate::model::requests::seeding::create_warranty_request::CreateWarrantyRequest;
 use crate::model::responses::base::ApiResponse;
 use crate::model::responses::inventory::warranty_check_response::WarrantyCheckResponse;
 use validator::Validate;
@@ -14,8 +14,8 @@ use validator::Validate;
 /// Create a warranty for a product identified by its serial number.
 #[utoipa::path(
     post,
-    path = "/api/v1/inventory/warranties",
-    tag = "inventory",
+    path = "/api/v1/seeding/warranties",
+    tag = "seeding",
     request_body = CreateWarrantyRequest,
     responses(
         (status = 201, description = "Warranty created successfully", body = ApiResponse<WarrantyCheckResponse>),

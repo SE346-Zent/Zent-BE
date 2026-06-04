@@ -79,7 +79,7 @@ use crate::model::{
 
 use crate::core::errors::ErrorResponse;
 
-use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, chat, users};
+use crate::handlers::v1::{auth, work_orders, media, inventory, seeding, notifications, chat, users};
 
 // API Documentation Service (v1)
 //
@@ -128,7 +128,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
         inventory::new_part_form_detail::new_part_form_detail,
         inventory::admin_analytics::admin_analytics,
         inventory::my_products::my_products,
-        inventory::create_warranty::create_warranty,
+        seeding::create_warranty::create_warranty,
         work_orders::approve_refusal,
         work_orders::deny_refusal,
         work_orders::history,
@@ -194,15 +194,13 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
             crate::model::requests::inventory::check_warranty_request::CheckWarrantyRequest,
             crate::model::responses::inventory::warranty_check_response::WarrantyCheckResponse,
             crate::model::requests::inventory::register_device_request::RegisterDeviceRequest,
-            crate::model::responses::inventory::register_device_response::RegisterDeviceResponse,
-            crate::model::requests::inventory::deny_part_request::DenyPartRequest,
             crate::model::responses::inventory::admin_analytics_response::AdminAnalyticsResponse,
             crate::model::responses::inventory::new_part_form_list_response::NewPartFormListItem,
             crate::model::responses::inventory::new_part_form_list_response::NewPartFormListResponse,
             crate::model::responses::inventory::new_part_form_list_response::NewPartFormStatusSummary,
             crate::model::responses::inventory::new_part_form_detail_response::NewPartFormDetailResponse,
             crate::model::requests::inventory::analytics_query::AnalyticsQuery,
-            crate::model::requests::inventory::create_warranty_request::CreateWarrantyRequest,
+            crate::model::requests::seeding::create_warranty_request::CreateWarrantyRequest,
             crate::model::responses::inventory::admin_analytics_response::TotalMetric,
             crate::model::responses::inventory::admin_analytics_response::JobCompletionTrend,
             crate::model::responses::inventory::admin_analytics_response::PartCategoryEntry,
@@ -243,6 +241,7 @@ use crate::handlers::v1::{auth, work_orders, media, inventory, notifications, ch
         (name = "auth", description = "Authentication endpoints"),
         (name = "work_orders", description = "Work order management"),
         (name = "inventory", description = "Inventory management"),
+        (name = "seeding", description = "Seeding and warranty management"),
         (name = "notifications", description = "Notification management"),
         (name = "media", description = "Media/OCI endpoints"),
         (name = "chat", description = "Chat & messaging endpoints"),

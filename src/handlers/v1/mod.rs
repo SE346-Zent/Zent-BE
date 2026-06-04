@@ -4,6 +4,7 @@ pub mod media;
 pub mod notifications;
 pub mod work_orders;
 pub mod inventory;
+pub mod seeding;
 pub mod users;
 pub mod chat;
 
@@ -20,6 +21,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .nest("/docs", api_docs::router())
         .nest("/work_orders", work_orders_router(state.clone()))
         .nest("/inventory", inventory::router(state.clone()))
+        .nest("/seeding", seeding::router(state.clone()))
         .nest("/users", users::router(state.clone()))
         .nest("/notifications", notifications::notifications_router(state.clone()))
         .nest("/media", media::media_router(state.clone()))
