@@ -3,10 +3,10 @@ use std::sync::Arc;
 use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, TransactionTrait};
 use uuid::Uuid;
 use crate::core::lookup_tables::LookupTables;
-use crate::core::errors::AppError;
+use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
 use crate::infrastructure::cache::ValkeyClient;
-use crate::model::responses::base::ApiResponse;
+use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 use crate::entities::users;
 
 /// Deny a technician's refusal, resetting the work order to 'Pending' for reassignment.
@@ -14,9 +14,11 @@ use crate::entities::users;
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/refusal/deny",
     responses(
-        (status = 200, description = "Refusal denied, status reverted", body = ApiResponse<String>),
-        (status = 400, description = "Bad Request"), (status = 403, description = "Forbidden"),
-        (status = 404, description = "Work order not found"), (status = 500, description = "Internal Server Error")
+        (status = 200, description = "Refusal denied, status reverted", body = MessageOnlyResponse),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Work order not found", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
     security(("bearer_auth" = []))
 )]

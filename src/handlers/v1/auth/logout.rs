@@ -66,5 +66,9 @@ pub async fn logout_handler(
         }
     }
 
+    // Close any WebSocket connections for the revoked session
+    let ws_manager = crate::infrastructure::ws::get_ws_manager();
+    ws_manager.close_session_connections(&authenticated_user.user.id, &logout_effect.revoked_session_id).await;
+
     Ok(Json(ApiResponse::message_only(200, "Logout successful")))
 }

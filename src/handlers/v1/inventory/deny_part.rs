@@ -3,7 +3,7 @@ use crate::core::state::AppState;
 use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
 use crate::model::requests::inventory::deny_part_request::DenyPartRequest;
-use crate::model::responses::base::ApiResponse;
+use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 use crate::services::v1::inventory::deny_part;
 use crate::entities::new_part_forms;
 use sea_orm::{EntityTrait, ActiveModelTrait, TransactionTrait, Set};
@@ -20,7 +20,7 @@ use validator::Validate;
         ("id" = Uuid, Path, description = "The unique identifier of the part registration form")
     ),
     responses(
-        (status = 200, description = "Part registration denied successfully", body = ApiResponse<String>),
+        (status = 200, description = "Part registration denied successfully", body = MessageOnlyResponse),
         (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),

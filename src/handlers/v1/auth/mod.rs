@@ -17,6 +17,7 @@ pub mod google_login;
 pub mod login_history;
 pub mod set_recovery_email;
 pub mod verify_recovery_email;
+pub mod sessions;
 
 pub use forgot_password::forgot_password_handler;
 pub use verify_forgot_password_otp::verify_forgot_password_otp_handler;
@@ -32,6 +33,9 @@ pub use google_login::google_login_handler;
 pub use login_history::login_history_handler;
 pub use set_recovery_email::set_recovery_email_handler;
 pub use verify_recovery_email::verify_recovery_email_handler;
+pub use sessions::list_sessions_handler;
+pub use sessions::revoke_session_handler;
+pub use sessions::revoke_all_sessions_handler;
 
 // Re-export __path_* items for utoipa OpenApi derive
 pub use forgot_password::__path_forgot_password_handler;
@@ -48,6 +52,7 @@ pub use google_login::__path_google_login_handler;
 pub use login_history::__path_login_history_handler;
 pub use set_recovery_email::__path_set_recovery_email_handler;
 pub use verify_recovery_email::__path_verify_recovery_email_handler;
+pub use sessions::__path_list_sessions_handler;
 
 use axum::{Router, routing::post};
 use crate::core::state::AppState;
@@ -69,4 +74,6 @@ pub fn router() -> Router<AppState> {
         .route("/recovery-email", post(set_recovery_email_handler))
         .route("/verify-recovery-email", post(verify_recovery_email_handler))
         .route("/google-login", post(google_login_handler))
+        .route("/sessions", axum::routing::get(list_sessions_handler).delete(revoke_all_sessions_handler))
+        .route("/sessions/{session_id}", axum::routing::delete(revoke_session_handler))
 }

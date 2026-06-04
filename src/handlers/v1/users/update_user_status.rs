@@ -18,12 +18,15 @@ use crate::{
     path = "/api/v1/users/{id}/status",
     tag = "users",
     request_body = UserStatusUpdateRequest,
+    params(
+        ("id" = Uuid, Path, description = "The unique identifier of the user")
+    ),
     responses(
         (status = 200, description = "Update status successful"),
         (status = 403, description = "Forbidden"),
         (status = 500, description = "Internal Server Error")
     ),
-    security(("jwt" = []))
+    security(("bearer_auth" = []))
 )]
 pub async fn update_user_status_handler(
     State(db): State<Arc<DatabaseConnection>>,

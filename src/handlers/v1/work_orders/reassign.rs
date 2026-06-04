@@ -26,7 +26,7 @@ pub struct ReassignResponse {
 #[utoipa::path(
     post, path = "/api/v1/work_orders/{id}/reassign", request_body = ReassignWorkOrderRequest,
     responses(
-        (status = 200, description = "Work order reassigned successfully"),
+        (status = 200, description = "Work order reassigned successfully", body = ApiResponse<ReassignResponse>),
         (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Not Found", body = ErrorResponse),

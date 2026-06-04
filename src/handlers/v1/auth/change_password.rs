@@ -3,12 +3,12 @@ use std::sync::Arc;
 use sea_orm::{DatabaseConnection, ActiveModelTrait};
 use validator::Validate;
 use crate::{
-    core::errors::AppError,
+    core::errors::{AppError, ErrorResponse},
     extractor::auth_user::AuthUser,
     infrastructure::cache::ValkeyClient,
     infrastructure::metrics,
     model::requests::auth::change_password_request::ChangePasswordRequest,
-    model::responses::base::ApiResponse,
+    model::responses::base::{ApiResponse, MessageOnlyResponse},
     services::v1::auth::change_password,
     utils::hasher,
 };
@@ -20,10 +20,10 @@ use redis::AsyncCommands;
     tag = "auth",
     request_body = ChangePasswordRequest,
     responses(
-        (status = 200, description = "Password changed successful"),
-        (status = 400, description = "Bad Request"),
-        (status = 401, description = "Unauthorized"),
-        (status = 500, description = "Internal Server Error")
+        (status = 200, description = "Password changed successful", body = MessageOnlyResponse),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
     security(("bearer_auth" = []))
 )]

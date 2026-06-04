@@ -15,6 +15,10 @@ use crate::model::requests::media::confirm_update_request::ConfirmUpdateRequest;
     patch,
     path = "/api/v1/media/work_orders/{id}/closing_form/photos/{image_id}",
     request_body(content_type = "multipart/form-data", description = "New image file and metadata (latitude, longitude)"),
+    params(
+        ("id" = Uuid, Path, description = "The unique identifier of the work order"),
+        ("image_id" = Uuid, Path, description = "The unique identifier of the image to update")
+    ),
     responses(
         (status = 200, description = "Photo updated successfully"),
         (status = 400, description = "Bad Request"),

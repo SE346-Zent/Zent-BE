@@ -13,6 +13,9 @@ use crate::model::responses::base::ApiResponse;
     post,
     path = "/api/v1/media/work_orders/{id}/closing_form/signature",
     request_body(content_type = "multipart/form-data", description = "Signature image file and metadata (latitude, longitude)"),
+    params(
+        ("id" = Uuid, Path, description = "The unique identifier of the work order")
+    ),
     responses(
         (status = 200, description = "Signature uploaded successfully", body = ApiResponse<String>),
         (status = 400, description = "Bad Request"),

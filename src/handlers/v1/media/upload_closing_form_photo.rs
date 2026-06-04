@@ -15,6 +15,9 @@ use crate::model::requests::media::confirm_upload_request::ConfirmUploadRequest;
     post,
     path = "/api/v1/media/work_orders/{id}/closing_form/photos",
     request_body(content_type = "multipart/form-data", description = "Image file and metadata (latitude, longitude, phase)"),
+    params(
+        ("id" = Uuid, Path, description = "The unique identifier of the work order")
+    ),
     responses(
         (status = 200, description = "Photo uploaded successfully"),
         (status = 400, description = "Bad Request"),

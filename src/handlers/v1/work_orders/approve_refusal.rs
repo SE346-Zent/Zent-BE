@@ -3,21 +3,22 @@ use std::sync::Arc;
 use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, TransactionTrait};
 use uuid::Uuid;
 use crate::core::lookup_tables::LookupTables;
-use crate::core::errors::AppError;
+use crate::core::errors::{AppError, ErrorResponse};
 use crate::extractor::auth_user::AuthUser;
 use crate::infrastructure::cache::ValkeyClient;
-use crate::model::requests::work_orders::approve_refusal_request::ApproveRefusalRequest;
-use crate::model::responses::base::ApiResponse;
+use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 
 /// Approve a technician's refusal, permanently transitioning the work order to 'Rejected' status.
 
 #[utoipa::path(
-    post, path = "/api/v1/work_orders/{id}/refusal/approve", request_body = ApproveRefusalRequest,
+    post, path = "/api/v1/work_orders/{id}/refusal/approve",
     responses(
-        (status = 200, description = "Refusal approved and work order reassigned", body = ApiResponse<String>),
-        (status = 400, description = "Bad Request"), (status = 403, description = "Forbidden"),
-        (status = 404, description = "Work order or technician not found"), (status = 409, description = "Technician schedule conflict"),
-        (status = 500, description = "Internal Server Error")
+        (status = 200, description = "Refusal approved and work order reassigned", body = MessageOnlyResponse),
+        (status = 400, description = "Bad Request", body = ErrorResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Work order or technician not found", body = ErrorResponse),
+        (status = 409, description = "Technician schedule conflict", body = ErrorResponse),
+        (status = 500, description = "Internal Server Error", body = ErrorResponse)
     ),
     security(("bearer_auth" = []))
 )]

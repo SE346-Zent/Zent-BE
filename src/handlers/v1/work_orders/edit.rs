@@ -16,7 +16,7 @@ use crate::{
     extractor::auth_user::AuthUser,
     infrastructure::cache::ValkeyClient,
     model::requests::work_orders::edit_request::EditWorkOrderRequest,
-    model::responses::base::ApiResponse,
+    model::responses::base::{ApiResponse, MessageOnlyResponse},
     services::v1::work_orders::edit as edit_svc,
     services::v1::work_orders::auto_assign,
 };
@@ -34,7 +34,7 @@ use crate::{
     path = "/api/v1/work_orders/{workOrderNumber}/edit",
     request_body = EditWorkOrderRequest,
     responses(
-        (status = 200, description = "Work order updated successfully", body = MessageOnlyResponseBody),
+        (status = 200, description = "Work order updated successfully", body = MessageOnlyResponse),
         (status = 400, description = "Bad Request", body = ErrorResponse),
         (status = 403, description = "Forbidden", body = ErrorResponse),
         (status = 404, description = "Not Found", body = ErrorResponse),
@@ -354,14 +354,4 @@ pub(super) async fn run_auto_assign_after_edit(
 
     tracing::info!("Auto-assigned WO {} to {} after customer edit", wo.work_order_number, assigned_tech_id);
     Some(assigned_tech_id)
-}
-
-/// Lightweight schema alias so utoipa can describe the success body.
-#[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct MessageOnlyResponseBody {
-    #[schema(example = 200)]
-    pub status_code: u16,
-    #[schema(example = "Work order updated successfully")]
-    pub message: String,
 }

@@ -43,7 +43,7 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
 
     // Phase 1: Wait for AUTH frame (with timeout)
     let auth_deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-    let user_id = loop {
+    let (user_id, session_id) = loop {
         tokio::select! {
             msg = ws_receiver.next() => {
                 match msg {
@@ -63,9 +63,14 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                             return;
                         }
                         match serde_json::from_str::<WsIncoming>(&text) {
-                            Ok(WsIncoming::Auth { token }) => {
+                            Ok(WsIncoming::Auth { token, session_id }) => {
                                 match validate_ws_token(&token, &state.decoding_key) {
-                                    Ok(uid) => break uid,
+                                    Ok(uid) => {
+                                        let sid = session_id
+                                            .and_then(|s| Uuid::parse_str(&s).ok())
+                                            .unwrap_or_else(Uuid::new_v4);
+                                        break (uid, sid);
+                                    }
                                     Err(reason) => {
                                         tracing::warn!(
                                             "[trace {}] WebSocket auth FAILED from {} — reason: {} (code 4001)",
@@ -164,8 +169,8 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     };
 
     let ws_manager = crate::infrastructure::ws::get_ws_manager();
-    let user_conn_id = ws_manager.register(user_id, cmd_tx.clone()).await;
-    tracing::info!("WebSocket authenticated for user {} (conn {}) from {}", user_id, user_conn_id, addr);
+    let user_conn_id = ws_manager.register(user_id, session_id, cmd_tx.clone()).await;
+    tracing::info!("WebSocket authenticated for user {} (conn {}, session {}) from {}", user_id, user_conn_id, session_id, addr);
 
     // Track active connection
     metrics::init().ws_connections_active.add(1, &[]);
@@ -258,10 +263,10 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
                 if let Ok(incoming) = serde_json::from_str::<WsIncoming>(&text) {
                     match incoming {
                         WsIncoming::Viewing { room_id } => {
-                            handle_viewing(&state, user_id, &room_id).await;
+                            handle_viewing(&state, session_id, &room_id).await;
                         }
                         WsIncoming::Leaving => {
-                            handle_leaving(&state, user_id).await;
+                            handle_leaving(&state, session_id).await;
                         }
                         WsIncoming::Message { room_id, content, image_url, reply_to } => {
                             handle_ws_message(&state, user_id, &room_id, content, image_url, reply_to).await;
@@ -321,14 +326,10 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
         );
     }
 
-    // Cleanup — stop spawned tasks and conditionally unregister.
-    // The conn_id check prevents a stale connection's cleanup from
-    // unregistering a newer connection for the same user.
+    // Cleanup — stop spawned tasks and unregister this connection.
+    // Always clear viewing state for this session since the connection is closing.
     shutdown.shutdown();
-    let still_us = ws_manager.user_conn_id(&user_id).await == Some(user_conn_id);
-    if still_us {
-        handle_leaving(&state, user_id).await;
-    }
+    handle_leaving(&state, session_id).await;
     ws_manager.unregister(&user_id, user_conn_id).await;
 
     // Track connection close
@@ -339,8 +340,8 @@ async fn handle_socket(socket: WebSocket, addr: SocketAddr, state: AppState) {
     ]);
 
     tracing::info!(
-        "[conn {}] WebSocket disconnected for user {} (cleanup complete, viewing_state_cleared={})",
-        user_conn_id, user_id, still_us
+        "[conn {}] WebSocket disconnected for user {} session {} (cleanup complete)",
+        user_conn_id, user_id, session_id
     );
 }
 
@@ -364,24 +365,25 @@ fn validate_ws_token(token: &str, decoding_key: &DecodingKey) -> Result<Uuid, &'
     Uuid::parse_str(&data.claims.sub).map_err(|_| "subject 'sub' is not a valid UUID")
 }
 
-/// Mark user as viewing a room: set chat:viewing:{uid} and reset unread.
-async fn handle_viewing(state: &AppState, user_id: Uuid, room_id: &str) {
+/// Mark session as viewing a room: set chat:viewing:{session_id} and reset unread.
+async fn handle_viewing(state: &AppState, session_id: Uuid, room_id: &str) {
     if let Some(ref vc) = state.valkey {
         if let Ok(mut conn) = vc.get_connection().await {
-            let viewing_key = format!("chat:viewing:{}", user_id);
-            let unread_key = format!("chat:unread:{}:{}", room_id, user_id);
+            let viewing_key = format!("chat:viewing:{}", session_id);
+            let unread_key = format!("chat:unread:{}:{}", room_id, session_id);
             let _: () = conn.set(&viewing_key, room_id).await.unwrap_or_default();
+            let _: () = conn.expire(&viewing_key, 86400).await.unwrap_or_default();
             let _: () = conn.set(&unread_key, 0u64).await.unwrap_or_default();
             let _: () = conn.expire(&unread_key, 86400).await.unwrap_or_default();
         }
     }
 }
 
-/// Clear viewing state when user leaves a chat.
-async fn handle_leaving(state: &AppState, user_id: Uuid) {
+/// Clear viewing state when a session leaves a chat.
+async fn handle_leaving(state: &AppState, session_id: Uuid) {
     if let Some(ref vc) = state.valkey {
         if let Ok(mut conn) = vc.get_connection().await {
-            let viewing_key = format!("chat:viewing:{}", user_id);
+            let viewing_key = format!("chat:viewing:{}", session_id);
             let _: () = conn.del(&viewing_key).await.unwrap_or_default();
         }
     }
@@ -470,12 +472,21 @@ async fn handle_ws_message(
                     continue;
                 }
 
-                // Check if recipient is viewing this room
+                // Check if ANY of the recipient's sessions is viewing this room
                 let is_viewing = if let Some(ref vc) = state.valkey {
                     if let Ok(mut conn) = vc.get_connection().await {
-                        let viewing_key = format!("chat:viewing:{}", member.user_id);
-                        let viewing_room: Option<String> = conn.get(&viewing_key).await.unwrap_or(None);
-                        viewing_room.as_deref() == Some(room_id)
+                        let ws_mgr = crate::infrastructure::ws::get_ws_manager();
+                        let session_ids = ws_mgr.get_user_session_ids(&member.user_id).await;
+                        let mut viewing = false;
+                        for sid in session_ids {
+                            let viewing_key = format!("chat:viewing:{}", sid);
+                            let viewing_room: Option<String> = conn.get(&viewing_key).await.unwrap_or(None);
+                            if viewing_room.as_deref() == Some(room_id) {
+                                viewing = true;
+                                break;
+                            }
+                        }
+                        viewing
                     } else {
                         false
                     }

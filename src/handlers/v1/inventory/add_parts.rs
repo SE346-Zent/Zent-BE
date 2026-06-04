@@ -7,7 +7,7 @@ use crate::core::lookup_tables::LookupTables;
 use crate::core::errors::AppError;
 use crate::extractor::auth_user::AuthUser;
 use crate::infrastructure::cache::ValkeyClient;
-use crate::model::responses::base::ApiResponse;
+use crate::model::responses::base::{ApiResponse, MessageOnlyResponse};
 use crate::entities::{work_orders as work_orders_ent, users};
 use crate::utils::oci;
 
@@ -16,8 +16,11 @@ use crate::utils::oci;
     path = "/api/v1/inventory/work_orders/{id}/parts",
     request_body(content_type = "multipart/form-data", description = "Part metadata and image files"),
     tag = "inventory",
+    params(
+        ("id" = Uuid, Path, description = "The unique identifier of the work order")
+    ),
     responses(
-        (status = 200, description = "Parts added successfully", body = ApiResponse<String>),
+        (status = 200, description = "Parts added successfully", body = MessageOnlyResponse),
         (status = 400, description = "Bad Request"),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Work order not found"),
