@@ -192,12 +192,7 @@ pub fn decide_google_login(
             return Err(AppError::Unauthorized("Account is inactive".to_string()));
         }
 
-        // 2. Google login is restricted only to Customer accounts
-        if user_record.role_id != customer_role_id {
-            return Err(AppError::Forbidden("Only customer accounts can sign in with Google".to_string()));
-        }
-
-        // 3. Verify account status
+        // 2. Verify account status
         let account_status = AccountStatusEnum::from(user_record.account_status);
 
         match account_status {
@@ -396,24 +391,29 @@ mod tests {
     }
 
     #[rstest]
-    fn test_decide_google_login_existing_wrong_role(
+    fn test_decide_google_login_existing_different_role(
         mock_existing_user: users::Model,
         mock_key: EncodingKey,
     ) {
-        let res = decide_google_login(
+        // Staff users (non-Customer) should be able to login with Google
+        let effect = decide_google_login(
             Some(&mock_existing_user),
             "exist@example.com".to_string(),
             None,
             None,
             1,
-            3, // Different from user's role_id (1)
+            3, // Customer role ID different from user's role_id (1)
             "hash".to_string(),
             AccessTokenDefaultTTLSeconds(900),
             SessionDefaultTTLSeconds(3600),
             &mock_key,
-        );
+        )
+        .unwrap();
 
-        assert!(matches!(res, Err(AppError::Forbidden(_))));
+        // User keeps their original role
+        assert_eq!(effect.user_id, mock_existing_user.id);
+        assert_eq!(effect.response_data.user.role_id, mock_existing_user.role_id);
+        assert_eq!(effect.response_data.user.account_status, AccountStatusEnum::Active);
     }
 
     #[rstest]
