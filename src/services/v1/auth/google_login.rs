@@ -275,6 +275,7 @@ pub fn decide_google_login(
             },
             access_token: token_bundle.access_token,
             refresh_token: token_bundle.refresh_token,
+            session_id: session_id.to_string(),
         },
     })
 }

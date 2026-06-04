@@ -87,6 +87,7 @@ pub async fn refresh_token_handler(
 
             Ok(Json(ApiResponse::success(200, "Refreshed", LoginResponseData {
                 user: user_info, access_token: token_bundle.access_token, refresh_token: token_bundle.refresh_token,
+                session_id: session_id.to_string(),
             })))
         }
         refresh_token::RefreshTokenEffect::ReuseAttackDetected { session_id } => {
