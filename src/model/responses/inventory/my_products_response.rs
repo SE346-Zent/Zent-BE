@@ -10,6 +10,8 @@ pub struct MyProductItem {
     pub product_id: Uuid,
     /// Product name.
     pub product_name: String,
+    /// Product model code.
+    pub product_model_code: String,
     /// Serial number.
     pub serial_number: String,
     /// Product model image URL (from SCM product model).

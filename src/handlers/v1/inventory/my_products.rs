@@ -103,6 +103,7 @@ pub async fn my_products(
         items.push(MyProductItem {
             product_id: zeus_prod.id,
             product_name: zeus_prod.product_name,
+            product_model_code: zeus_prod.product_model_code,
             serial_number: zeus_prod.serial_number,
             image_url,
             warranty,
