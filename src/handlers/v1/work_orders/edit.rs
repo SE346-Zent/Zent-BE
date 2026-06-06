@@ -281,9 +281,18 @@ pub(super) async fn run_auto_assign_after_edit(
     let system_user_id = cfg.system_user_id;
     let province = wo.province.clone();
 
+    let active_status_id = match luts.account_statuses_by_name.get("Active") {
+        Some(id) => *id,
+        None => {
+            tracing::warn!("Active account status not found in lookup tables");
+            return None;
+        }
+    };
+
     let technicians = match users::Entity::find()
         .filter(users::Column::RoleId.eq(tech_role_id))
         .filter(users::Column::Province.eq(&province))
+        .filter(users::Column::AccountStatus.eq(active_status_id))
         .all(db.as_ref())
         .await
     {

@@ -174,7 +174,7 @@ impl ZeusInventoryClient for ZeusClient {
     ) -> Result<ZeusPart, AppError> {
         let payload = PartsApi::create_part_payload(part_catalog_id, condition_id, serial_number, mfg_date);
         let envelope = self
-            .send_expect_envelope(self.make_post("/inventory/parts").json(&payload))
+            .send_expect_envelope(self.make_post("/seeding/parts").json(&payload))
             .await?;
 
         let data = envelope.data.ok_or_else(|| {
@@ -246,7 +246,7 @@ impl ZeusInventoryClient for ZeusClient {
     ) -> Result<ZeusProduct, AppError> {
         let payload = ProductsApi::create_product_payload(model_code, customer_id, product_name, serial_number);
         let envelope = self
-            .send_expect_envelope(self.make_post("/inventory/products").json(&payload))
+            .send_expect_envelope(self.make_post("/seeding/products/register").json(&payload))
             .await?;
 
         let data = envelope.data.ok_or_else(|| {
